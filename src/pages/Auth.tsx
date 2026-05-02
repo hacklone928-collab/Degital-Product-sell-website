@@ -75,27 +75,27 @@ export default function Auth() {
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-white rounded-3xl shadow-2xl shadow-indigo-100 border border-gray-100 p-8 md:p-12 w-full max-w-md relative overflow-hidden"
+        className="bg-white rounded-[32px] sm:rounded-[40px] shadow-2xl shadow-indigo-100 border border-gray-100 p-6 sm:p-12 w-full max-w-md relative overflow-hidden"
       >
-        <div className="absolute top-0 left-0 w-full h-2 bg-indigo-600" />
+        <div className="absolute top-0 left-0 w-full h-1.5 sm:h-2 bg-indigo-600" />
         
-        <div className="space-y-8">
+        <div className="space-y-6 sm:space-y-8">
           <div className="text-center">
-            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
               {isLogin ? "Welcome Back" : "Connect with Us"}
             </h1>
-            <p className="text-gray-500 mt-2">
+            <p className="text-xs sm:text-sm text-gray-500 mt-1 sm:mt-2">
               {isLogin ? "Enter your credentials to access your account" : "Create an account to start buying assets"}
             </p>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             <button 
               onClick={handleGoogleLogin}
               disabled={loading}
-              className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-200 rounded-2xl hover:bg-gray-50 hover:border-gray-300 transition-all font-semibold text-gray-700"
+              className="w-full flex items-center justify-center gap-2 sm:gap-3 px-4 py-2.5 sm:py-3 border border-gray-200 rounded-xl sm:rounded-2xl hover:bg-gray-50 hover:border-gray-300 transition-all font-bold text-xs sm:text-sm text-gray-700"
             >
-              <Chrome className="w-5 h-5 text-indigo-600" />
+              <Chrome className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
               Continue with Google
             </button>
             
@@ -106,10 +106,10 @@ export default function Auth() {
             </div>
           </div>
 
-          <form onSubmit={handleEmailAuth} className="space-y-4">
+          <form onSubmit={handleEmailAuth} className="space-y-3 sm:space-y-4">
             {!isLogin && (
               <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">Full Name</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Full Name</label>
                 <div className="relative">
                   <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input 
@@ -117,7 +117,7 @@ export default function Auth() {
                     required 
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:border-indigo-500 transition-all outline-none"
+                    className="w-full pl-11 pr-4 py-2.5 sm:py-3 bg-gray-50 border border-transparent rounded-xl sm:rounded-2xl focus:bg-white focus:border-indigo-500 transition-all outline-none text-sm"
                     placeholder="John Doe"
                   />
                 </div>
@@ -125,7 +125,7 @@ export default function Auth() {
             )}
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">Email Address</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Email Address</label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input 
@@ -133,14 +133,14 @@ export default function Auth() {
                   required 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:border-indigo-500 transition-all outline-none"
+                  className="w-full pl-11 pr-4 py-2.5 sm:py-3 bg-gray-50 border border-transparent rounded-xl sm:rounded-2xl focus:bg-white focus:border-indigo-500 transition-all outline-none text-sm"
                   placeholder="name@example.com"
                 />
               </div>
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">Password</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Password</label>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input 
@@ -148,18 +148,18 @@ export default function Auth() {
                   required 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:border-indigo-500 transition-all outline-none"
+                  className="w-full pl-11 pr-4 py-2.5 sm:py-3 bg-gray-50 border border-transparent rounded-xl sm:rounded-2xl focus:bg-white focus:border-indigo-500 transition-all outline-none text-sm"
                   placeholder="••••••••"
                 />
               </div>
             </div>
 
-            {error && <p className="text-red-500 text-xs ml-1">{error}</p>}
+            {error && <p className="text-red-500 text-[10px] ml-1">{error}</p>}
 
             <button 
               type="submit" 
               disabled={loading}
-              className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
+              className="w-full py-3.5 sm:py-4 bg-indigo-600 text-white rounded-xl sm:rounded-2xl font-bold text-sm sm:text-base hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
             >
               {loading ? "Processing..." : (isLogin ? "Sign In" : "Create Account")}
             </button>

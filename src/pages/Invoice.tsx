@@ -16,6 +16,7 @@ interface Order {
   createdAt: any;
   customerEmail?: string;
   customerName?: string;
+  deliveryAddress?: string;
   email?: string;
 }
 
@@ -108,7 +109,7 @@ export default function Invoice() {
                 </div>
                 <div className="flex flex-wrap gap-4">
                   <div className="flex items-center gap-2 text-indigo-100/80 text-xs font-bold uppercase tracking-widest">
-                    <Hash className="w-3.5 h-3.5 font-bold" /> #{order.id.slice(-12).toUpperCase()}
+                    <Hash className="w-3.5 h-3.5 font-bold" /> #{order.id.slice(-8).toUpperCase()}
                   </div>
                   <div className="flex items-center gap-2 text-indigo-100/80 text-xs font-bold uppercase tracking-widest">
                     <Calendar className="w-3.5 h-3.5" /> {formattedDate}
@@ -131,9 +132,17 @@ export default function Invoice() {
                 <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2">Billed To</h4>
                 <div className="space-y-2">
                   <div className="text-lg font-bold text-gray-900">{order.customerName || "Customer"}</div>
-                  <div className="flex items-center gap-2 text-gray-500 font-medium">
+                  <div className="flex items-center gap-2 text-gray-500 font-medium text-sm">
                     <Mail className="w-4 h-4" /> {order.customerEmail || order.email}
                   </div>
+                  {order.deliveryAddress && (
+                    <div className="mt-4 pt-4 border-t border-gray-50">
+                      <h5 className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Delivery Address</h5>
+                      <p className="text-sm text-gray-600 leading-relaxed max-w-[280px]">
+                        {order.deliveryAddress}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="space-y-4 text-left md:text-right">

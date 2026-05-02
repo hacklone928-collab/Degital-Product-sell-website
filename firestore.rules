@@ -62,5 +62,11 @@ service cloud.firestore {
       allow create: if true; // Guest can send tickets
       allow read, write: if isAdmin();
     }
+
+    // Categories
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
   }
 }

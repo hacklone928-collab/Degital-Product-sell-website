@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { db, storage, auth } from "../lib/firebase";
 import { collection, addDoc, getDocs, deleteDoc, doc, setDoc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { Plus, Package, Users, DollarSign, Trash2, Edit, Star, Database, Settings as SettingsIcon, Save, ShoppingBag, Clock, CheckCircle, Copy, Link as LinkIcon, Inbox, Mail, Search, ShieldCheck, TrendingUp, Calendar, Eye, ExternalLink } from "lucide-react";
+import { Plus, Package, Users, DollarSign, Trash2, Edit, Star, Database, Settings as SettingsIcon, Save, ShoppingBag, Clock, CheckCircle, Copy, Link as LinkIcon, Inbox, Mail, Search, ShieldCheck, TrendingUp, Calendar, Eye, EyeOff, ExternalLink, ImagePlus, Upload, Loader2, Phone } from "lucide-react";
 import { motion } from "motion/react";
 import { cn } from "../lib/utils";
 import { handleFirestoreError, OperationType } from "../lib/firestoreUtils";
@@ -19,19 +19,63 @@ import {
 } from 'recharts';
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<"products" | "settings" | "orders" | "pages" | "tickets">("products");
+  const [activeTab, setActiveTab] = useState<"products" | "settings" | "orders" | "pages" | "tickets" | "categories">("products");
   const [revenueTimeframe, setRevenueTimeframe] = useState<"daily" | "weekly" | "monthly">("daily");
   const [showSalesStats, setShowSalesStats] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [pages, setPages] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  const handleFileUpload = async (file: File, type: "main" | "additional", target: "new" | "edit") => {
+    if (!file) return;
+    setUploading(true);
+    setUploadProgress(0);
+    
+    try {
+      const storageRef = ref(storage, `products/${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+      
+      if (target === "new") {
+        if (type === "main") {
+          setNewProduct(prev => ({ ...prev, imageUrl: downloadURL }));
+        } else {
+          const current = newProduct.additionalImageUrls ? newProduct.additionalImageUrls.split(",") : [];
+          setNewProduct(prev => ({ 
+            ...prev, 
+            additionalImageUrls: [...current, downloadURL].join(",") 
+          }));
+        }
+      } else {
+        if (type === "main") {
+          setEditingProduct(prev => ({ ...prev, imageUrl: downloadURL }));
+        } else {
+          const current = editingProduct.additionalImageUrls ? editingProduct.additionalImageUrls.split(",") : [];
+          setEditingProduct(prev => ({ 
+            ...prev, 
+            additionalImageUrls: [...current, downloadURL].join(",") 
+          }));
+        }
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("Failed to upload image.");
+    } finally {
+      setUploading(false);
+    }
+  };
   const [isAdding, setIsAdding] = useState(false);
   const [isAddingPage, setIsAddingPage] = useState(false);
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [editingPage, setEditingPage] = useState<any | null>(null);
+  const [editingCategory, setEditingCategory] = useState<any | null>(null);
   const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [editingCredentials, setEditingCredentials] = useState<{ [key: string]: { username?: string, password?: string } }>({});
@@ -64,15 +108,34 @@ export default function AdminDashboard() {
     bkashLogo: "",
     nagadLogo: "",
     rocketLogo: "",
-    heroBannerUrl: ""
+    heroBanners: [] as { id: string, imageUrl: string, title?: string, subtitle?: string, link?: string, buttonText?: string }[],
+    enableStripe: true,
+    enableLocal: true,
+    enableCOD: true,
+    hiddenCategories: [] as string[]
   });
   const [newProduct, setNewProduct] = useState({
     name: "",
     price: 0,
-    category: "Software",
+    subscriptionMonthlyPrice: 0,
+    subscriptionYearlyPrice: 0,
+    subscriptionMonthlyText: "",
+    subscriptionMonthlySubtext: "",
+    subscriptionYearlyText: "",
+    subscriptionYearlySubtext: "",
+    subscriptionLifetimeText: "",
+    subscriptionLifetimeSubtext: "",
+    category: "",
     description: "",
     imageUrl: "",
+    additionalImageUrls: "",
     fileUrl: "",
+  });
+
+  const [newCategory, setNewCategory] = useState({
+    name: "",
+    description: "",
+    icon: "Package"
   });
 
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
@@ -235,6 +298,7 @@ export default function AdminDashboard() {
     fetchProducts();
     fetchSettings();
     fetchPages();
+    fetchCategories();
     if (isActuallyAdmin) {
       fetchOrders();
       fetchTickets();
@@ -442,6 +506,61 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchCategories = async () => {
+    try {
+      const snap = await getDocs(collection(db, "categories"));
+      setCategories(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, "categories");
+    }
+  };
+
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await addDoc(collection(db, "categories"), {
+        ...newCategory,
+        createdAt: serverTimestamp(),
+      });
+      setIsAddingCategory(false);
+      setNewCategory({ name: "", description: "", icon: "Package" });
+      fetchCategories();
+      alert("Category added successfully!");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to add category.");
+    }
+  };
+
+  const handleUpdateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const { id, ...data } = editingCategory;
+      await setDoc(doc(db, "categories", id), {
+        ...data,
+        updatedAt: serverTimestamp(),
+      });
+      setEditingCategory(null);
+      fetchCategories();
+      alert("Category updated successfully!");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to update category.");
+    }
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this category?")) return;
+    try {
+      await deleteDoc(doc(db, "categories", id));
+      fetchCategories();
+      alert("Category deleted successfully!");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to delete category.");
+    }
+  };
+
   const fetchPages = async () => {
     try {
       const snap = await getDocs(collection(db, "pages"));
@@ -498,6 +617,14 @@ export default function AdminDashboard() {
       await setDoc(doc(db, "products", id), {
         ...data,
         price: Number(data.price),
+        subscriptionMonthlyPrice: data.category === "Subscription" ? Number(data.subscriptionMonthlyPrice || 0) : 0,
+        subscriptionYearlyPrice: data.category === "Subscription" ? Number(data.subscriptionYearlyPrice || 0) : 0,
+        subscriptionMonthlyText: data.subscriptionMonthlyText || "",
+        subscriptionMonthlySubtext: data.subscriptionMonthlySubtext || "",
+        subscriptionYearlyText: data.subscriptionYearlyText || "",
+        subscriptionYearlySubtext: data.subscriptionYearlySubtext || "",
+        subscriptionLifetimeText: data.subscriptionLifetimeText || "",
+        subscriptionLifetimeSubtext: data.subscriptionLifetimeSubtext || "",
         updatedAt: serverTimestamp(),
       });
       setEditingProduct(null);
@@ -545,13 +672,37 @@ export default function AdminDashboard() {
       await addDoc(collection(db, "products"), {
         ...newProduct,
         price: Number(newProduct.price),
+        subscriptionMonthlyPrice: newProduct.category === "Subscription" ? Number(newProduct.subscriptionMonthlyPrice || 0) : 0,
+        subscriptionYearlyPrice: newProduct.category === "Subscription" ? Number(newProduct.subscriptionYearlyPrice || 0) : 0,
+        subscriptionMonthlyText: newProduct.subscriptionMonthlyText || "",
+        subscriptionMonthlySubtext: newProduct.subscriptionMonthlySubtext || "",
+        subscriptionYearlyText: newProduct.subscriptionYearlyText || "",
+        subscriptionYearlySubtext: newProduct.subscriptionYearlySubtext || "",
+        subscriptionLifetimeText: newProduct.subscriptionLifetimeText || "",
+        subscriptionLifetimeSubtext: newProduct.subscriptionLifetimeSubtext || "",
         rating: 4.5 + Math.random() * 0.5,
         reviewCount: Math.floor(Math.random() * 50),
         createdAt: serverTimestamp(),
       });
       setIsAdding(false);
       fetchProducts();
-      setNewProduct({ name: "", price: 0, category: "Software", description: "", imageUrl: "", fileUrl: "" });
+      setNewProduct({ 
+        name: "", 
+        price: 0, 
+        subscriptionMonthlyPrice: 0, 
+        subscriptionYearlyPrice: 0, 
+        subscriptionMonthlyText: "",
+        subscriptionMonthlySubtext: "",
+        subscriptionYearlyText: "",
+        subscriptionYearlySubtext: "",
+        subscriptionLifetimeText: "",
+        subscriptionLifetimeSubtext: "",
+        category: "Software", 
+        description: "", 
+        imageUrl: "", 
+        additionalImageUrls: "", 
+        fileUrl: "" 
+      });
     } catch (error) {
       console.error(error);
     }
@@ -625,15 +776,15 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-8">
         {stats.map((stat, i) => (
-          <div key={i} className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-6">
-            <div className={cn("p-4 rounded-2xl", stat.bg)}>
-              <stat.icon className={cn("w-6 h-6", stat.color)} />
+          <div key={i} className="bg-white p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-sm flex flex-col sm:flex-row items-center sm:items-center gap-3 sm:gap-6 text-center sm:text-left">
+            <div className={cn("p-2.5 sm:p-4 rounded-xl sm:rounded-2xl shrink-0", stat.bg)}>
+              <stat.icon className={cn("w-5 h-5 sm:w-6 sm:h-6", stat.color)} />
             </div>
             <div>
-              <div className="text-gray-500 text-xs font-bold uppercase tracking-widest">{stat.label}</div>
-              <div className="text-3xl font-black text-gray-900">{stat.value}</div>
+              <div className="text-gray-500 text-[10px] sm:text-xs font-bold uppercase tracking-widest">{stat.label}</div>
+              <div className="text-xl sm:text-3xl font-black text-gray-900 truncate">{stat.value}</div>
             </div>
           </div>
         ))}
@@ -750,11 +901,11 @@ export default function AdminDashboard() {
       </div>
 
       <div className="space-y-8">
-        <div className="flex gap-1 p-1 bg-gray-100/50 rounded-2xl w-full overflow-x-auto no-scrollbar scroll-smooth whitespace-nowrap">
+        <div className="flex gap-1 p-1 bg-gray-100/50 rounded-2xl w-full overflow-x-auto no-scrollbar scroll-smooth whitespace-nowrap sticky top-16 z-20 backdrop-blur-sm">
           <button 
             onClick={() => setActiveTab("products")}
             className={cn(
-              "px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
+              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
               activeTab === "products" 
                 ? "bg-white text-indigo-600 shadow-sm" 
                 : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
@@ -765,7 +916,7 @@ export default function AdminDashboard() {
           <button 
             onClick={() => setActiveTab("orders")}
             className={cn(
-              "px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
+              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
               activeTab === "orders" 
                 ? "bg-white text-indigo-600 shadow-sm" 
                 : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
@@ -774,9 +925,20 @@ export default function AdminDashboard() {
             Sales
           </button>
           <button 
+            onClick={() => setActiveTab("categories")}
+            className={cn(
+              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
+              activeTab === "categories" 
+                ? "bg-white text-indigo-600 shadow-sm" 
+                : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+            )}
+          >
+            Categories
+          </button>
+          <button 
             onClick={() => setActiveTab("pages")}
             className={cn(
-              "px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
+              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
               activeTab === "pages" 
                 ? "bg-white text-indigo-600 shadow-sm" 
                 : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
@@ -787,7 +949,7 @@ export default function AdminDashboard() {
           <button 
             onClick={() => setActiveTab("tickets")}
             className={cn(
-              "px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
+              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
               activeTab === "tickets" 
                 ? "bg-white text-indigo-600 shadow-sm" 
                 : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
@@ -798,7 +960,7 @@ export default function AdminDashboard() {
           <button 
             onClick={() => setActiveTab("settings")}
             className={cn(
-              "px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
+              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
               activeTab === "settings" 
                 ? "bg-white text-indigo-600 shadow-sm" 
                 : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
@@ -808,7 +970,130 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        {activeTab === "products" ? (
+        {activeTab === "categories" ? (
+          <section className="space-y-6">
+            <div className="flex justify-between items-center bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+              <div>
+                <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">Category Management</h3>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Manage product categories and filters</p>
+              </div>
+              <button 
+                onClick={() => setIsAddingCategory(true)}
+                className="bg-indigo-600 text-white px-6 py-3 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" /> Add Category
+              </button>
+            </div>
+            
+            <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm space-y-6">
+              <div className="flex items-center gap-3 border-l-4 border-amber-500 pl-4 py-1">
+                <div>
+                  <h3 className="text-lg font-black text-gray-900 uppercase tracking-tighter">Visibility & Filtering</h3>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Control which categories appear on the storefront</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                {Array.from(new Set(["Software", "Plugins", "Scripts", "Apps", "Templates", "Subscription", ...categories.map(c => c.name)])).map(catName => {
+                  const isHidden = siteSettings.hiddenCategories?.includes(catName);
+                  return (
+                    <button
+                      key={catName}
+                      type="button"
+                      onClick={() => {
+                        const currentHidden = siteSettings.hiddenCategories || [];
+                        const nextHidden = isHidden 
+                          ? currentHidden.filter(name => name !== catName)
+                          : [...currentHidden, catName];
+                        setSiteSettings({...siteSettings, hiddenCategories: nextHidden});
+                      }}
+                      className={cn(
+                        "p-4 rounded-2xl border transition-all text-center space-y-2 flex flex-col items-center justify-center group",
+                        isHidden 
+                          ? "bg-gray-50 border-gray-200 text-gray-400 grayscale" 
+                          : "bg-indigo-50 border-indigo-100 text-indigo-700 shadow-sm"
+                      )}
+                    >
+                      <div className={cn(
+                        "p-2 rounded-xl transition-colors",
+                        isHidden ? "bg-gray-200" : "bg-white"
+                      )}>
+                        {isHidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-tighter truncate w-full">{catName}</span>
+                      <div className={cn(
+                        "text-[8px] font-bold px-2 py-0.5 rounded-full uppercase",
+                        isHidden ? "bg-red-100 text-red-600" : "bg-green-100 text-green-600"
+                      )}>
+                        {isHidden ? "Hidden" : "Visible"}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              
+              <div className="pt-4 flex justify-end">
+                <button 
+                  onClick={handleUpdateSettings}
+                  className="bg-indigo-600 text-white px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2"
+                >
+                  <Save className="w-4 h-4" /> Save Visibility
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {categories.map(category => (
+                <div key={category.id} className="bg-white rounded-[32px] p-6 border border-gray-100 shadow-sm relative group overflow-hidden">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50/50 rounded-bl-[60px] -mr-8 -mt-8 transition-all group-hover:bg-indigo-100/50" />
+                  
+                  <div className="relative">
+                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4">
+                      {category.icon === "Package" ? <Package className="w-6 h-6" /> : <Database className="w-6 h-6" />}
+                    </div>
+                    
+                    <h4 className="text-lg font-black text-gray-900 uppercase tracking-tighter flex items-center gap-2">
+                      {category.name}
+                      {siteSettings.hiddenCategories?.includes(category.name) && (
+                        <span className="text-[8px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Hidden</span>
+                      )}
+                    </h4>
+                    <p className="text-sm text-gray-500 mt-2 line-clamp-2 leading-relaxed">
+                      {category.description || "No description provided."}
+                    </p>
+                    
+                    <div className="mt-6 pt-6 border-t border-gray-50 flex items-center justify-between">
+                      <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest bg-gray-50 px-3 py-1.5 rounded-full">
+                        {products.filter(p => p.category === category.name).length} Products
+                      </div>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => setEditingCategory(category)}
+                          className="p-2 text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-colors"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteCategory(category.id)}
+                          className="p-2 text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {categories.length === 0 && (
+                <div className="col-span-full py-20 text-center bg-gray-50/50 rounded-[40px] border-2 border-dashed border-gray-200">
+                  <Package className="w-12 h-12 text-gray-200 mx-auto mb-4" />
+                  <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">No categories found. Add your first one above.</p>
+                </div>
+              )}
+            </div>
+          </section>
+        ) : activeTab === "products" ? (
           <section className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
             <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-center bg-gray-50/50 gap-4">
               <div className="flex items-center gap-4 w-full sm:w-auto">
@@ -1073,12 +1358,19 @@ export default function AdminDashboard() {
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {orders
-                        .filter(o => 
-                          o.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          o.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          o.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          o.customerEmail?.toLowerCase().includes(searchTerm.toLowerCase())
-                        )
+                        .filter(o => {
+                          const term = searchTerm.toLowerCase().replace(/^#/, '');
+                          return (
+                            o.id.toLowerCase().includes(term) || 
+                            o.customerName?.toLowerCase().includes(term) ||
+                            o.email?.toLowerCase().includes(term) ||
+                            o.customerEmail?.toLowerCase().includes(term) ||
+                            o.deliveryAddress?.toLowerCase().includes(term) ||
+                            o.transactionId?.toLowerCase().includes(term) ||
+                            o.customerPhone?.toLowerCase().includes(term) ||
+                            o.paymentPhone?.toLowerCase().includes(term)
+                          );
+                        })
                         .map(o => (
                         <tr key={o.id} className={cn(
                           "hover:bg-gray-50/50 transition-colors group",
@@ -1094,14 +1386,22 @@ export default function AdminDashboard() {
                           </td>
                           <td className="px-3 sm:px-6 py-3 sm:py-4">
                             <div className="flex flex-col">
-                              <span className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase font-mono">#{o.id.slice(0, 8)}</span>
+                              <span className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase font-mono">#{o.id.slice(-8).toUpperCase()}</span>
                               <span className="text-[8px] sm:text-[9px] text-gray-400 mt-0.5 whitespace-nowrap">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'Just now'}</span>
                             </div>
                           </td>
                           <td className="px-3 sm:px-6 py-3 sm:py-4">
                             <div className="flex flex-col max-w-[100px] sm:max-w-none">
                               <span className="text-xs sm:text-sm font-bold text-gray-900 truncate">{o.customerName || "Anonymous"}</span>
-                              <span className="text-[10px] sm:text-xs text-gray-500 truncate">{o.customerEmail || o.email}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] sm:text-xs text-gray-500 truncate">{o.customerEmail || o.email}</span>
+                                {o.deliveryAddress && (
+                                  <span className="flex items-center gap-0.5 text-[8px] font-black bg-purple-50 text-purple-600 px-1 rounded uppercase tracking-tighter">
+                                    <ShoppingBag className="w-2 h-2" />
+                                    Details
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </td>
                           <td className="hidden sm:table-cell px-6 py-4 border-l border-gray-50">
@@ -1449,18 +1749,140 @@ export default function AdminDashboard() {
                     placeholder="© 2026 Your Brand. All rights reserved."
                   />
                 </div>
-                <div className="pt-2">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Hero Banner URL (Optional Image)</label>
-                  <input 
-                    type="text" 
-                    value={siteSettings.heroBannerUrl}
-                    onChange={e => setSiteSettings({...siteSettings, heroBannerUrl: e.target.value})}
-                    className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="https://images.unsplash.com/promo-banner.jpg"
-                  />
-                  <p className="text-[10px] text-gray-400 mt-2 pl-1">If provided, this image will replace the text-based hero section for a more visual look.</p>
+                <div className="md:col-span-2 pt-6 border-t border-gray-100">
+                  <div className="flex justify-between items-center mb-6">
+                    <div>
+                      <h4 className="font-bold text-gray-900 border-l-4 border-indigo-600 pl-3">Hero Slider Banners</h4>
+                      <p className="text-[10px] text-gray-400 mt-1 pl-3">Add multiple banners to create a sliding hero section.</p>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        const newBanner = { 
+                          id: Date.now().toString(), 
+                          imageUrl: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=1600&q=80",
+                          title: siteSettings.heroTitle || "New Title",
+                          subtitle: siteSettings.heroSubtitle || "New Subtitle",
+                          link: "/",
+                          buttonText: "Open"
+                        };
+                        setSiteSettings(prev => ({
+                          ...prev,
+                          heroBanners: [...(prev.heroBanners || []), newBanner]
+                        }));
+                      }}
+                      className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-all flex items-center gap-2"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add New Slide
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {(siteSettings.heroBanners || []).map((banner, index) => (
+                      <div key={banner.id} className="bg-gray-50 rounded-2xl p-6 border border-gray-200 space-y-4 relative group">
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setSiteSettings(prev => ({
+                              ...prev,
+                              heroBanners: prev.heroBanners.filter(b => b.id !== banner.id)
+                            }));
+                          }}
+                          className="absolute top-4 right-4 p-2 bg-white text-red-500 rounded-xl border border-red-50 opacity-0 group-hover:opacity-100 transition-all shadow-sm hover:bg-red-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+
+                        <div className="flex gap-4 items-start">
+                          <div className="w-24 h-24 rounded-xl bg-white border border-gray-200 overflow-hidden flex-shrink-0">
+                            <img src={banner.imageUrl} className="w-full h-full object-cover" />
+                          </div>
+                          <div className="flex-grow space-y-3">
+                            <div>
+                              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Slide Image URL</label>
+                              <input 
+                                type="text"
+                                value={banner.imageUrl}
+                                onChange={e => {
+                                  const newBanners = [...siteSettings.heroBanners];
+                                  newBanners[index].imageUrl = e.target.value;
+                                  setSiteSettings({...siteSettings, heroBanners: newBanners});
+                                }}
+                                className="w-full mt-1 bg-white border-none rounded-xl px-4 py-2 outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-mono"
+                              />
+                            </div>
+                            <div>
+                               <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Target Link (Optional)</label>
+                               <input 
+                                 type="text"
+                                 value={banner.link || ""}
+                                 onChange={e => {
+                                   const newBanners = [...siteSettings.heroBanners];
+                                   newBanners[index].link = e.target.value;
+                                   setSiteSettings({...siteSettings, heroBanners: newBanners});
+                                 }}
+                                 placeholder="/"
+                                 className="w-full mt-1 bg-white border-none rounded-xl px-4 py-2 outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-mono"
+                               />
+                             </div>
+                             <div>
+                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Button Text</label>
+                                <input 
+                                  type="text"
+                                  value={banner.buttonText || ""}
+                                  onChange={e => {
+                                    const newBanners = [...siteSettings.heroBanners];
+                                    newBanners[index].buttonText = e.target.value;
+                                    setSiteSettings({...siteSettings, heroBanners: newBanners});
+                                  }}
+                                  placeholder="Open"
+                                  className="w-full mt-1 bg-white border-none rounded-xl px-4 py-2 outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-bold"
+                                />
+                             </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Title Translation</label>
+                            <input 
+                              type="text"
+                              value={banner.title || ""}
+                              onChange={e => {
+                                const newBanners = [...siteSettings.heroBanners];
+                                newBanners[index].title = e.target.value;
+                                setSiteSettings({...siteSettings, heroBanners: newBanners});
+                              }}
+                              className="w-full mt-1 bg-white border-none rounded-xl px-4 py-2 outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-bold"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Subtitle Translation</label>
+                            <input 
+                              type="text"
+                              value={banner.subtitle || ""}
+                              onChange={e => {
+                                const newBanners = [...siteSettings.heroBanners];
+                                newBanners[index].subtitle = e.target.value;
+                                setSiteSettings({...siteSettings, heroBanners: newBanners});
+                              }}
+                              className="w-full mt-1 bg-white border-none rounded-xl px-4 py-2 outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-medium"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {(!siteSettings.heroBanners || siteSettings.heroBanners.length === 0) && (
+                      <div className="md:col-span-2 py-12 bg-gray-50 border-2 border-dashed border-gray-200 rounded-[32px] text-center">
+                        <ImagePlus className="w-12 h-12 text-gray-200 mx-auto mb-4" />
+                        <p className="text-gray-400 font-bold text-sm tracking-tight italic">No custom sliders added yet. Default hero will be used.</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex flex-col gap-3 pt-2">
+
+                <div className="md:col-span-2 pt-6 border-t border-gray-100">
                   <div className="flex items-center gap-3">
                     <input 
                       type="checkbox"
@@ -1484,6 +1906,48 @@ export default function AdminDashboard() {
                     <label htmlFor="showTicker" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
                       Show Most Sold Ticker (Slide)
                     </label>
+                  </div>
+                </div>
+
+                <div className="md:col-span-2 pt-6 border-t border-gray-100">
+                  <h4 className="font-bold text-gray-900 border-l-4 border-indigo-600 pl-3 mb-4">Payment Methods Visibility</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-2xl">
+                      <input 
+                        type="checkbox"
+                        id="enableStripe"
+                        checked={siteSettings.enableStripe !== false}
+                        onChange={e => setSiteSettings({...siteSettings, enableStripe: e.target.checked})}
+                        className="w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      />
+                      <label htmlFor="enableStripe" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
+                        Stripe
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-2xl">
+                      <input 
+                        type="checkbox"
+                        id="enableLocal"
+                        checked={siteSettings.enableLocal !== false}
+                        onChange={e => setSiteSettings({...siteSettings, enableLocal: e.target.checked})}
+                        className="w-5 h-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500 cursor-pointer"
+                      />
+                      <label htmlFor="enableLocal" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
+                        Local (bKash)
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-2xl">
+                      <input 
+                        type="checkbox"
+                        id="enableCOD"
+                        checked={siteSettings.enableCOD !== false}
+                        onChange={e => setSiteSettings({...siteSettings, enableCOD: e.target.checked})}
+                        className="w-5 h-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                      />
+                      <label htmlFor="enableCOD" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
+                        COD
+                      </label>
+                    </div>
                   </div>
                 </div>
 
@@ -1684,36 +2148,45 @@ export default function AdminDashboard() {
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-3xl p-8 max-w-xl w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex justify-between items-start">
               <div>
-                <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tighter">Order Details</h2>
-                <p className="text-xs font-bold text-gray-400 mt-1">TRANSACTION ID: {selectedOrder.id}</p>
+                <h2 className="text-xl sm:text-2xl font-black text-gray-900 uppercase tracking-tighter">Order Details</h2>
+                <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-widest">Order ID: #{selectedOrder.id.slice(-8).toUpperCase()}</p>
+                <p className="text-[9px] font-medium text-gray-300 mt-0.5">FULL ID: {selectedOrder.id}</p>
               </div>
               <button onClick={() => setSelectedOrder(null)} className="text-gray-400 hover:text-gray-600 bg-gray-50 p-2 rounded-xl transition-all">
-                <Trash2 className="w-6 h-6 transform rotate-45" />
+                <Trash2 className="w-5 h-5 sm:w-6 sm:h-6 transform rotate-45" />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Customer</div>
-                <div className="font-bold text-gray-900 text-sm leading-tight">{selectedOrder.customerName || "Anonymous User"}</div>
-                <div className="text-[11px] text-gray-500 mt-1">{selectedOrder.customerEmail || selectedOrder.userEmail || "No email available"}</div>
+                <div className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Customer</div>
+                <div className="font-bold text-gray-900 text-xs sm:text-sm leading-tight">{selectedOrder.customerName || "Anonymous User"}</div>
+                <div className="text-[10px] sm:text-[11px] text-gray-500 mt-1">{selectedOrder.customerEmail || selectedOrder.userEmail || "No email available"}</div>
                 {selectedOrder.customerPhone && (
-                  <div className="text-[11px] text-emerald-600 font-black mt-2 flex items-center gap-1.5">
-                    <ShoppingBag className="w-3.5 h-3.5" />
+                  <div className="text-[10px] sm:text-[11px] text-emerald-600 font-black mt-2 flex items-center gap-1.5">
+                    <Phone className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                     {selectedOrder.customerPhone}
+                  </div>
+                )}
+                {selectedOrder.deliveryAddress && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="text-[8px] sm:text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Delivery Address</div>
+                    <div className="text-[10px] sm:text-[11px] text-gray-700 leading-relaxed font-medium bg-white p-2 rounded-lg border border-gray-50">
+                      {selectedOrder.deliveryAddress}
+                    </div>
                   </div>
                 )}
               </div>
               <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 text-right">
-                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Payment</div>
-                <div className="font-black text-indigo-600 text-lg">৳{selectedOrder.amount.toLocaleString()}</div>
+                <div className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Payment</div>
+                <div className="font-black text-indigo-600 text-base sm:text-lg">৳{selectedOrder.amount.toLocaleString()}</div>
                 <div className="flex items-center justify-end gap-2 mt-2">
                   <span className={cn(
-                    "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
+                    "px-2 sm:px-3 py-1 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest",
                     selectedOrder.status === "completed" ? "bg-emerald-100 text-emerald-700" : 
                     selectedOrder.status === "pending" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600"
                   )}>
@@ -1723,9 +2196,9 @@ export default function AdminDashboard() {
                 {selectedOrder.status === "pending" && isActuallyAdmin && (
                   <button 
                     onClick={() => handleConfirmOrder(selectedOrder.id)}
-                    className="w-full mt-4 bg-indigo-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95 hover:-translate-y-0.5"
+                    className="w-full mt-4 bg-indigo-600 text-white py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-2xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95"
                   >
-                    Confirm & Complete Order
+                    Confirm Order
                   </button>
                 )}
               </div>
@@ -1734,11 +2207,20 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-2 gap-4 mt-6">
               <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 space-y-1">
                 <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Payment Method</div>
-                <div className="font-bold text-pink-600 uppercase text-xs">{selectedOrder.paymentMethod || "N/A"}</div>
+                <div className="font-bold text-pink-600 uppercase text-xs">
+                  {selectedOrder.paymentMethod === "cod" ? "Cash on Delivery" : selectedOrder.paymentMethod || "N/A"}
+                </div>
               </div>
               <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 space-y-1">
-                <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Transaction ID</div>
-                <div className="font-mono font-bold text-indigo-600 uppercase text-xs">{selectedOrder.transactionId || "N/A"}</div>
+                <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Payment Phone</div>
+                <div className="font-bold text-emerald-600 text-xs">{selectedOrder.paymentPhone || "N/A"}</div>
+              </div>
+              <div className="bg-emerald-50/30 p-4 rounded-2xl border border-emerald-100 space-y-1 col-span-2">
+                <div className="text-[9px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3" />
+                  Transaction ID / Payment Proof
+                </div>
+                <div className="font-mono font-bold text-gray-900 text-sm break-all">{selectedOrder.transactionId || "N/A"}</div>
               </div>
             </div>
 
@@ -1867,7 +2349,99 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Modal - Support Ticket Details */}
+      {/* Modal - Edit Category */}
+      {editingCategory && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 text-left">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-6"
+          >
+            <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tighter">Edit Category</h2>
+            <form onSubmit={handleUpdateCategory} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Category Name</label>
+                <input 
+                  type="text" required value={editingCategory.name}
+                  onChange={e => setEditingCategory({...editingCategory, name: e.target.value})}
+                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Description (Optional)</label>
+                <textarea 
+                  rows={3}
+                  value={editingCategory.description || ""}
+                  onChange={e => setEditingCategory({...editingCategory, description: e.target.value})}
+                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div className="flex gap-4 pt-4">
+                <button 
+                  type="button" onClick={() => setEditingCategory(null)}
+                  className="px-10 py-4 bg-gray-100 text-gray-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all active:scale-95"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 active:scale-95"
+                >
+                  Update Category
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Modal - Add Category */}
+      {isAddingCategory && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 text-left">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-6"
+          >
+            <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tighter">Add New Category</h2>
+            <form onSubmit={handleAddCategory} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Category Name</label>
+                <input 
+                  type="text" required value={newCategory.name}
+                  onChange={e => setNewCategory({...newCategory, name: e.target.value})}
+                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="e.g. Graphic Assets"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Description (Optional)</label>
+                <textarea 
+                  rows={3}
+                  value={newCategory.description}
+                  onChange={e => setNewCategory({...newCategory, description: e.target.value})}
+                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="What's this category for?"
+                />
+              </div>
+              <div className="flex gap-4 pt-4">
+                <button 
+                  type="button" onClick={() => setIsAddingCategory(false)}
+                  className="px-10 py-4 bg-gray-100 text-gray-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all active:scale-95"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 active:scale-95"
+                >
+                  Create Category
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
       {selectedTicket && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
           <motion.div 
@@ -2024,10 +2598,10 @@ export default function AdminDashboard() {
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-3xl p-8 max-w-xl w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
           >
-            <h2 className="text-2xl font-bold text-gray-900">Edit Product</h2>
-            <form onSubmit={handleUpdateProduct} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Edit Product</h2>
+            <form onSubmit={handleUpdateProduct} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="md:col-span-2 space-y-1">
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Product Name</label>
                 <input 
@@ -2048,17 +2622,113 @@ export default function AdminDashboard() {
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Category</label>
                 <select 
                   value={editingProduct.category}
-                  onChange={e => setEditingProduct({...editingProduct, category: e.target.value})}
+                  onChange={e => {
+                    if (e.target.value === "ADD_NEW") {
+                      setIsAddingCategory(true);
+                      return;
+                    }
+                    setEditingProduct({...editingProduct, category: e.target.value});
+                  }}
                   className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
                 >
-                  <option>Software</option>
-                  <option>Plugins</option>
-                  <option>Scripts</option>
-                  <option>Apps</option>
-                  <option>Templates</option>
-                  <option>Subscription</option>
+                  <option value="">Select Category</option>
+                  <option value="Software">Software</option>
+                  <option value="Plugins">Plugins</option>
+                  <option value="Scripts">Scripts</option>
+                  <option value="Apps">Apps</option>
+                  <option value="Templates">Templates</option>
+                  {categories.map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
+                  <option value="Subscription">Subscription</option>
+                  <option value="ADD_NEW" className="text-indigo-600 font-bold">+ Add New Category</option>
                 </select>
               </div>
+              {editingProduct.category === "Subscription" && (
+                <>
+                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100">
+                    <div className="md:col-span-2 flex items-center gap-2 mb-2">
+                      <Clock className="w-4 h-4 text-indigo-600" />
+                      <span className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Subscription Settings</span>
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Monthly Label</label>
+                      <input 
+                        type="text" value={editingProduct.subscriptionMonthlyText || ""}
+                        onChange={e => setEditingProduct({...editingProduct, subscriptionMonthlyText: e.target.value})}
+                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        placeholder="e.g. Monthly Plan"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Monthly Subtext</label>
+                      <input 
+                        type="text" value={editingProduct.subscriptionMonthlySubtext || ""}
+                        onChange={e => setEditingProduct({...editingProduct, subscriptionMonthlySubtext: e.target.value})}
+                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        placeholder="e.g. Access for 30 days"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Monthly Price</label>
+                      <input 
+                        type="number" value={editingProduct.subscriptionMonthlyPrice || ""}
+                        onChange={e => setEditingProduct({...editingProduct, subscriptionMonthlyPrice: Number(e.target.value)})}
+                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold"
+                      />
+                    </div>
+                    <div className="border-t border-indigo-100 md:col-span-2 my-2"></div>
+                    
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Yearly Label</label>
+                      <input 
+                        type="text" value={editingProduct.subscriptionYearlyText || ""}
+                        onChange={e => setEditingProduct({...editingProduct, subscriptionYearlyText: e.target.value})}
+                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        placeholder="e.g. Annual Savings"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Yearly Subtext</label>
+                      <input 
+                        type="text" value={editingProduct.subscriptionYearlySubtext || ""}
+                        onChange={e => setEditingProduct({...editingProduct, subscriptionYearlySubtext: e.target.value})}
+                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        placeholder="e.g. Best value for pros"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Yearly Price</label>
+                      <input 
+                        type="number" value={editingProduct.subscriptionYearlyPrice || ""}
+                        onChange={e => setEditingProduct({...editingProduct, subscriptionYearlyPrice: Number(e.target.value)})}
+                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold"
+                      />
+                    </div>
+                    <div className="border-t border-indigo-100 md:col-span-2 my-2"></div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Lifetime Label</label>
+                      <input 
+                        type="text" value={editingProduct.subscriptionLifetimeText || ""}
+                        onChange={e => setEditingProduct({...editingProduct, subscriptionLifetimeText: e.target.value})}
+                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        placeholder="e.g. Forever Deal"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Lifetime Subtext</label>
+                      <input 
+                        type="text" value={editingProduct.subscriptionLifetimeSubtext || ""}
+                        onChange={e => setEditingProduct({...editingProduct, subscriptionLifetimeSubtext: e.target.value})}
+                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        placeholder="e.g. Own it for life"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
               <div className="md:col-span-2 space-y-1">
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Description</label>
                 <textarea 
@@ -2069,12 +2739,49 @@ export default function AdminDashboard() {
                 />
               </div>
               <div className="md:col-span-2 space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Image URL</label>
-                <input 
-                  type="text" value={editingProduct.imageUrl}
-                  onChange={e => setEditingProduct({...editingProduct, imageUrl: e.target.value})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Main Image URL</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" value={editingProduct.imageUrl}
+                    onChange={e => setEditingProduct({...editingProduct, imageUrl: e.target.value})}
+                    className="flex-grow bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <div className="relative">
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], "main", "edit")}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                    />
+                    <button type="button" disabled={uploading} className="h-full px-4 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center gap-2 hover:bg-indigo-100 transition-all disabled:opacity-50">
+                      {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      <span className="text-xs font-bold uppercase tracking-widest hidden sm:inline">{uploading ? "Uploading" : "Upload"}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="md:col-span-2 space-y-1">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Additional Images (comma separated)</label>
+                <div className="flex gap-2">
+                  <textarea 
+                    rows={2}
+                    value={editingProduct.additionalImageUrls || ""}
+                    onChange={e => setEditingProduct({...editingProduct, additionalImageUrls: e.target.value})}
+                    placeholder="url1, url2, url3..."
+                    className="flex-grow bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-xs"
+                  />
+                  <div className="relative flex-shrink-0">
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], "additional", "edit")}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                    />
+                    <button type="button" disabled={uploading} className="h-full px-4 bg-pink-50 text-pink-600 rounded-2xl flex items-center justify-center hover:bg-pink-100 transition-all disabled:opacity-50">
+                      {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ImagePlus className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
               </div>
               <div className="md:col-span-2 space-y-1">
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Download URL</label>
@@ -2109,10 +2816,10 @@ export default function AdminDashboard() {
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-3xl p-8 max-w-xl w-full shadow-2xl space-y-6"
+            className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
           >
-            <h2 className="text-2xl font-bold text-gray-900">Add Digital Product</h2>
-            <form onSubmit={handleAddProduct} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Add Digital Product</h2>
+            <form onSubmit={handleAddProduct} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="md:col-span-2 space-y-1">
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Product Name</label>
                 <input 
@@ -2134,25 +2841,158 @@ export default function AdminDashboard() {
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Category</label>
                 <select 
                   value={newProduct.category}
-                  onChange={e => setNewProduct({...newProduct, category: e.target.value})}
+                  onChange={e => {
+                    if (e.target.value === "ADD_NEW") {
+                      setIsAddingCategory(true);
+                      return;
+                    }
+                    setNewProduct({...newProduct, category: e.target.value});
+                  }}
                   className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
                 >
-                  <option>Software</option>
-                  <option>Plugins</option>
-                  <option>Scripts</option>
-                  <option>Apps</option>
-                  <option>Templates</option>
-                  <option>Subscription</option>
+                  <option value="">Select Category</option>
+                  <option value="Software">Software</option>
+                  <option value="Plugins">Plugins</option>
+                  <option value="Scripts">Scripts</option>
+                  <option value="Apps">Apps</option>
+                  <option value="Templates">Templates</option>
+                  {categories.map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
+                  <option value="Subscription">Subscription</option>
+                  <option value="ADD_NEW" className="text-indigo-600 font-bold">+ Add New Category</option>
                 </select>
               </div>
+              {newProduct.category === "Subscription" && (
+                <>
+                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100">
+                    <div className="md:col-span-2 flex items-center gap-2 mb-2">
+                      <Clock className="w-4 h-4 text-indigo-600" />
+                      <span className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Subscription Settings</span>
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Monthly Label</label>
+                      <input 
+                        type="text" value={newProduct.subscriptionMonthlyText}
+                        onChange={e => setNewProduct({...newProduct, subscriptionMonthlyText: e.target.value})}
+                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        placeholder="e.g. Monthly Plan"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Monthly Subtext</label>
+                      <input 
+                        type="text" value={newProduct.subscriptionMonthlySubtext}
+                        onChange={e => setNewProduct({...newProduct, subscriptionMonthlySubtext: e.target.value})}
+                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        placeholder="e.g. Access for 30 days"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Monthly Price</label>
+                      <input 
+                        type="number" value={newProduct.subscriptionMonthlyPrice || ""}
+                        onChange={e => setNewProduct({...newProduct, subscriptionMonthlyPrice: Number(e.target.value)})}
+                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold"
+                      />
+                    </div>
+                    <div className="border-t border-indigo-100 md:col-span-2 my-2"></div>
+                    
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Yearly Label</label>
+                      <input 
+                        type="text" value={newProduct.subscriptionYearlyText}
+                        onChange={e => setNewProduct({...newProduct, subscriptionYearlyText: e.target.value})}
+                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        placeholder="e.g. Annual Savings"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Yearly Subtext</label>
+                      <input 
+                        type="text" value={newProduct.subscriptionYearlySubtext}
+                        onChange={e => setNewProduct({...newProduct, subscriptionYearlySubtext: e.target.value})}
+                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        placeholder="e.g. Best value for pros"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Yearly Price</label>
+                      <input 
+                        type="number" value={newProduct.subscriptionYearlyPrice || ""}
+                        onChange={e => setNewProduct({...newProduct, subscriptionYearlyPrice: Number(e.target.value)})}
+                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold"
+                      />
+                    </div>
+                    <div className="border-t border-indigo-100 md:col-span-2 my-2"></div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Lifetime Label</label>
+                      <input 
+                        type="text" value={newProduct.subscriptionLifetimeText}
+                        onChange={e => setNewProduct({...newProduct, subscriptionLifetimeText: e.target.value})}
+                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        placeholder="e.g. Forever Deal"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Lifetime Subtext</label>
+                      <input 
+                        type="text" value={newProduct.subscriptionLifetimeSubtext}
+                        onChange={e => setNewProduct({...newProduct, subscriptionLifetimeSubtext: e.target.value})}
+                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        placeholder="e.g. Own it for life"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
               <div className="md:col-span-2 space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Image URL</label>
-                <input 
-                  type="text" value={newProduct.imageUrl}
-                  onChange={e => setNewProduct({...newProduct, imageUrl: e.target.value})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="https://images.unsplash.com/..."
-                />
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Main Image URL</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" value={newProduct.imageUrl}
+                    onChange={e => setNewProduct({...newProduct, imageUrl: e.target.value})}
+                    className="flex-grow bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="https://images.unsplash.com/..."
+                  />
+                  <div className="relative">
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], "main", "new")}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                    />
+                    <button type="button" disabled={uploading} className="h-full px-4 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center gap-2 hover:bg-indigo-100 transition-all disabled:opacity-50">
+                      {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      <span className="text-xs font-bold uppercase tracking-widest hidden sm:inline">{uploading ? "Uploading" : "Upload"}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="md:col-span-2 space-y-1">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Additional Images (comma separated)</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={newProduct.additionalImageUrls}
+                    onChange={e => setNewProduct({...newProduct, additionalImageUrls: e.target.value})}
+                    placeholder="url1, url2, url3..."
+                    className="flex-grow bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <div className="relative flex-shrink-0">
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], "additional", "new")}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                    />
+                    <button type="button" disabled={uploading} className="h-full px-4 bg-pink-50 text-pink-600 rounded-2xl flex items-center justify-center hover:bg-pink-100 transition-all disabled:opacity-50">
+                      {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ImagePlus className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
               </div>
               <div className="md:col-span-2 space-y-1">
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Download URL (Private)</label>

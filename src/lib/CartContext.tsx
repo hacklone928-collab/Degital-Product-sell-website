@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 
 interface CartItem {
   id: string;
+  originalId?: string;
   name: string;
   price: number;
   imageUrl: string;
@@ -11,7 +12,7 @@ interface CartItem {
 
 interface CartContextType {
   items: CartItem[];
-  addToCart: (product: any) => void;
+  addToCart: (product: any, selectedPrice?: number, selectedPlan?: string) => void;
   removeFromCart: (productId: string) => void;
   clearCart: () => void;
   totalItems: number;
@@ -30,11 +31,20 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem("cart", JSON.stringify(items));
   }, [items]);
 
-  const addToCart = (product: any) => {
+  const addToCart = (product: any, selectedPrice?: number, selectedPlan?: string) => {
     setItems(prev => {
-      const existing = prev.find(item => item.id === product.id);
-      if (existing) return prev; // Since these are digital assets, 1 per customer is usually enough
-      return [...prev, { ...product, quantity: 1 }];
+      const cartId = selectedPlan ? `${product.id}_${selectedPlan.toLowerCase()}` : product.id;
+      const existing = prev.find(item => item.id === cartId);
+      if (existing) return prev; 
+      
+      return [...prev, { 
+        ...product, 
+        id: cartId,
+        originalId: product.id, // Store original ID for reference if needed
+        name: selectedPlan ? `${product.name} (${selectedPlan})` : product.name,
+        price: selectedPrice !== undefined ? selectedPrice : product.price,
+        quantity: 1 
+      }];
     });
   };
 

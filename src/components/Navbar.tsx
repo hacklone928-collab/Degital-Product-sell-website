@@ -19,13 +19,14 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
   const { settings } = useSettings();
   const { totalItems, items, removeFromCart, totalPrice } = useCart();
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [navSearch, setNavSearch] = useState("");
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (navSearch.trim()) {
       navigate(`/?q=${encodeURIComponent(navSearch.trim())}`);
-      // Close mobile menu or other overlays if necessary
+      setIsSearchOpen(false);
     }
   };
   const handleLogout = async () => {
@@ -37,31 +38,48 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
     <nav className="bg-white border-b border-gray-100 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
-          <div className="flex items-center gap-8">
-            <Link to="/" className="text-2xl font-bold tracking-tighter text-indigo-600 flex items-center gap-2">
+          <div className="flex items-center gap-2 sm:gap-8">
+            <Link to="/" className="text-lg sm:text-2xl font-bold tracking-tighter text-indigo-600 flex items-center gap-1.5 sm:gap-2">
               {settings.logoUrl && settings.logoUrl.trim() !== "" && (
-                <img src={settings.logoUrl} alt="Logo" className="w-8 h-8 object-contain" />
+                <img src={settings.logoUrl} alt="Logo" className="w-5 h-5 sm:w-8 sm:h-8 object-contain" />
               )}
-              {settings.siteName}
+              <span className="truncate max-w-[100px] sm:max-w-none">{settings.siteName}</span>
             </Link>
             
-            <form onSubmit={handleSearch} className="hidden md:flex relative">
+            <form onSubmit={handleSearch} className="hidden sm:flex relative">
               <input 
                 type="text" 
-                placeholder="Search software..." 
+                placeholder="Search..." 
                 value={navSearch}
                 onChange={(e) => setNavSearch(e.target.value)}
-                className="pl-10 pr-4 py-1.5 border border-gray-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-64 transition-all"
+                className="pl-9 pr-8 py-1.5 border border-gray-200 rounded-full text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 w-32 sm:w-64 transition-all"
               />
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              {navSearch && (
+                <button 
+                  type="button"
+                  onClick={() => setNavSearch("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1"
+                >
+                  <X className="w-3 h-3 text-gray-400 hover:text-gray-600" />
+                </button>
+              )}
             </form>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <button 
+              onClick={() => setIsSearchOpen(!isSearchOpen)}
+              className="sm:hidden p-1.5 text-gray-600 hover:text-indigo-600 transition-colors"
+              title="Search"
+            >
+              {isSearchOpen ? <X className="w-5 h-5" /> : <Search className="w-5 h-5" />}
+            </button>
+
             {isAdmin && (
               <Link 
                 to="/admin" 
-                className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors"
+                className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-sm font-black uppercase tracking-widest text-gray-600 hover:text-indigo-600 transition-colors"
                 id="admin-link"
               >
                 <LayoutDashboard className="w-4 h-4" />
@@ -70,34 +88,38 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
             )}
 
             {user ? (
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 sm:gap-4">
                 <Link 
                   to="/my-products" 
-                  className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors"
+                  className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-sm font-black uppercase tracking-widest text-gray-600 hover:text-indigo-600 transition-colors"
+                  title="My Products"
                 >
                   <ShoppingBag className="w-4 h-4" />
                   <span className="hidden lg:inline">My Products</span>
                 </Link>
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                    <UserIcon className="w-4 h-4 text-indigo-600" />
+                <Link 
+                  to="/profile"
+                  className="flex items-center gap-1.5 sm:gap-2 group"
+                >
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-indigo-100 flex items-center justify-center group-hover:bg-indigo-600 transition-colors">
+                    <UserIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600 group-hover:text-white transition-colors" />
                   </div>
-                  <span className="text-sm font-medium text-gray-700 hidden sm:inline">
-                    {user.displayName || user.email}
+                  <span className="text-xs sm:text-sm font-bold text-gray-700 hidden sm:inline group-hover:text-indigo-600 transition-colors truncate max-w-[80px]">
+                    {user.displayName || user.email?.split('@')[0]}
                   </span>
-                </div>
+                </Link>
                 <button 
                   onClick={handleLogout}
-                  className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                  className="p-1 text-gray-400 hover:text-red-500 transition-colors"
                   title="Logout"
                 >
-                  <LogOut className="w-5 h-5" />
+                  <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </div>
             ) : (
               <Link 
                 to="/auth" 
-                className="bg-indigo-600 text-white px-5 py-2 rounded-full text-sm font-semibold hover:bg-indigo-700 transition-all shadow-sm"
+                className="bg-indigo-600 text-white px-4 sm:px-5 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-sm font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-sm"
               >
                 Log In
               </Link>
@@ -105,11 +127,11 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
             
             <button 
               onClick={() => setIsCartOpen(true)}
-              className="relative p-2 text-gray-600 hover:text-indigo-600 transition-colors"
+              className="relative p-1.5 sm:p-2 text-gray-600 hover:text-indigo-600 transition-colors"
             >
-              <ShoppingCart className="w-6 h-6" />
+              <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6" />
               {totalItems > 0 && (
-                <span className="absolute top-1 right-1 w-4 h-4 bg-indigo-600 text-white text-[10px] flex items-center justify-center rounded-full">
+                <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-indigo-600 text-white text-[8px] sm:text-[10px] flex items-center justify-center rounded-full font-bold">
                   {totalItems}
                 </span>
               )}
@@ -117,6 +139,41 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
           </div>
         </div>
       </div>
+
+      {/* Mobile Search Bar Expansion */}
+      <AnimatePresence mode="wait">
+        {isSearchOpen && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="sm:hidden bg-white border-t border-gray-100 overflow-hidden"
+          >
+            <div className="px-4 py-3">
+              <form onSubmit={handleSearch} className="relative">
+                <input 
+                  type="text" 
+                  placeholder="Search products..." 
+                  value={navSearch}
+                  onChange={(e) => setNavSearch(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 bg-gray-50 border-none rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 font-medium"
+                  autoFocus
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                {navSearch && (
+                  <button 
+                    type="button"
+                    onClick={() => setNavSearch("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1"
+                  >
+                    <X className="w-3.5 h-3.5 text-gray-400" />
+                  </button>
+                )}
+              </form>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Cart Sidebar Overlay */}
       <AnimatePresence>

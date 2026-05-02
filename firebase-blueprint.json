@@ -60,9 +60,26 @@
         "heroSubtitle": { "type": "string" },
         "footerText": { "type": "string" },
         "logoUrl": { "type": "string" },
-        "faviconUrl": { "type": "string" }
+        "faviconUrl": { "type": "string" },
+        "heroBanners": { 
+          "type": "array",
+          "description": "List of banner objects for the hero slider"
+        }
       },
       "required": ["siteName"]
+    },
+    "Category": {
+      "title": "Product Category",
+      "description": "Categories for filtering products",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" },
+        "hidden": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name"]
     }
   },
   "firestore": {
@@ -81,6 +98,10 @@
     "/orders/{orderId}": {
       "schema": "Order",
       "description": "Purchase records"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Product categories"
     }
   }
 }

@@ -19,6 +19,7 @@ import Contact from "./pages/Contact";
 import DynamicPage from "./pages/DynamicPage";
 import MyProducts from "./pages/MyProducts";
 import Invoice from "./pages/Invoice";
+import Profile from "./pages/Profile";
 import Navbar from "./components/Navbar";
 
 import { SettingsProvider } from "./lib/SettingsContext";
@@ -57,7 +58,7 @@ export default function App() {
         <BrowserRouter>
         <div className="min-h-screen bg-white font-sans text-gray-900 overflow-x-hidden flex flex-col">
           <Navbar user={user} isAdmin={isAdmin} />
-          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow">
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 flex-grow">
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/product/:id" element={<ProductDetail />} />
@@ -69,6 +70,7 @@ export default function App() {
               <Route path="/p/:slug" element={<DynamicPage />} />
               <Route path="/my-products" element={<MyProducts />} />
               <Route path="/invoice/:orderId" element={<Invoice />} />
+              <Route path="/profile" element={user ? <Profile /> : <Navigate to="/auth" />} />
               <Route 
                 path="/admin" 
                 element={isAdmin ? <AdminDashboard /> : <Navigate to="/" />} 

@@ -31,6 +31,11 @@ interface SiteSettings {
   nagadLogo?: string;
   rocketLogo?: string;
   heroBannerUrl?: string;
+  enableStripe?: boolean;
+  enableLocal?: boolean;
+  enableCOD?: boolean;
+  heroBanners?: { id: string, imageUrl: string, title?: string, subtitle?: string, link?: string }[];
+  hiddenCategories?: string[];
 }
 
 const defaultSettings: SiteSettings = {
@@ -60,6 +65,11 @@ const defaultSettings: SiteSettings = {
   nagadLogo: "https://freelogopng.com/images/all_img/1679248787nagad-logo-png.png",
   rocketLogo: "https://freelogopng.com/images/all_img/1679249767rocket-logo-png.png",
   heroBannerUrl: "",
+  enableStripe: true,
+  enableLocal: true,
+  enableCOD: true,
+  heroBanners: [],
+  hiddenCategories: []
 };
 
 const SettingsContext = createContext<{ settings: SiteSettings; loading: boolean }>({

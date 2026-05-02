@@ -1,4 +1,5 @@
 import { useLocation, Link, Navigate } from "react-router-dom";
+import { useEffect } from "react";
 import { CheckCircle, Download, ShoppingBag, ArrowRight, Zap, Mail, Clock, ShieldCheck, FileText } from "lucide-react";
 import { motion } from "motion/react";
 import { cn } from "../lib/utils";
@@ -6,6 +7,19 @@ import { cn } from "../lib/utils";
 export default function Success() {
   const location = useLocation();
   const { orderId, token, productName, status } = location.state || {};
+
+  useEffect(() => {
+    if (orderId) {
+      import("canvas-confetti").then((confetti) => {
+        confetti.default({
+          particleCount: 150,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ["#6366f1", "#a855f7", "#ec4899"]
+        });
+      });
+    }
+  }, [orderId]);
 
   if (!orderId) return <Navigate to="/" />;
 
@@ -34,10 +48,10 @@ export default function Success() {
         </motion.div>
         
         <div className="space-y-2">
-          <h1 className="text-4xl font-black text-gray-900 tracking-tight uppercase">
+          <h1 className="text-2xl sm:text-4xl font-black text-gray-900 tracking-tight uppercase px-4">
             {isPending ? "Order Submitted!" : "Payment Successful!"}
           </h1>
-          <p className="text-gray-500 text-lg font-medium">
+          <p className="text-gray-500 text-sm sm:text-lg font-medium px-4">
             {isPending 
               ? "Your request is being reviewed by our team." 
               : "Thank you for your purchase. Your digital assets are ready."}
@@ -45,7 +59,7 @@ export default function Success() {
         </div>
       </div>
 
-      <div className="bg-white rounded-[40px] border-2 border-gray-100 p-8 md:p-12 shadow-2xl shadow-indigo-100 space-y-8 relative overflow-hidden">
+      <div className="bg-white rounded-[32px] sm:rounded-[40px] border-2 border-gray-100 p-6 md:p-12 shadow-2xl shadow-indigo-100 space-y-8 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-16 -mt-16 blur-2xl opacity-50" />
         
         <div className="space-y-4 relative">
@@ -53,7 +67,7 @@ export default function Success() {
             <Zap className="w-4 h-4 fill-current" />
             Order #{orderId.slice(-8).toUpperCase()}
           </div>
-          <h3 className="text-3xl font-black text-gray-900 tracking-tighter">{productName}</h3>
+          <h3 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tighter">{productName}</h3>
           
           {isPending ? (
             <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 text-left space-y-3">
@@ -70,27 +84,27 @@ export default function Success() {
           )}
         </div>
 
-        <div className="flex flex-col sm:flex-row justify-center gap-4">
+        <div className="flex flex-col sm:flex-row justify-center gap-3">
           {isPending ? (
             <Link 
               to="/my-products"
-              className="flex-grow max-w-xs flex items-center justify-center gap-3 bg-indigo-600 text-white px-8 py-5 rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100"
+              className="w-full sm:w-auto sm:flex-grow sm:max-w-xs flex items-center justify-center gap-3 bg-indigo-600 text-white px-8 py-4 sm:py-5 rounded-2xl sm:rounded-[24px] font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100"
             >
               <ShoppingBag className="w-5 h-5" />
-              Go to My Products
+              My Products
             </Link>
           ) : (
             <a 
               href={downloadUrl}
-              className="flex-grow max-w-xs flex items-center justify-center gap-3 bg-emerald-600 text-white px-8 py-5 rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100"
+              className="w-full sm:w-auto sm:flex-grow sm:max-w-xs flex items-center justify-center gap-3 bg-emerald-600 text-white px-8 py-4 sm:py-5 rounded-2xl sm:rounded-[24px] font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100"
             >
               <Download className="w-5 h-5" />
-              Download Now
+              Download
             </a>
           )}
           <Link 
             to={`/invoice/${orderId}`}
-            className="flex-grow max-w-[200px] flex items-center justify-center gap-3 bg-gray-50 text-gray-700 border-2 border-gray-100 px-8 py-5 rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-white hover:border-indigo-100 transition-all"
+            className="w-full sm:w-auto sm:flex-grow sm:max-w-[180px] flex items-center justify-center gap-3 bg-gray-50 text-gray-700 border-2 border-gray-100 px-8 py-4 sm:py-5 rounded-2xl sm:rounded-[24px] font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-white hover:border-indigo-100 transition-all"
           >
             <FileText className="w-5 h-5 text-indigo-600" />
             Invoice
