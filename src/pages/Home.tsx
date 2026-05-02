@@ -98,6 +98,49 @@ export default function Home() {
 
   return (
     <div className="space-y-6 sm:space-y-16 pb-20">
+      {/* Most Sold Ticker */}
+      {(settings.showTicker ?? true) && topSellers.length > 0 && (
+        <div 
+          style={{ backgroundColor: settings.tickerBgColor || "#4f46e5" }}
+          className="overflow-hidden py-1.5 sm:py-3.5 -mx-4 sm:-mx-8 lg:-mx-12 relative border-b border-white/5 shadow-inner"
+        >
+          <div className="flex whitespace-nowrap items-center">
+            <motion.div 
+              animate={{ x: [0, "-50%"] }}
+              transition={{ 
+                duration: settings.tickerSpeed || 25, 
+                repeat: Infinity, 
+                ease: "linear" 
+              }}
+              className="flex whitespace-nowrap gap-8 sm:gap-16 items-center"
+            >
+              {[...topSellers, ...topSellers, ...topSellers].map((p, i) => (
+                <Link 
+                  key={`${p.id}-${i}`} 
+                  to={`/product/${p.id}`}
+                  style={{ color: settings.tickerTextColor || "#ffffff" }}
+                  className="flex items-center gap-2 sm:gap-4 group/ticker"
+                >
+                  <span className="bg-white/20 px-1.5 py-0.5 rounded-[4px] text-[8px] sm:text-[10px] font-black uppercase tracking-widest whitespace-nowrap">
+                    {settings.tickerText || "🔥 Sold"}
+                  </span>
+                  <span className="font-bold text-[11px] sm:text-base tracking-tight whitespace-nowrap group-hover/ticker:underline decoration-2 underline-offset-4">
+                    {p.name}
+                  </span>
+                  <span className="text-[10px] sm:text-sm font-medium opacity-70">
+                    ৳{p.price.toLocaleString()}
+                  </span>
+                  <div className="flex items-center gap-0.5 sm:gap-1 text-amber-300">
+                    <Star className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 fill-current" />
+                    <span className="text-[10px] sm:text-sm font-black">{p.rating || 4.8}</span>
+                  </div>
+                </Link>
+              ))}
+            </motion.div>
+          </div>
+        </div>
+      )}
+
       {/* Hero Section */}
       {settings.showHero !== false && (
         <HeroSlider 

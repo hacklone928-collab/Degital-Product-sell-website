@@ -109,6 +109,12 @@ export default function AdminDashboard() {
     nagadLogo: "",
     rocketLogo: "",
     heroBanners: [] as { id: string, imageUrl: string, title?: string, subtitle?: string, link?: string, buttonText?: string }[],
+    // Ticker Settings
+    showTicker: true,
+    tickerBgColor: "#4f46e5",
+    tickerTextColor: "#ffffff",
+    tickerSpeed: 25,
+    tickerText: "🔥 Top Selling Products",
     enableStripe: true,
     enableLocal: true,
     enableCOD: true,
@@ -1749,6 +1755,97 @@ export default function AdminDashboard() {
                     placeholder="© 2026 Your Brand. All rights reserved."
                   />
                 </div>
+
+                <div className="md:col-span-2 pt-6 border-t border-gray-100">
+                  <div className="bg-gray-900 rounded-3xl p-6 sm:p-8 text-white relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl -mr-32 -mt-32" />
+                    
+                    <div className="relative z-10 space-y-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-black text-lg uppercase tracking-tighter">Most Sold Ticker</h4>
+                          <p className="text-white/50 text-[10px] uppercase font-bold tracking-widest mt-1">Control the scrolling top seller bar</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            checked={siteSettings.showTicker}
+                            onChange={e => setSiteSettings({...siteSettings, showTicker: e.target.checked})}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-500"></div>
+                        </label>
+                      </div>
+
+                      {(siteSettings.showTicker ?? true) && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 pt-4 border-t border-white/5">
+                          <div className="space-y-4">
+                            <div>
+                              <label className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-2 block">Ticker Colors</label>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center gap-2 bg-white/5 p-2 rounded-xl border border-white/10">
+                                    <input 
+                                      type="color" 
+                                      value={siteSettings.tickerBgColor || "#4f46e5"}
+                                      onChange={e => setSiteSettings({...siteSettings, tickerBgColor: e.target.value})}
+                                      className="h-6 w-6 rounded-md bg-transparent border-none cursor-pointer"
+                                    />
+                                    <span className="text-[10px] font-mono text-white/60">{siteSettings.tickerBgColor || "#4f46e5"}</span>
+                                  </div>
+                                  <span className="text-[8px] text-white/30 uppercase font-black tracking-widest pl-1">Background</span>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center gap-2 bg-white/5 p-2 rounded-xl border border-white/10">
+                                    <input 
+                                      type="color" 
+                                      value={siteSettings.tickerTextColor || "#ffffff"}
+                                      onChange={e => setSiteSettings({...siteSettings, tickerTextColor: e.target.value})}
+                                      className="h-6 w-6 rounded-md bg-transparent border-none cursor-pointer"
+                                    />
+                                    <span className="text-[10px] font-mono text-white/60">{siteSettings.tickerTextColor || "#ffffff"}</span>
+                                  </div>
+                                  <span className="text-[8px] text-white/30 uppercase font-black tracking-widest pl-1">Text</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-2 block">Ticker Text Label</label>
+                              <input 
+                                type="text"
+                                value={siteSettings.tickerText || ""}
+                                onChange={e => setSiteSettings({...siteSettings, tickerText: e.target.value})}
+                                placeholder="🔥 Sold"
+                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs font-bold text-white outline-none focus:ring-1 focus:ring-indigo-500"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            <div>
+                              <label className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-2 block">Scroll Speed (Seconds)</label>
+                              <div className="flex items-center gap-4">
+                                <input 
+                                  type="range" 
+                                  min="10" 
+                                  max="60" 
+                                  step="5"
+                                  value={siteSettings.tickerSpeed || 25}
+                                  onChange={e => setSiteSettings({...siteSettings, tickerSpeed: parseInt(e.target.value)})}
+                                  className="flex-grow accent-indigo-500"
+                                />
+                                <span className="bg-white/10 px-3 py-1 rounded-lg font-mono text-xs">{siteSettings.tickerSpeed || 25}s</span>
+                              </div>
+                              <p className="text-[9px] text-white/30 mt-2 italic">* Lower value = Faster scroll</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 <div className="md:col-span-2 pt-6 border-t border-gray-100">
                   <div className="flex justify-between items-center mb-6">
                     <div>

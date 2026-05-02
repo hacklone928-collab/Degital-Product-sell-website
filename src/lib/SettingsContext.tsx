@@ -24,6 +24,10 @@ interface SiteSettings {
   stat3Value: string;
   showHero?: boolean;
   showTicker?: boolean;
+  tickerBgColor?: string;
+  tickerTextColor?: string;
+  tickerSpeed?: number;
+  tickerText?: string;
   bkashNumber?: string;
   nagadNumber?: string;
   rocketNumber?: string;
@@ -34,7 +38,7 @@ interface SiteSettings {
   enableStripe?: boolean;
   enableLocal?: boolean;
   enableCOD?: boolean;
-  heroBanners?: { id: string, imageUrl: string, title?: string, subtitle?: string, link?: string }[];
+  heroBanners?: { id: string, imageUrl: string, title?: string, subtitle?: string, link?: string, buttonText?: string }[];
   hiddenCategories?: string[];
 }
 
@@ -58,6 +62,10 @@ const defaultSettings: SiteSettings = {
   stat3Value: "99.9%",
   showHero: true,
   showTicker: true,
+  tickerBgColor: "#4f46e5",
+  tickerTextColor: "#ffffff",
+  tickerSpeed: 25,
+  tickerText: "🔥 Top Selling Products",
   bkashNumber: "01700000000",
   nagadNumber: "01800000000",
   rocketNumber: "01900000000",
