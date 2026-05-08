@@ -8,6 +8,7 @@ interface CartItem {
   imageUrl: string;
   category: string;
   quantity: number;
+  planName?: string;
 }
 
 interface CartContextType {
@@ -40,10 +41,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       return [...prev, { 
         ...product, 
         id: cartId,
-        originalId: product.id, // Store original ID for reference if needed
-        name: selectedPlan ? `${product.name} (${selectedPlan})` : product.name,
+        originalId: product.id,
+        name: product.name,
         price: selectedPrice !== undefined ? selectedPrice : product.price,
-        quantity: 1 
+        quantity: 1,
+        planName: selectedPlan 
       }];
     });
   };

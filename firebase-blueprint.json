@@ -8,7 +8,7 @@
         "uid": { "type": "string" },
         "email": { "type": "string" },
         "displayName": { "type": "string" },
-        "role": { "type": "string", "enum": ["user", "admin"] },
+        "role": { "type": "string", "enum": ["user", "moderator", "admin", "super_admin"] },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "email", "role"]
@@ -61,6 +61,12 @@
         "footerText": { "type": "string" },
         "logoUrl": { "type": "string" },
         "faviconUrl": { "type": "string" },
+        "heroTitleSizeMobile": { "type": "string" },
+        "heroTitleSizeDesktop": { "type": "string" },
+        "heroSubtitleSizeMobile": { "type": "string" },
+        "heroSubtitleSizeDesktop": { "type": "string" },
+        "heroTitleColor": { "type": "string" },
+        "heroSubtitleColor": { "type": "string" },
         "heroBanners": { 
           "type": "array",
           "description": "List of banner objects for the hero slider"
@@ -80,9 +86,51 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["name"]
+    },
+    "Review": {
+      "title": "Product Review",
+      "description": "User feedback and rating for a product",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userAvatar": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "rating", "comment"]
+    },
+    "Coupon": {
+      "title": "Coupon",
+      "description": "Discount codes for checkout",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "type": { "type": "string", "enum": ["percentage", "fixed"] },
+        "value": { "type": "number" },
+        "expiryDate": { "type": "string", "format": "date-time" },
+        "isActive": { "type": "boolean" },
+        "usageCount": { "type": "number" },
+        "assignedEmail": { "type": "string", "format": "email", "description": "Email of the user this coupon is assigned to" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "type", "value", "expiryDate", "isActive"]
+    },
+    "ConnectionTest": {
+      "title": "Connection Test",
+      "description": "Minimal document for connectivity verification",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string" }
+      }
     }
   },
   "firestore": {
+    "/test/connection": {
+      "schema": "ConnectionTest",
+      "description": "Public checkpoint for testing Firestore availability"
+    },
     "/settings/site": {
       "schema": "Settings",
       "description": "Global site configuration settings"
@@ -94,6 +142,14 @@
     "/products/{productId}": {
       "schema": "Product",
       "description": "Public catalog of digital items"
+    },
+    "/products/{productId}/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Product reviews"
+    },
+    "/coupons/{couponId}": {
+      "schema": "Coupon",
+      "description": "Discount coupons"
     },
     "/orders/{orderId}": {
       "schema": "Order",

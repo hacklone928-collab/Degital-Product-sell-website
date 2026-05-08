@@ -1,26 +1,29 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { doc, getDoc, updateDoc, increment, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, updateDoc, increment, serverTimestamp, collection, addDoc, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
-import { Star, ShieldCheck, Download, Zap, Share2, Heart, ArrowLeft, CheckCircle2, ShoppingCart, CheckCircle, MessageSquare } from "lucide-react";
-import { motion } from "motion/react";
+import { handleFirestoreError, OperationType } from "../lib/firestoreUtils";
+import { Star, ShieldCheck, Download, Zap, Share2, Heart, ArrowLeft, CheckCircle2, ShoppingCart, CheckCircle, MessageSquare, Info, Settings, Users, StarHalf } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../lib/utils";
 import { useCart } from "../lib/CartContext";
-
 import { useSettings } from "../lib/SettingsContext";
+
+interface Review {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  rating: number;
+  comment: string;
+  createdAt: any;
+}
 
 interface Product {
   id: string;
   name: string;
   price: number;
-  subscriptionMonthlyPrice?: number;
-  subscriptionYearlyPrice?: number;
-  subscriptionMonthlyText?: string;
-  subscriptionMonthlySubtext?: string;
-  subscriptionYearlyText?: string;
-  subscriptionYearlySubtext?: string;
-  subscriptionLifetimeText?: string;
-  subscriptionLifetimeSubtext?: string;
+  // ... other fields
   description: string;
   category: string;
   tags?: string[];
@@ -28,18 +31,22 @@ interface Product {
   additionalImageUrls?: string;
   rating?: number;
   reviewCount?: number;
+  specs?: string; // We'll add this
+  overview?: string; // We'll add this
 }
 
 export default function ProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { settings } = useSettings();
-  const [product, setProduct] = useState<Product | null>(null);
+  const [product, setProduct] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-  const [userRating, setUserRating] = useState(0);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [activeTab, setActiveTab] = useState<"overview" | "specs" | "reviews">("overview");
+  const [newReviewComment, setNewReviewComment] = useState("");
+  const [userRating, setUserRating] = useState(5);
   const [hoverRating, setHoverRating] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [hasRated, setHasRated] = useState(false);
   const { addToCart, items } = useCart();
 
   const [selectedPlan, setSelectedPlan] = useState<"lifetime" | "monthly" | "yearly">("lifetime");
@@ -81,42 +88,75 @@ export default function ProductDetail() {
 
   useEffect(() => {
     if (!id) return;
-    const fetchProduct = async () => {
-      const docRef = doc(db, "products", id);
-      const docSnap = await getDoc(docRef);
+    
+    // Real-time product data
+    const productRef = doc(db, "products", id);
+    const unsubscribeProduct = onSnapshot(productRef, (docSnap) => {
       if (docSnap.exists()) {
-        const data = docSnap.data() as Product;
-        
-        // Check if category is hidden
+        const data = docSnap.data();
         if (settings?.hiddenCategories?.includes(data.category)) {
           navigate("/", { replace: true });
           return;
         }
-
-        setProduct({ id: docSnap.id, ...data } as Product);
-        setActiveImage(data.imageUrl || null);
+        setProduct({ id: docSnap.id, ...data });
+        if (!activeImage) setActiveImage(data.imageUrl || null);
       }
       setLoading(false);
-    };
-    fetchProduct();
-  }, [id]);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `products/${id}`);
+      setLoading(false);
+    });
 
-  const handleRate = async (rating: number) => {
+    // Real-time reviews
+    const reviewsQuery = query(
+      collection(db, "products", id, "reviews"),
+      orderBy("createdAt", "desc"),
+      limit(50)
+    );
+    const unsubscribeReviews = onSnapshot(reviewsQuery, (snapshot) => {
+      const reviewList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Review[];
+      setReviews(reviewList);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `products/${id}/reviews`);
+    });
+
+    return () => {
+      unsubscribeProduct();
+      unsubscribeReviews();
+    };
+  }, [id, settings]);
+
+  const handleRate = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!auth.currentUser) {
-      alert("Please sign in to rate products.");
+      alert("Please sign in to leave a review.");
       return;
     }
-    if (!product) return;
+    if (!product || !newReviewComment.trim()) return;
 
     setIsSubmitting(true);
     try {
+      const reviewData = {
+        userId: auth.currentUser.uid,
+        userName: auth.currentUser.displayName || auth.currentUser.email?.split('@')[0] || "Anonymous",
+        userAvatar: auth.currentUser.photoURL || "",
+        rating: userRating,
+        comment: newReviewComment.trim(),
+        createdAt: serverTimestamp()
+      };
+
+      // Add review
+      await addDoc(collection(db, "products", product.id, "reviews"), reviewData);
+
+      // Update product rating average
       const productRef = doc(db, "products", product.id);
-      
-      // Calculate new average rating
       const currentRating = product.rating || 0;
       const currentCount = product.reviewCount || 0;
       const newCount = currentCount + 1;
-      const newRating = ((currentRating * currentCount) + rating) / newCount;
+      const newRating = ((currentRating * currentCount) + userRating) / newCount;
 
       await updateDoc(productRef, {
         rating: Number(newRating.toFixed(1)),
@@ -124,16 +164,12 @@ export default function ProductDetail() {
         updatedAt: serverTimestamp()
       });
 
-      setProduct({
-        ...product,
-        rating: Number(newRating.toFixed(1)),
-        reviewCount: newCount
-      });
-      setHasRated(true);
-      alert("Thank you for your rating!");
+      setNewReviewComment("");
+      setUserRating(5);
+      alert("Review submitted successfully!");
     } catch (error) {
-      console.error("Error rating product:", error);
-      alert("Failed to submit rating. Please try again.");
+      console.error("Error submitting review:", error);
+      alert("Failed to submit review.");
     } finally {
       setIsSubmitting(false);
     }
@@ -175,22 +211,22 @@ export default function ProductDetail() {
   ];
 
   return (
-    <div className="space-y-6 sm:space-y-12 py-4 sm:py-6">
+    <div className="space-y-6 sm:space-y-12 py-2 sm:py-6 relative max-w-6xl mx-auto">
       <button 
         onClick={() => navigate(-1)}
-        className="flex items-center gap-1.5 text-xs sm:text-sm font-black uppercase tracking-widest text-gray-400 hover:text-indigo-600 transition-colors mb-2 sm:mb-4 px-1"
+        className="flex items-center gap-1.5 text-[10px] sm:text-xs font-black uppercase tracking-widest text-gray-400 hover:text-indigo-600 transition-colors mb-2 sm:mb-4 px-1"
       >
-        <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Back
+        <ArrowLeft className="w-3.5 h-3.5" /> Back
       </button>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 sm:gap-12 xl:gap-20">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-10 xl:gap-16">
         {/* Gallery */}
         <motion.div 
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="space-y-4 sm:space-y-6"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-3 sm:space-y-5"
         >
-          <div className="aspect-[4/3] sm:aspect-square rounded-2xl sm:rounded-3xl overflow-hidden bg-gray-50 border border-gray-100 shadow-sm transition-all duration-500">
+          <div className="aspect-[1.4/1] rounded-2xl sm:rounded-[32px] overflow-hidden bg-gray-50 border border-gray-100 shadow-sm">
             <img 
               src={activeImage || product.imageUrl || `https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=1000&q=80`} 
               alt={product.name}
@@ -198,14 +234,14 @@ export default function ProductDetail() {
             />
           </div>
           {allImages.length > 1 && (
-            <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar px-1 sm:grid sm:grid-cols-4 sm:gap-4 sm:pb-0 sm:px-0">
+            <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar px-1 sm:grid sm:grid-cols-4 sm:gap-4 sm:pb-0 sm:px-0">
               {allImages.map((img, i) => (
                 <div 
                   key={i} 
                   onClick={() => setActiveImage(img)}
                   className={cn(
-                    "w-16 h-16 sm:w-auto aspect-square rounded-xl overflow-hidden cursor-pointer transition-all border-2 flex-shrink-0",
-                    activeImage === img ? "border-indigo-600 sm:ring-2 sm:ring-indigo-500 sm:ring-offset-2" : "border-transparent opacity-60 hover:opacity-100"
+                    "w-16 h-16 sm:w-auto aspect-square rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all border-2 flex-shrink-0 shadow-sm",
+                    activeImage === img ? "border-indigo-600 ring-2 ring-indigo-50" : "border-transparent opacity-60 hover:opacity-100"
                   )}
                 >
                   <img src={img} className="w-full h-full object-cover" />
@@ -217,107 +253,82 @@ export default function ProductDetail() {
 
         {/* Info */}
         <motion.div 
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
           className="space-y-6 sm:space-y-8"
         >
           <div className="space-y-3 sm:space-y-4">
             <div className="flex items-center gap-3">
-              <span className="bg-indigo-50 text-indigo-600 text-[9px] sm:text-xs font-black px-3 py-1 rounded-full uppercase tracking-widest border border-indigo-100">
+              <span className="bg-indigo-50 text-indigo-600 text-[9px] sm:text-[10px] font-black px-3 py-1 rounded-lg uppercase tracking-widest border border-indigo-100">
                 {product.category}
               </span>
-              <div className="flex items-center gap-1 text-amber-400">
+              <div className="flex items-center gap-1.5 text-amber-400">
                 <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current" />
-                <span className="text-xs sm:text-sm font-bold text-gray-700">{product.rating || 0}</span>
-                <span className="text-[10px] sm:text-sm text-gray-400 font-medium">({product.reviewCount || 0})</span>
+                <span className="text-xs sm:text-sm font-black text-gray-900">{product.rating || 0}</span>
+                <span className="text-[10px] sm:text-xs text-gray-400 font-bold">({product.reviewCount || 0} Reviews)</span>
               </div>
             </div>
             
-            <h1 className="text-xl sm:text-4xl md:text-5xl font-black tracking-tight text-gray-900 leading-tight uppercase">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black tracking-tighter text-gray-900 leading-tight uppercase">
               {product.name}
             </h1>
             
-            <p className="text-gray-500 text-xs sm:text-lg leading-relaxed font-medium">
-              {product.description || "Take your development to the next level with this high-performance professional software toolkit."}
+            <p className="text-gray-500 text-xs sm:text-base leading-relaxed font-medium line-clamp-3">
+              {product.description}
             </p>
           </div>
 
-          {/* Rating Section */}
-          {!hasRated && (
-            <div className="bg-amber-50/50 rounded-2xl p-3 sm:p-4 border border-amber-100 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-0">
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] font-black text-amber-800 uppercase tracking-widest">Rate:</span>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      onMouseEnter={() => setHoverRating(star)}
-                      onMouseLeave={() => setHoverRating(0)}
-                      onClick={() => handleRate(star)}
-                      disabled={isSubmitting}
-                      className={cn(
-                        "transition-all",
-                        (hoverRating || userRating) >= star ? "text-amber-400 scale-110" : "text-gray-300"
-                      )}
-                    >
-                      <Star className={cn("w-5 h-5 sm:w-6 sm:h-6", (hoverRating || userRating) >= star ? "fill-current" : "")} />
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {isSubmitting && <div className="text-amber-600 text-[10px] font-black animate-pulse uppercase tracking-widest">Submitting...</div>}
-            </div>
-          )}
-
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
             {features.map((feature, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
-                <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500" />
+              <div key={i} className="flex items-center gap-2 text-[10px] sm:text-sm text-gray-600 font-bold">
+                <div className="w-4 h-4 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" />
+                </div>
                 {feature}
               </div>
             ))}
           </div>
 
-          <div className="bg-gray-50 rounded-[24px] sm:rounded-[32px] p-5 sm:p-8 border border-gray-100 space-y-6">
+          <div className="bg-white rounded-3xl p-5 sm:p-8 border border-gray-100 space-y-5 sm:space-y-7 shadow-sm">
             {product.category === "Subscription" && (
               <div className="space-y-3 sm:space-y-4">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Select Your Plan</label>
-                <div className="grid grid-cols-1 gap-2 sm:gap-3">
+                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Select Plan</label>
+                <div className="grid grid-cols-1 gap-2.5">
                     <button 
                       onClick={() => setSelectedPlan("lifetime")}
                       className={cn(
-                        "p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 text-left transition-all flex justify-between items-center group",
-                        selectedPlan === "lifetime" ? "border-indigo-600 bg-white" : "border-transparent bg-white/50 hover:bg-white"
+                        "p-3 sm:p-4 rounded-xl border-2 text-left transition-all flex justify-between items-center group gap-3",
+                        selectedPlan === "lifetime" ? "border-indigo-600 bg-indigo-50/30" : "border-gray-50 bg-gray-50/30 hover:border-gray-100"
                       )}
                     >
-                      <div>
-                        <div className="font-bold text-xs sm:text-base text-gray-900 group-hover:text-indigo-600 transition-colors">
-                          {product.subscriptionLifetimeText || "Lifetime Purchase"}
+                      <div className="space-y-0.5">
+                        <div className="font-black text-[11px] sm:text-base text-gray-900 uppercase tracking-tight group-hover:text-indigo-600 transition-colors">
+                          {product.subscriptionLifetimeText || "Lifetime Access"}
                         </div>
-                        <div className="text-[9px] sm:text-xs text-gray-500">
-                          {product.subscriptionLifetimeSubtext || "Forever access"}
+                        <div className="text-[9px] sm:text-xs text-gray-500 font-medium line-clamp-1">
+                          Forever access, one-time payment
                         </div>
                       </div>
-                      <div className="text-base sm:text-lg font-black text-indigo-600">৳{product.price.toLocaleString()}</div>
+                      <div className="text-sm sm:text-xl font-black text-indigo-600 tracking-tighter">৳{product.price.toLocaleString()}</div>
                     </button>
 
                     {product.subscriptionMonthlyPrice && (
                       <button 
                         onClick={() => setSelectedPlan("monthly")}
                         className={cn(
-                          "p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 text-left transition-all flex justify-between items-center group",
-                          selectedPlan === "monthly" ? "border-indigo-600 bg-white" : "border-transparent bg-white/50 hover:bg-white"
+                          "p-3 sm:p-4 rounded-xl border-2 text-left transition-all flex justify-between items-center group gap-3",
+                          selectedPlan === "monthly" ? "border-indigo-600 bg-indigo-50/30" : "border-gray-50 bg-gray-50/30 hover:border-gray-100"
                         )}
                       >
-                        <div>
-                          <div className="font-bold text-xs sm:text-base text-gray-900 group-hover:text-indigo-600 transition-colors">
-                            {product.subscriptionMonthlyText || "Monthly"}
+                        <div className="space-y-0.5">
+                          <div className="font-black text-[11px] sm:text-base text-gray-900 uppercase tracking-tight group-hover:text-indigo-600 transition-colors">
+                            {product.subscriptionMonthlyText || "Monthly Subscription"}
                           </div>
-                          <div className="text-[9px] sm:text-xs text-gray-500">
-                            {product.subscriptionMonthlySubtext || "30 days access"}
+                          <div className="text-[9px] sm:text-xs text-gray-500 font-medium line-clamp-1">
+                            Cancel anytime
                           </div>
                         </div>
-                        <div className="text-base sm:text-lg font-black text-indigo-600">৳{product.subscriptionMonthlyPrice.toLocaleString()}<span className="text-[10px] font-normal text-gray-400">/mo</span></div>
+                        <div className="text-sm sm:text-xl font-black text-indigo-600 tracking-tighter">৳{product.subscriptionMonthlyPrice.toLocaleString()}<span className="text-[9px] font-medium text-gray-400">/mo</span></div>
                       </button>
                     )}
 
@@ -325,19 +336,19 @@ export default function ProductDetail() {
                       <button 
                         onClick={() => setSelectedPlan("yearly")}
                         className={cn(
-                          "p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 text-left transition-all flex justify-between items-center group",
-                          selectedPlan === "yearly" ? "border-indigo-600 bg-white" : "border-transparent bg-white/50 hover:bg-white"
+                          "p-3 sm:p-4 rounded-xl border-2 text-left transition-all flex justify-between items-center group gap-3",
+                          selectedPlan === "yearly" ? "border-indigo-600 bg-indigo-50/30" : "border-gray-50 bg-gray-50/30 hover:border-gray-100"
                         )}
                       >
-                        <div>
-                          <div className="font-bold text-xs sm:text-base text-gray-900 group-hover:text-indigo-600 transition-colors">
-                            {product.subscriptionYearlyText || "Yearly"}
+                        <div className="space-y-0.5">
+                          <div className="font-black text-[11px] sm:text-base text-gray-900 uppercase tracking-tight group-hover:text-indigo-600 transition-colors">
+                            {product.subscriptionYearlyText || "Yearly Professional"}
                           </div>
-                          <div className="text-[9px] sm:text-xs text-gray-500">
-                            {product.subscriptionYearlySubtext || "365 days access"}
+                          <div className="text-[9px] sm:text-xs text-gray-500 font-medium line-clamp-1">
+                            Full year access
                           </div>
                         </div>
-                        <div className="text-base sm:text-lg font-black text-indigo-600">৳{product.subscriptionYearlyPrice.toLocaleString()}<span className="text-[10px] font-normal text-gray-400">/yr</span></div>
+                        <div className="text-sm sm:text-xl font-black text-indigo-600 tracking-tighter">৳{product.subscriptionYearlyPrice.toLocaleString()}<span className="text-[9px] font-medium text-gray-400">/yr</span></div>
                       </button>
                     )}
                 </div>
@@ -347,28 +358,28 @@ export default function ProductDetail() {
             <div className="flex items-center justify-between gap-4">
               <div className="space-y-0.5">
                 <span className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">
-                  {product.category === "Subscription" && selectedPlan !== "lifetime" ? "Sub Price" : "One-time"}
+                  Total Investment
                 </span>
-                <div className="text-2xl sm:text-5xl font-black text-gray-900 flex items-baseline gap-0.5 sm:gap-1">
+                <div className="text-2xl sm:text-5xl font-black text-gray-900 flex items-baseline gap-1 tracking-tighter">
                   <span className="text-xs sm:text-xl font-medium text-gray-400">৳</span>
                   {getActivePrice().toLocaleString()}
                 </div>
               </div>
-              <div className="bg-white px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl shadow-sm border border-gray-100 flex items-center gap-1 sm:gap-2">
-                <Zap className="w-3 h-3 sm:w-4 sm:h-4 text-amber-500 fill-current" />
-                <span className="text-[9px] sm:text-sm font-black uppercase tracking-widest">Instant</span>
+              <div className="bg-amber-50 px-3 py-2 sm:px-5 sm:py-3 rounded-xl border border-amber-100 flex flex-col items-center">
+                <Zap className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-amber-500 fill-current mb-0.5" />
+                <span className="text-[7px] sm:text-[9px] font-black uppercase tracking-widest text-amber-700">Instant</span>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+            <div className="flex gap-3">
               <button 
                 onClick={handleAddToCart}
                 disabled={isInCart}
                 className={cn(
-                  "flex-grow py-3.5 sm:py-5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-lg uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-2 sm:gap-3 active:scale-95",
+                  "flex-1 py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-base uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95",
                   isInCart 
                     ? "bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-none cursor-default" 
-                    : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200"
+                    : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100"
                 )}
               >
                 {isInCart ? (
@@ -386,58 +397,218 @@ export default function ProductDetail() {
               
               <button 
                 onClick={handleBuyNow}
-                className="px-6 py-3.5 sm:py-5 sm:px-8 bg-gray-900 text-white rounded-xl sm:rounded-2xl font-black text-xs sm:text-lg uppercase tracking-widest hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-2 shadow-xl shadow-gray-200"
+                className="flex-1 py-4 sm:py-5 bg-gray-900 text-white rounded-xl sm:rounded-2xl font-black text-xs sm:text-base uppercase tracking-widest hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg"
               >
                 Buy Now
               </button>
             </div>
             
-            <p className="text-center text-[9px] sm:text-xs text-gray-400 font-medium uppercase tracking-widest">
-              Secured by Stripe & SSL
-            </p>
+            <div className="flex justify-center items-center gap-3">
+              <div className="flex -space-x-1.5">
+                {[1,2,3,4].map(i => (
+                  <div key={i} className="w-5 h-5 rounded-full border-2 border-white bg-gray-200 overflow-hidden">
+                    <img src={`https://i.pravatar.cc/100?u=${i + parseInt(product.id.slice(0, 2), 16)}`} alt="Avatar" />
+                  </div>
+                ))}
+              </div>
+              <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest">
+                {Math.floor(Math.random() * 50) + 20}+ recently purchased
+              </p>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3 sm:gap-6 pt-4 border-t border-gray-100">
-            <div className="flex items-center gap-1.5 text-[10px] sm:text-sm font-black uppercase tracking-widest text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-              <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
-              Secure
+          <div className="flex items-center gap-3 sm:gap-4 pt-4 border-t border-gray-50">
+            <div className="flex items-center gap-1.5 text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+              Verified Assets
             </div>
-            <div className="flex items-center gap-1.5 text-[10px] sm:text-sm font-black uppercase tracking-widest text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+            <div className="flex items-center gap-1.5 text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100">
               <Download className="w-3.5 h-3.5 text-indigo-500" />
-              {Math.floor(Math.random() * 500) + 100} Sold
+              Instant Delivery
             </div>
-            <button className="ml-auto p-2 text-gray-400 hover:text-red-500 transition-colors">
-              <Heart className="w-5 h-5 sm:w-6 sm:h-6" />
-            </button>
           </div>
         </motion.div>
       </div>
       
-      {/* Description & Reviews Tabs (Simplified) */}
+      {/* Tabs Section */}
       <section className="pt-10 sm:pt-20 space-y-8 sm:space-y-12">
-        <div className="border-b border-gray-100 flex gap-6 sm:gap-12 overflow-x-auto no-scrollbar scroll-smooth">
-          <button className="pb-3 sm:pb-4 border-b-2 border-indigo-600 font-black text-[10px] sm:text-sm uppercase tracking-widest text-indigo-600 whitespace-nowrap">Details</button>
-          <button className="pb-3 sm:pb-4 border-b-2 border-transparent font-black text-[10px] sm:text-sm uppercase tracking-widest text-gray-400 hover:text-gray-600 transition-colors whitespace-nowrap">Specs</button>
-          <button className="pb-3 sm:pb-4 border-b-2 border-transparent font-black text-[10px] sm:text-sm uppercase tracking-widest text-gray-400 hover:text-gray-600 transition-colors whitespace-nowrap">Reviews ({product.reviewCount || 0})</button>
+        <div className="border-b border-gray-100 flex gap-6 sm:gap-10 overflow-x-auto no-scrollbar">
+          {[
+            { id: "overview", label: "Asset Overview", icon: Info },
+            { id: "specs", label: "Technical Specs", icon: Settings },
+            { id: "reviews", label: `Client Reviews (${product.reviewCount || 0})`, icon: MessageSquare }
+          ].map(tab => (
+            <button 
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={cn(
+                "pb-4 flex items-center gap-2 font-black text-[10px] sm:text-sm uppercase tracking-widest transition-all whitespace-nowrap border-b-2",
+                activeTab === tab.id ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-400 hover:text-gray-900"
+              )}
+            >
+              <tab.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              {tab.label}
+            </button>
+          ))}
         </div>
         
-        <div className="prose prose-indigo max-w-none text-gray-500 text-sm sm:text-base leading-relaxed space-y-6 sm:space-y-8">
-          <p className="font-medium">
-            This premium asset is meticulously engineered to solve real-world problems for modern developers and designers. 
-            Whether you're building a massive enterprise solution or a sleek startup MVP, this product provides the foundation you need.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 not-prose">
-            <div className="bg-indigo-50/50 rounded-2xl p-5 sm:p-6 border border-indigo-100">
-              <h4 className="font-black text-indigo-900 mb-2 uppercase text-xs tracking-widest">Key Value Proposition</h4>
-              <p className="text-[11px] sm:text-sm text-indigo-800/80 font-medium">Save over 100+ hours of development time. Ready to deploy out of the box with zero configuration needed for baseline functionality.</p>
-            </div>
-            <div className="bg-gray-50 rounded-2xl p-5 sm:p-6 border border-gray-100">
-              <h4 className="font-black text-gray-900 mb-2 uppercase text-xs tracking-widest">Technical Compatibility</h4>
-              <p className="text-[11px] sm:text-sm text-gray-500 font-medium">Works with all major modern frameworks. Clean, documented code following industry best practices and standards.</p>
-            </div>
-          </div>
+        <div className="min-h-[200px]">
+          <AnimatePresence mode="wait">
+            {activeTab === "overview" && (
+              <motion.div 
+                key="overview"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6 sm:space-y-8"
+              >
+                <div className="prose prose-indigo max-w-none text-gray-500 text-xs sm:text-base leading-relaxed">
+                  <p className="font-bold text-gray-900 leading-relaxed text-sm sm:text-lg">
+                    {product.overview || "This premium digital asset is meticulously engineered for modern development workflows. Built with performance, scalability, and ease of use in mind, it provides a robust foundation for your next big project."}
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-8">
+                    <div className="p-5 sm:p-6 bg-indigo-50/30 rounded-2xl border border-indigo-100/50">
+                      <h4 className="font-black text-indigo-900 text-[10px] sm:text-xs uppercase tracking-widest mb-2">Designed for Efficiency</h4>
+                      <p className="text-[11px] sm:text-sm text-indigo-800/70 font-medium">Reduce your time-to-market significantly with our ready-to-use components and logic. Focus on what matters most - your unique features.</p>
+                    </div>
+                    <div className="p-5 sm:p-6 bg-emerald-50/30 rounded-2xl border border-emerald-100/50">
+                      <h4 className="font-black text-emerald-900 text-[10px] sm:text-xs uppercase tracking-widest mb-2">Scalable Foundation</h4>
+                      <p className="text-[11px] sm:text-sm text-emerald-800/70 font-medium">Built following industry standard best practices. Whether you're a solo dev or a large team, this asset scales with your needs.</p>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === "specs" && (
+              <motion.div 
+                key="specs"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6"
+              >
+                {[
+                  { label: "Category", value: product.category },
+                  { label: "Last Updated", value: product.updatedAt ? new Date(product.updatedAt.seconds * 1000).toLocaleDateString() : "Recently" },
+                  { label: "File Format", value: product.category === "Software" ? ".zip / .dmg / .exe" : "Digital Asset" },
+                  { label: "Included Files", value: "Source code, Documentation, License" },
+                  { label: "Compatibility", value: "Modern Browsers, Cross-platform" },
+                  { label: "License", value: "Commercial Premium" }
+                ].map((spec, i) => (
+                  <div key={i} className="flex justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+                    <span className="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">{spec.label}</span>
+                    <span className="text-[10px] sm:text-xs font-bold text-gray-900">{spec.value}</span>
+                  </div>
+                ))}
+              </motion.div>
+            )}
+
+            {activeTab === "reviews" && (
+              <motion.div 
+                key="reviews"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-8 sm:space-y-12"
+              >
+                {/* Submit Review */}
+                {auth.currentUser ? (
+                  <div className="bg-gray-50 rounded-2xl p-4 sm:p-6 border border-gray-100 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-[10px] sm:text-sm font-black text-gray-900 uppercase tracking-widest">Write a Review</h4>
+                      <div className="flex gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            onClick={() => setUserRating(star)}
+                            onMouseEnter={() => setHoverRating(star)}
+                            onMouseLeave={() => setHoverRating(0)}
+                            className="transition-transform active:scale-125"
+                          >
+                            <Star 
+                              className={cn(
+                                "w-4 h-4 sm:w-5 sm:h-5",
+                                (hoverRating || userRating) >= star ? "text-amber-400 fill-current" : "text-gray-300"
+                              )} 
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <textarea 
+                      value={newReviewComment}
+                      onChange={(e) => setNewReviewComment(e.target.value)}
+                      placeholder="Share your experience with this asset..."
+                      className="w-full p-4 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 min-h-[100px] font-medium"
+                    />
+                    <div className="flex justify-end">
+                      <button 
+                        onClick={handleRate}
+                        disabled={isSubmitting || !newReviewComment.trim()}
+                        className="bg-indigo-600 text-white px-6 py-2 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest hover:bg-indigo-700 transition-all disabled:opacity-50"
+                      >
+                        {isSubmitting ? "Submitting..." : "Post Review"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-indigo-50 rounded-2xl p-6 text-center border border-indigo-100">
+                    <p className="text-sm font-bold text-indigo-900">Please <Link to="/auth" className="underline">sign in</Link> to leave a review.</p>
+                  </div>
+                )}
+
+                {/* Review List */}
+                <div className="space-y-6">
+                  {reviews.length === 0 ? (
+                    <div className="text-center py-10 space-y-4">
+                      <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto">
+                        <MessageSquare className="w-6 h-6 text-gray-200" />
+                      </div>
+                      <p className="text-xs sm:text-sm text-gray-400 font-bold uppercase tracking-widest">No reviews yet. Be the first!</p>
+                    </div>
+                  ) : (
+                    reviews.map((review) => (
+                      <div key={review.id} className="flex gap-4 p-4 rounded-2xl border border-transparent hover:border-gray-50 transition-colors">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-100 shrink-0 overflow-hidden border border-gray-50">
+                          <img src={review.userAvatar || `https://ui-avatars.com/api/?name=${review.userName}&background=random`} alt={review.userName} />
+                        </div>
+                        <div className="space-y-1.5 flex-grow">
+                          <div className="flex justify-between items-center">
+                            <h5 className="text-[11px] sm:text-sm font-black text-gray-900 uppercase tracking-tight">{review.userName}</h5>
+                            <span className="text-[9px] sm:text-[10px] text-gray-400 font-medium">
+                              {review.createdAt ? new Date(review.createdAt.seconds * 1000).toLocaleDateString() : "Just now"}
+                            </span>
+                          </div>
+                          <div className="flex gap-0.5 text-amber-400">
+                            {[...Array(5)].map((_, i) => (
+                              <Star key={i} className={cn("w-3 h-3 fill-current", i < review.rating ? "text-amber-400" : "text-gray-200")} />
+                            ))}
+                          </div>
+                          <p className="text-[11px] sm:text-sm text-gray-500 font-medium leading-relaxed italic">
+                            "{review.comment}"
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </section>
+
+      {/* Sticky Mobile Buy Button (Modified) */}
+      <div className="sm:hidden fixed bottom-24 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] z-40">
+        <button 
+          onClick={handleBuyNow}
+          className="w-full py-3.5 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl shadow-indigo-500/40 flex items-center justify-center gap-2 active:scale-95 transition-all"
+        >
+          <Zap className="w-4 h-4 fill-current" />
+          Buy for ৳{getActivePrice().toLocaleString()}
+        </button>
+      </div>
     </div>
   );
 }

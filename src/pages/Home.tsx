@@ -1,7 +1,23 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { Search, ArrowRight, Star, Code, Cpu, Layout, FileText, Package, ShoppingCart, CheckCircle, ChevronLeft, ChevronRight, Zap, ShieldCheck, MessageSquare } from "lucide-react";
+import { 
+  Search, 
+  ArrowRight, 
+  Star, 
+  Code, 
+  Cpu, 
+  Layout, 
+  FileText, 
+  Package, 
+  ShoppingCart, 
+  CheckCircle, 
+  ChevronLeft, 
+  ChevronRight, 
+  Zap, 
+  ShieldCheck, 
+  MessageSquare
+} from "lucide-react";
 import { cn } from "../lib/utils";
 import { useSettings } from "../lib/SettingsContext";
 import { useCart } from "../lib/CartContext";
@@ -97,12 +113,12 @@ export default function Home() {
   });
 
   return (
-    <div className="space-y-6 sm:space-y-16 pb-20">
+    <div className="w-full space-y-8 sm:space-y-16 pb-20">
       {/* Most Sold Ticker */}
       {(settings.showTicker ?? true) && topSellers.length > 0 && (
         <div 
           style={{ backgroundColor: settings.tickerBgColor || "#4f46e5" }}
-          className="overflow-hidden py-1.5 sm:py-3.5 -mx-4 sm:-mx-8 lg:-mx-12 relative border-b border-white/5 shadow-inner"
+          className="overflow-hidden py-2 sm:py-4 relative border-b border-white/5 shadow-inner rounded-2xl"
         >
           <div className="flex whitespace-nowrap items-center">
             <motion.div 
@@ -112,27 +128,27 @@ export default function Home() {
                 repeat: Infinity, 
                 ease: "linear" 
               }}
-              className="flex whitespace-nowrap gap-8 sm:gap-16 items-center"
+              className="flex whitespace-nowrap gap-10 sm:gap-16 items-center"
             >
               {[...topSellers, ...topSellers, ...topSellers].map((p, i) => (
                 <Link 
                   key={`${p.id}-${i}`} 
                   to={`/product/${p.id}`}
                   style={{ color: settings.tickerTextColor || "#ffffff" }}
-                  className="flex items-center gap-2 sm:gap-4 group/ticker"
+                  className="flex items-center gap-3 sm:gap-4 group/ticker"
                 >
-                  <span className="bg-white/20 px-1.5 py-0.5 rounded-[4px] text-[8px] sm:text-[10px] font-black uppercase tracking-widest whitespace-nowrap">
+                  <span className="bg-white/20 px-2.5 py-1 rounded-[6px] text-[10px] sm:text-[10px] font-black uppercase tracking-widest whitespace-nowrap">
                     {settings.tickerText || "🔥 Sold"}
                   </span>
-                  <span className="font-bold text-[11px] sm:text-base tracking-tight whitespace-nowrap group-hover/ticker:underline decoration-2 underline-offset-4">
+                  <span className="font-bold text-sm sm:text-base tracking-tight whitespace-nowrap group-hover/ticker:underline decoration-2 underline-offset-4">
                     {p.name}
                   </span>
-                  <span className="text-[10px] sm:text-sm font-medium opacity-70">
+                  <span className="text-xs sm:text-sm font-medium opacity-70">
                     ৳{p.price.toLocaleString()}
                   </span>
-                  <div className="flex items-center gap-0.5 sm:gap-1 text-amber-300">
-                    <Star className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 fill-current" />
-                    <span className="text-[10px] sm:text-sm font-black">{p.rating || 4.8}</span>
+                  <div className="flex items-center gap-1 text-amber-300">
+                    <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-current" />
+                    <span className="text-xs sm:text-sm font-black">{p.rating || 4.8}</span>
                   </div>
                 </Link>
               ))}
@@ -152,50 +168,52 @@ export default function Home() {
       )}
 
       {/* Featured Statistics */}
-      <section className="grid grid-cols-3 gap-1 sm:gap-8 py-4 sm:py-10 border-y border-gray-100">
+      <section className="grid grid-cols-3 gap-1 sm:gap-8 py-10 sm:py-20 border-y border-gray-100 w-full overflow-hidden">
         {[
-          { label: settings.stat1Label, value: settings.stat1Value, icon: Layout, color: "text-indigo-500" },
-          { label: settings.stat2Label, value: settings.stat2Value, icon: Code, color: "text-purple-500" },
-          { label: settings.stat3Label, value: settings.stat3Value, icon: FileText, color: "text-pink-500" },
+          { label: settings.stat1Label || "TOTAL USERS", value: settings.stat1Value || "50k+", icon: Layout, color: "text-indigo-500", bg: "bg-indigo-50" },
+          { label: settings.stat2Label || "DIGITAL ASSETS", value: settings.stat2Value || "1,200+", icon: Code, color: "text-purple-500", bg: "bg-purple-50" },
+          { label: settings.stat3Label || "SUCCESS RATE", value: settings.stat3Value || "99.9%", icon: FileText, color: "text-pink-500", bg: "bg-pink-50" },
         ].map((stat, i) => (
-          <div key={i} className="text-center space-y-1">
-            <div className={cn("flex justify-center", stat.color)}>
-              <stat.icon className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
+          <div key={i} className="text-center space-y-2 sm:space-y-4 px-1">
+            <div className={cn("mx-auto flex items-center justify-center w-10 h-10 sm:w-16 sm:h-16 rounded-2xl shrink-0 transition-transform hover:scale-110", stat.bg)}>
+              <stat.icon className={cn("w-5 h-5 sm:w-8 sm:h-8", stat.color)} />
             </div>
-            <div className="text-xs sm:text-2xl font-bold text-gray-900 leading-tight">{stat.value}</div>
-            <div className="text-[7px] sm:text-xs text-gray-400 sm:text-gray-500 uppercase tracking-wider sm:tracking-widest leading-none truncate px-1 font-bold">
-              {stat.label}
+            <div className="space-y-1 sm:space-y-1.5">
+              <div className="text-[15px] sm:text-3xl font-black text-gray-900 leading-tight whitespace-nowrap overflow-hidden tracking-tighter">{stat.value}</div>
+              <div className="text-[8px] sm:text-[11px] text-gray-400 font-bold uppercase tracking-widest leading-none whitespace-nowrap overflow-hidden opacity-80">
+                {stat.label}
+              </div>
             </div>
           </div>
         ))}
       </section>
 
       {/* Why Choose Us */}
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-8">
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6">
         {[
-          { title: "Instant Access", desc: "Download assets immediately after purchase.", icon: Zap, bg: "bg-indigo-50", text: "text-indigo-600" },
-          { title: "Secure Payments", desc: "Top-tier encryption for your safety.", icon: ShieldCheck, bg: "bg-emerald-50", text: "text-emerald-600" },
-          { title: "Expert Support", desc: "Friendly help available whenever you need.", icon: MessageSquare, bg: "bg-amber-50", text: "text-amber-600" },
+          { title: "Instant Delivery", desc: "Digital assets instantly.", icon: Zap, bg: "bg-indigo-50", text: "text-indigo-600" },
+          { title: "Secure Platform", desc: "Safe checkout flows.", icon: ShieldCheck, bg: "bg-emerald-50", text: "text-emerald-600" },
+          { title: "Top Quality", desc: "Curated premium assets.", icon: MessageSquare, bg: "bg-amber-50", text: "text-amber-600" },
         ].map((item, i) => (
-          <div key={i} className="flex items-center gap-4 p-5 rounded-2xl bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all">
-            <div className={cn("p-3 rounded-xl shrink-0", item.bg, item.text)}>
-              <item.icon className="w-5 h-5 sm:w-6 sm:h-6" />
+          <div key={i} className="flex items-center gap-3.5 sm:gap-5 p-4 sm:p-6 rounded-xl sm:rounded-[24px] bg-white border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group">
+            <div className={cn("p-3 sm:p-4 rounded-xl shrink-0 group-hover:scale-110 transition-transform shadow-sm", item.bg, item.text)}>
+              <item.icon className="w-5 h-5 sm:w-8 sm:h-8" />
             </div>
-            <div>
-              <h4 className="font-bold text-gray-900 text-sm sm:text-base leading-tight">{item.title}</h4>
-              <p className="text-[10px] sm:text-xs text-gray-500 mt-1">{item.desc}</p>
+            <div className="space-y-1 flex-grow">
+              <h4 className="font-black text-gray-900 text-sm sm:text-xl leading-tight">{item.title}</h4>
+              <p className="text-[10px] sm:text-sm text-gray-500 font-medium leading-tight">{item.desc}</p>
             </div>
           </div>
         ))}
       </section>
 
       {/* Product List */}
-      <section ref={productsRef} className="space-y-6 sm:space-y-8">
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl sm:text-3xl font-black text-gray-900 uppercase tracking-tight">
-                {searchTerm ? `Search: ${searchTerm}` : "Best Sellers"}
+      <section ref={productsRef} className="space-y-6 sm:space-y-12">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 sm:gap-10">
+          <div className="space-y-2 sm:space-y-3 w-full">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <h2 className="text-2xl sm:text-4xl font-black text-gray-900 uppercase tracking-tighter leading-tight">
+                {searchTerm ? `Search: ${searchTerm}` : "Premium Catalog"}
               </h2>
               {searchTerm && (
                 <button 
@@ -203,45 +221,46 @@ export default function Home() {
                     setSearchTerm("");
                     navigate("/");
                   }}
-                  className="p-1 px-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-[10px] font-black uppercase tracking-widest text-gray-500 transition-colors"
+                  className="w-fit p-1 px-4 bg-indigo-600 hover:bg-indigo-700 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-white transition-all shadow-lg shadow-indigo-200 active:scale-95"
                 >
                   Clear
                 </button>
               )}
             </div>
-            <p className="text-xs sm:text-base text-gray-500 font-medium">Hand-picked premium assets for your ideas.</p>
+            <p className="text-xs sm:text-xl text-gray-500 font-medium">Hand-picked premium assets for your ideas.</p>
           </div>
           
-          <div className="flex flex-wrap gap-2 overflow-x-auto pb-2 md:pb-0 no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
-            {categoryOptions.map(cat => (
-              <button
-                key={cat}
-                onClick={() => setFilter(cat)}
-                className={cn(
-                  "px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap",
-                  filter === cat 
-                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200" 
-                    : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-900"
-                )}
-              >
-                {cat}
-              </button>
-            ))}
+          <div className="w-full lg:w-auto flex flex-wrap gap-3 overflow-x-auto pb-2 no-scrollbar">
+            <div className="flex bg-gray-100/30 p-2 rounded-3xl border border-gray-100 overflow-x-auto no-scrollbar w-full sm:w-auto">
+              {categoryOptions.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setFilter(cat)}
+                  className={cn(
+                    "px-5 py-3 sm:px-8 sm:py-3.5 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all duration-300 whitespace-nowrap",
+                    filter === cat 
+                      ? "bg-indigo-600 text-white shadow-2xl shadow-indigo-200 ring-4 ring-indigo-500/10 scale-105 z-10" 
+                      : "text-gray-400 hover:text-gray-900 hover:bg-white"
+                  )}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-8">
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-8 w-full">
             {[1, 2, 3, 4].map(i => (
-              <div key={i} className="animate-pulse space-y-4">
-                <div className="aspect-[4/3] bg-gray-100 rounded-2xl" />
-                <div className="h-4 bg-gray-100 rounded w-2/3" />
-                <div className="h-4 bg-gray-100 rounded w-1/3" />
+              <div key={i} className="animate-pulse space-y-2">
+                <div className="aspect-square bg-gray-100 rounded-lg sm:rounded-2xl" />
+                <div className="h-3 bg-gray-100 rounded w-2/3 mx-auto" />
               </div>
             ))}
           </div>
         ) : filteredProducts.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-8">
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-8 w-full">
             {filteredProducts.map(product => (
               <ProductCard key={product.id} product={product as any} />
             ))}
@@ -260,7 +279,15 @@ export default function Home() {
 
 function HeroSlider({ banners, defaultTitle, defaultSubtitle, productsRef }: { banners: any[], defaultTitle: string, defaultSubtitle: string, productsRef: React.RefObject<HTMLElement> }) {
   const [current, setCurrent] = useState(0);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
   const navigate = useNavigate();
+  const { settings } = useSettings();
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (banners.length <= 1) return;
@@ -270,18 +297,34 @@ function HeroSlider({ banners, defaultTitle, defaultSubtitle, productsRef }: { b
     return () => clearInterval(timer);
   }, [banners.length]);
 
-  if (!banners || banners.length === 0) {
+  if (banners.length === 0) {
     return (
-      <section className="relative overflow-hidden rounded-2xl sm:rounded-[40px] bg-indigo-950 text-white min-h-[220px] sm:min-h-[400px] flex items-center shadow-2xl shadow-indigo-100/50">
+      <section className="relative overflow-hidden rounded-xl sm:rounded-[32px] bg-indigo-950 text-white min-h-[140px] sm:min-h-[400px] flex items-center shadow-2xl shadow-indigo-100/50 mx-auto w-full">
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/50 to-purple-900/50" />
-        <div className="absolute top-0 right-0 w-64 sm:w-96 h-64 sm:h-96 bg-indigo-500/20 rounded-full blur-3xl -mr-32 sm:-mr-48 -mt-32 sm:-mt-48" />
-        <div className="relative w-full max-w-4xl mx-auto text-center px-4 sm:px-6 py-6 sm:py-20 space-y-4 sm:space-y-8">
+        <div className="absolute top-0 right-0 w-64 sm:w-96 h-64 sm:h-96 bg-indigo-500/20 rounded-full blur-3xl -mr-16 sm:-mr-48 -mt-32 sm:-mt-48 pointer-events-none" />
+        <div className="relative w-full max-w-4xl mx-auto text-center px-6 py-4 sm:py-20 space-y-2.5 sm:space-y-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            <h1 className="text-lg sm:text-5xl md:text-7xl font-black tracking-tighter leading-tight uppercase">{defaultTitle}</h1>
-            <p className="text-indigo-100/80 text-[10px] sm:text-lg md:text-xl max-w-2xl mx-auto mt-1 sm:mt-4 font-medium px-4">{defaultSubtitle}</p>
+            <h1 
+              style={{ 
+                fontSize: isMobile ? (settings.heroTitleSizeMobile || "18px") : (settings.heroTitleSizeDesktop || "48px"),
+                color: settings.heroTitleColor || "#ffffff"
+              }}
+              className="font-black tracking-tighter leading-tight uppercase underline decoration-indigo-500/30 decoration-2 underline-offset-2 sm:underline-offset-8 px-2"
+            >
+              {defaultTitle}
+            </h1>
+            <p 
+              style={{ 
+                fontSize: isMobile ? (settings.heroSubtitleSizeMobile || "10px") : (settings.heroSubtitleSizeDesktop || "16px"),
+                color: settings.heroSubtitleColor || "#ffffffcc"
+              }}
+              className="text-indigo-100/80 mt-1 sm:mt-4 font-medium px-4 line-clamp-2 sm:line-clamp-none max-w-2xl mx-auto"
+            >
+              {defaultSubtitle}
+            </p>
           </motion.div>
-          <button onClick={() => productsRef.current?.scrollIntoView({ behavior: 'smooth' })} className="bg-white text-indigo-950 px-6 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all flex items-center gap-2 mx-auto shadow-xl">
-            <Package className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" /> Explore
+          <button onClick={() => productsRef.current?.scrollIntoView({ behavior: 'smooth' })} className="bg-white text-indigo-950 px-5 py-2.5 sm:px-8 sm:py-4 rounded-lg sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all flex items-center gap-1.5 sm:gap-2 mx-auto shadow-xl active:scale-95">
+            <Package className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-indigo-600" /> Explore
           </button>
         </div>
       </section>
@@ -291,57 +334,69 @@ function HeroSlider({ banners, defaultTitle, defaultSubtitle, productsRef }: { b
   const slide = banners[current];
 
   return (
-    <section className="relative overflow-hidden rounded-2xl sm:rounded-[40px] bg-indigo-950 text-white min-h-[220px] sm:min-h-[450px] shadow-2xl shadow-indigo-100/50 group/slider">
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={current}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          className="absolute inset-0"
-        >
-          <div className="absolute inset-0 w-full h-full">
-            <img 
-              src={slide.imageUrl} 
-              alt={slide.title || "Banner"} 
-              className="w-full h-full object-cover opacity-50" 
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-indigo-950/90 via-indigo-950/40 to-transparent" />
-          </div>
+  <section className="relative overflow-hidden rounded-xl sm:rounded-[40px] bg-indigo-950 text-white min-h-[160px] sm:min-h-[450px] shadow-2xl shadow-indigo-100/50 group/slider mx-auto w-full">
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={current}
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+        className="absolute inset-0"
+      >
+        <div className="absolute inset-0 w-full h-full">
+          <img 
+            src={slide.imageUrl} 
+            alt={slide.title || "Banner"} 
+            className="w-full h-full object-cover opacity-50" 
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-indigo-950/90 via-indigo-950/40 to-transparent" />
+        </div>
 
-          <div className="relative h-full w-full max-w-5xl mx-auto flex flex-col justify-center items-center text-center px-4 py-4 sm:py-20 space-y-2.5 sm:space-y-8">
-            <motion.div
-              initial={{ y: 30, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.2 }}
-              className="space-y-1 sm:space-y-4"
+        <div className="relative h-full w-full max-w-5xl mx-auto flex flex-col justify-center items-center text-center px-6 py-4 sm:py-20 space-y-3 sm:space-y-8">
+          <motion.div
+            initial={{ y: 30, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="space-y-1 sm:space-y-4"
+          >
+            <h1 
+              style={{ 
+                fontSize: isMobile ? (settings.heroTitleSizeMobile || "18px") : (settings.heroTitleSizeDesktop || "48px"),
+                color: settings.heroTitleColor || "#ffffff"
+              }}
+              className="font-black tracking-tighter uppercase leading-[1.1] sm:leading-none px-4 break-words"
             >
-              <h1 className="text-base sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tighter uppercase leading-tight px-2">
-                {slide.title || defaultTitle}
-              </h1>
-              <p className="text-indigo-100/80 text-[9px] sm:text-lg md:text-xl max-w-2xl mx-auto font-medium px-4 line-clamp-1 sm:line-clamp-none">
-                {slide.subtitle || defaultSubtitle}
-              </p>
-            </motion.div>
+              {slide.title || defaultTitle}
+            </h1>
+            <p 
+              style={{ 
+                fontSize: isMobile ? (settings.heroSubtitleSizeMobile || "10px") : (settings.heroSubtitleSizeDesktop || "16px"),
+                color: settings.heroSubtitleColor || "#ffffffcc"
+              }}
+              className="text-white/80 max-w-2xl mx-auto font-medium px-4 line-clamp-2 sm:line-clamp-none"
+            >
+              {slide.subtitle || defaultSubtitle}
+            </p>
+          </motion.div>
 
-            <motion.div
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="flex gap-4"
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.3 }}
+          >
+            <button 
+              onClick={() => slide.link ? (slide.link.startsWith('http') ? window.open(slide.link, '_blank') : navigate(slide.link)) : productsRef.current?.scrollIntoView({ behavior: 'smooth' })}
+              className="bg-white text-indigo-950 px-5 py-2.5 sm:px-8 sm:py-5 rounded-lg sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all flex items-center gap-1.5 sm:gap-3 shadow-xl active:scale-95"
             >
-              <button 
-                onClick={() => slide.link ? (slide.link.startsWith('http') ? window.open(slide.link, '_blank') : navigate(slide.link)) : productsRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                className="bg-white text-indigo-950 px-5 py-2.5 sm:px-8 sm:py-5 rounded-lg sm:rounded-[24px] font-black text-[9px] sm:text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all flex items-center gap-1.5 sm:gap-3 shadow-xl active:scale-95"
-              >
-                <ArrowRight className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-indigo-600" />
-                {slide.buttonText || (slide.link ? "Open" : "Explore")}
-              </button>
-            </motion.div>
-          </div>
-        </motion.div>
-      </AnimatePresence>
+              <ArrowRight className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-indigo-600" />
+              {slide.buttonText || (slide.link ? "Open" : "Explore")}
+            </button>
+          </motion.div>
+        </div>
+      </motion.div>
+    </AnimatePresence>
+
 
       {/* Controls */}
       {banners.length > 1 && (
@@ -395,10 +450,10 @@ function ProductCard({ product }: any) {
 
   return (
     <div 
-      className="group bg-white rounded-xl sm:rounded-3xl border border-gray-100 overflow-hidden hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-500 flex flex-col h-full relative"
+      className="group bg-white rounded-xl sm:rounded-[32px] border border-gray-100 overflow-hidden hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-500 flex flex-col h-full relative w-full max-w-full box-border"
     >
       {/* Image Section */}
-      <div className="relative aspect-[16/11] sm:aspect-[16/10] overflow-hidden bg-gray-50 border-b border-gray-50">
+      <div className="relative aspect-square sm:aspect-[1.5/1] overflow-hidden bg-gray-50 border-b border-gray-50/50">
         <Link to={`/product/${product.id}`} className="block w-full h-full">
           <img 
             src={product.imageUrl || `https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800&q=80`} 
@@ -406,9 +461,9 @@ function ProductCard({ product }: any) {
             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
           />
         </Link>
-        <div className="absolute top-1 sm:top-4 left-1 sm:left-4">
+        <div className="absolute top-2 sm:top-4 left-2 sm:left-4">
           <span className={cn(
-            "px-1.5 sm:px-3 py-0.5 sm:py-1 rounded-full text-[6px] sm:text-[10px] font-black uppercase tracking-widest border shadow-sm",
+            "px-2 sm:px-3 py-1 rounded-md sm:rounded-xl text-[7px] sm:text-[9px] font-black uppercase tracking-widest border shadow-sm backdrop-blur-md",
             getCategoryColor(product.category)
           )}>
             {product.category}
@@ -416,37 +471,40 @@ function ProductCard({ product }: any) {
         </div>
       </div>
       
-      {/* Content Section */}
-      <div className="p-2 sm:p-6 flex-grow flex flex-col justify-between space-y-1 sm:space-y-4">
-        <div className="space-y-0.5 sm:space-y-2">
+      <div className="p-3 sm:p-6 flex-grow flex flex-col justify-between space-y-3 sm:space-y-5">
+        <div className="space-y-1 sm:space-y-1.5">
           <Link to={`/product/${product.id}`} className="block">
-            <h3 className="text-[10px] sm:text-lg font-bold text-gray-900 leading-tight group-hover:text-indigo-600 transition-colors line-clamp-1 sm:line-clamp-none">
+            <h3 className="text-[12px] sm:text-base lg:text-lg font-black text-gray-900 leading-tight group-hover:text-indigo-600 transition-colors line-clamp-2 min-h-[2.4em] sm:min-h-0 tracking-tight uppercase">
               {product.name}
             </h3>
           </Link>
-          <p className="text-[8px] sm:text-sm text-gray-500 line-clamp-1 sm:line-clamp-2 leading-relaxed font-medium">
-            {product.description || "Premium software asset."}
-          </p>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-0.5 text-amber-400">
+              <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" />
+              <span className="text-[9px] sm:text-[10px] font-black">{product.rating || 4.8}</span>
+            </div>
+            <span className="text-[9px] sm:text-[10px] text-gray-300 font-bold uppercase tracking-widest">• {product.category}</span>
+          </div>
         </div>
         
-        <div className="space-y-1.5 sm:space-y-4 pt-1.5 sm:pt-4 border-t border-gray-50">
+        <div className="space-y-2 sm:space-y-4 pt-3 sm:pt-5 border-t border-gray-50">
           <div className="flex items-center justify-between">
-            <div className="text-[13px] sm:text-2xl font-black text-gray-900 flex items-baseline gap-0.5 sm:gap-1 tracking-tighter">
-              <span className="text-[8px] sm:text-sm font-medium text-gray-400">৳</span>
+            <div className="text-sm sm:text-xl font-black text-gray-900 flex items-baseline gap-0.5 tracking-tighter">
+              <span className="text-[9px] sm:text-xs font-medium text-gray-400">৳</span>
               {product.price.toLocaleString()}
             </div>
-            <div className="flex items-center gap-0.5 sm:gap-1.5 px-0.5 sm:px-2 py-0.5 bg-amber-50 rounded-md sm:rounded-lg text-amber-600 border border-amber-100">
-              <Star className="w-2 h-2 sm:w-3.5 sm:h-3.5 fill-current" />
-              <span className="text-[8px] sm:text-xs font-black">{product.rating || 4.8}</span>
+            <div className="bg-emerald-50 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+               <ShieldCheck className="w-2.5 h-2.5 text-emerald-500" />
+               <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Safe</span>
             </div>
           </div>
           
-          <div className="flex flex-col gap-1.5 sm:gap-3">
+          <div className="flex flex-col gap-1.5 sm:gap-2">
             <button 
               onClick={() => addToCart(product)}
               disabled={isInCart}
               className={cn(
-                "w-full py-1.5 sm:py-3 px-2 sm:px-4 rounded-lg sm:rounded-2xl text-center text-[8px] sm:text-xs font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2 shadow-lg",
+                "w-full py-2 sm:py-3 px-4 rounded-lg sm:rounded-xl text-center text-[9px] sm:text-[10px] font-black uppercase tracking-[0.15em] transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-sm",
                 isInCart 
                   ? "bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-none cursor-default" 
                   : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100"
@@ -454,38 +512,29 @@ function ProductCard({ product }: any) {
             >
               {isInCart ? (
                 <>
-                  <CheckCircle className="w-2.5 h-2.5 sm:w-4 sm:h-4" />
-                  <span>Added</span>
+                  <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span>In Cart</span>
                 </>
               ) : (
                 <>
-                  <ShoppingCart className="w-2.5 h-2.5 sm:w-4 sm:h-4" />
-                  <span>Cart</span>
+                  <ShoppingCart className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span>Buy Asset</span>
                 </>
               )}
             </button>
-            <div className="flex gap-1 sm:gap-2">
+            <div className="flex gap-1.5">
               <Link 
                 to={`/product/${product.id}`}
-                className="flex-1 py-1 sm:py-3 px-1 sm:px-4 bg-gray-50 text-gray-600 rounded-lg sm:rounded-2xl text-center text-[8px] sm:text-xs font-black uppercase tracking-widest hover:bg-gray-100 transition-all active:scale-95 whitespace-nowrap"
+                className="flex-1 py-1.5 sm:py-2.5 bg-gray-50 text-gray-500 rounded-lg sm:rounded-xl text-center text-[8px] sm:text-[9px] font-black uppercase tracking-widest hover:bg-gray-100 transition-all active:scale-95 flex items-center justify-center"
               >
-                View
+                Details
               </Link>
-              {product.category === "Subscription" ? (
-                <Link 
-                  to={`/product/${product.id}`}
-                  className="flex-1 py-1 sm:py-3 px-1 sm:px-4 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-lg sm:rounded-2xl text-center text-[8px] sm:text-xs font-black uppercase tracking-widest hover:bg-indigo-100 transition-all active:scale-95 whitespace-nowrap"
-                >
-                  Plans
-                </Link>
-              ) : (
-                <Link 
-                  to={`/checkout/${product.id}`}
-                  className="flex-1 py-1 sm:py-3 px-1 sm:px-4 bg-gray-900 text-white rounded-lg sm:rounded-2xl text-center text-[8px] sm:text-xs font-black uppercase tracking-widest hover:bg-black transition-all active:scale-95 whitespace-nowrap"
-                >
-                  Buy
-                </Link>
-              )}
+              <Link 
+                to={product.category === "Subscription" ? `/product/${product.id}` : `/checkout?productId=${product.id}`}
+                className="flex-1 py-1.5 sm:py-2.5 bg-gray-900 text-white rounded-lg sm:rounded-xl text-center text-[8px] sm:text-[9px] font-black uppercase tracking-widest hover:bg-black transition-all active:scale-95 flex items-center justify-center"
+              >
+                Checkout
+              </Link>
             </div>
           </div>
         </div>

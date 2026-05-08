@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { User } from "firebase/auth";
-import { doc, getDoc, collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, collection, addDoc, serverTimestamp, query, where, getDocs, increment, updateDoc } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
@@ -75,6 +75,10 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
   const [isSuccess, setIsSuccess] = useState(false);
   const [lastOrderId, setLastOrderId] = useState("");
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<any | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
 
   // Set default payment method based on settings
   useEffect(() => {
@@ -194,7 +198,62 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
     fetchProductAndIntent();
   }, [id, user, navigate, isCartCheckout, cartItems, cartTotal, isSuccess]);
 
-  const totalAmount = isCartCheckout ? cartTotal : (products[0]?.price || 0);
+  const subtotal = isCartCheckout ? cartTotal : (products[0]?.price || 0);
+  const discountAmount = appliedCoupon 
+    ? (appliedCoupon.type === "percentage" 
+        ? (subtotal * appliedCoupon.value) / 100 
+        : appliedCoupon.value)
+    : 0;
+  const totalAmount = Math.max(0, subtotal - discountAmount);
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) return;
+    setIsValidatingCoupon(true);
+    setCouponError(null);
+    try {
+      const q = query(collection(db, "coupons"), where("code", "==", couponCode.toUpperCase().trim()), where("isActive", "==", true));
+      const snap = await getDocs(q);
+      
+      if (snap.empty) {
+        setCouponError("Invalid coupon code.");
+        setAppliedCoupon(null);
+      } else {
+        const couponData = snap.docs[0].data();
+        const expiryDate = new Date(couponData.expiryDate);
+        if (expiryDate < new Date()) {
+          setCouponError("This coupon has expired.");
+          setAppliedCoupon(null);
+        } else {
+          setAppliedCoupon({ id: snap.docs[0].id, ...couponData });
+          setCouponError(null);
+        }
+      }
+    } catch (error) {
+      console.error(error);
+      setCouponError("Failed to validate coupon.");
+    } finally {
+      setIsValidatingCoupon(false);
+    }
+  };
+
+  const handleOrderSuccess = async (orderId: string) => {
+    try {
+      if (appliedCoupon) {
+        await updateDoc(doc(db, "coupons", appliedCoupon.id), {
+          usageCount: increment(1)
+        });
+      }
+      isCartCheckout && clearCart();
+      setLastOrderId(orderId);
+      setIsSuccess(true);
+    } catch (error) {
+      console.error("Error updating coupon usage:", error);
+      // Still set success as order was created
+      isCartCheckout && clearCart();
+      setLastOrderId(orderId);
+      setIsSuccess(true);
+    }
+  };
 
   useEffect(() => {
     if (isSuccess) {
@@ -327,7 +386,7 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 max-w-6xl mx-auto py-8">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 max-w-7xl mx-auto py-8">
       {globalError && (
         <div className="lg:col-span-12 p-6 bg-red-50 border-2 border-red-100 rounded-[32px] text-red-600 space-y-2">
            <div className="flex items-center gap-2 font-black uppercase tracking-widest text-xs">
@@ -373,17 +432,66 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
           </div>
 
           <div className="space-y-3 pt-4 border-t border-gray-200 border-dashed">
+            {/* Coupon Section */}
+            <div className="space-y-2 py-2">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block ml-1">Have a coupon?</label>
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value)}
+                  placeholder="Enter code"
+                  className="flex-grow bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                />
+                <button 
+                  onClick={handleApplyCoupon}
+                  disabled={isValidatingCoupon || !couponCode.trim()}
+                  className="bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all disabled:opacity-50"
+                >
+                  {isValidatingCoupon ? "..." : "Apply"}
+                </button>
+              </div>
+              {couponError && (
+                <p className="text-[9px] font-bold text-red-500 ml-1">{couponError}</p>
+              )}
+              {appliedCoupon && (
+                <div className="flex items-center justify-between bg-emerald-50 border border-emerald-100 p-2 rounded-xl mt-2">
+                  <div className="flex items-center gap-2">
+                    <Check className="w-3 h-3 text-emerald-600" />
+                    <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">
+                      {appliedCoupon.code} Applied
+                    </span>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setAppliedCoupon(null);
+                      setCouponCode("");
+                    }}
+                    className="text-[9px] font-black text-gray-400 uppercase hover:text-red-500"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Subtotal</span>
-              <span className="font-medium font-mono">৳{totalAmount.toLocaleString()}</span>
+              <span className="font-medium font-mono">৳{subtotal.toLocaleString()}</span>
             </div>
+            {appliedCoupon && (
+              <div className="flex justify-between text-sm text-emerald-600">
+                <span>Discount ({appliedCoupon.code})</span>
+                <span className="font-bold font-mono">-৳{discountAmount.toLocaleString()}</span>
+              </div>
+            )}
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Platform Fee</span>
               <span className="text-green-600 font-bold font-mono">FREE</span>
             </div>
             <div className="flex justify-between text-base font-bold text-gray-900 pt-4 border-t border-gray-200">
               <span>Total Amount</span>
-              <span className="font-mono">৳{totalAmount.toLocaleString()}</span>
+              <span className="font-mono text-indigo-600">৳{totalAmount.toLocaleString()}</span>
             </div>
           </div>
         </section>
@@ -510,11 +618,9 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
                   userId={user?.uid!}
                   customerInfo={customerInfo}
                   amount={totalAmount}
-                  onSuccess={(orderId) => {
-                    isCartCheckout && clearCart();
-                    setLastOrderId(orderId);
-                    setIsSuccess(true);
-                  }}
+                  appliedCoupon={appliedCoupon}
+                  discountAmount={discountAmount}
+                  onSuccess={handleOrderSuccess}
                 />
               </motion.div>
             ) : gateway === "stripe" ? (
@@ -531,11 +637,9 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
                       userId={user?.uid!} 
                       customerInfo={customerInfo}
                       amount={totalAmount} 
-                      onSuccess={(orderId) => {
-                        isCartCheckout && clearCart();
-                        setLastOrderId(orderId);
-                        setIsSuccess(true);
-                      }}
+                      appliedCoupon={appliedCoupon}
+                      discountAmount={discountAmount}
+                      onSuccess={handleOrderSuccess}
                     />
                   </Elements>
                 ) : (
@@ -554,11 +658,9 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
                   userId={user?.uid!} 
                   customerInfo={customerInfo}
                   amount={totalAmount}
-                  onSuccess={(orderId) => {
-                    isCartCheckout && clearCart();
-                    setLastOrderId(orderId);
-                    setIsSuccess(true);
-                  }}
+                  appliedCoupon={appliedCoupon}
+                  discountAmount={discountAmount}
+                  onSuccess={handleOrderSuccess}
                 />
               </motion.div>
             )}
@@ -569,7 +671,7 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
   );
 }
 
-function CODForm({ products, userId, customerInfo, amount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, amount: number, onSuccess?: (orderId: string) => void }) {
+function CODForm({ products, userId, customerInfo, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -600,6 +702,8 @@ function CODForm({ products, userId, customerInfo, amount, onSuccess }: { produc
         paymentMethod: "cod",
         status: "pending",
         amount,
+        couponCode: appliedCoupon?.code || null,
+        discountAmount: discountAmount || 0,
         createdAt: serverTimestamp(),
       });
 
@@ -637,7 +741,7 @@ function CODForm({ products, userId, customerInfo, amount, onSuccess }: { produc
   );
 }
 
-function StripeForm({ products, userId, customerInfo, amount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, amount: number, onSuccess?: (orderId: string) => void }) {
+function StripeForm({ products, userId, customerInfo, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
   const productIds = products.map(p => p.id);
   const stripe = useStripe();
   const elements = useElements();
@@ -685,6 +789,8 @@ function StripeForm({ products, userId, customerInfo, amount, onSuccess }: { pro
           deliveryAddress: customerInfo.address,
           status: "completed",
           amount,
+          couponCode: appliedCoupon?.code || null,
+          discountAmount: discountAmount || 0,
           paymentIntentId: paymentIntent.id,
           downloadToken,
           gateway: "stripe",
@@ -717,7 +823,7 @@ function StripeForm({ products, userId, customerInfo, amount, onSuccess }: { pro
   );
 }
 
-function LocalForm({ products, userId, customerInfo, amount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, amount: number, onSuccess?: (orderId: string) => void }) {
+function LocalForm({ products, userId, customerInfo, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
   const { settings } = useSettings();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -773,6 +879,8 @@ function LocalForm({ products, userId, customerInfo, amount, onSuccess }: { prod
         paymentMethod: selectedMethod,
         status: "pending", // Set to pending for manual confirmation
         amount,
+        couponCode: appliedCoupon?.code || null,
+        discountAmount: discountAmount || 0,
         createdAt: serverTimestamp(),
       });
 

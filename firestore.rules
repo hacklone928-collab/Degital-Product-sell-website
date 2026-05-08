@@ -9,22 +9,38 @@ service cloud.firestore {
     // Helper functions
     function isSignedIn() { return request.auth != null; }
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
-    function isAdmin() { 
-      return isSignedIn() && (
-        (request.auth.token.keys().contains('email') && (
-          request.auth.token.email == 'businessonline.6251@gmail.com' || 
-          request.auth.token.email == 'hacklone928@gmail.com'
-        )) || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin')
-      ); 
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
-    function isValidId(id) { return id is string && id.size() <= 128; }
+
+    function hasRole(roles) {
+      return isSignedIn() && (
+        request.auth.token.email in ['businessonline.6251@gmail.com', 'hacklone928@gmail.com'] || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         getUserData().role in roles)
+      );
+    }
+
+    function isSuperAdmin() { return hasRole(['super_admin']); }
+    function isAdmin() { return hasRole(['super_admin', 'admin']); }
+    function isModerator() { return hasRole(['super_admin', 'admin', 'moderator']); }
+
+    // Faster admin check for list operations to avoid get()
+    function isHardcodedAdmin() {
+      return isSignedIn() && request.auth.token.email in ['businessonline.6251@gmail.com', 'hacklone928@gmail.com'];
+    }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
 
     // Settings
     match /settings/site {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // Connection Test
+    match /test/connection {
+      allow read: if true;
     }
 
     // Pages
@@ -35,32 +51,54 @@ service cloud.firestore {
 
     // Users
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
+      allow read: if isOwner(userId) || isModerator();
       allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']));
-      allow update: if isAdmin();
+      allow update: if isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'bonusBalance']));
+      allow update: if isSuperAdmin(); // Only Super Admin can change roles or manually edit users
     }
 
     // Products
     match /products/{productId} {
       allow read: if true;
       allow delete: if isAdmin();
-      allow update: if isAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'reviewCount', 'updatedAt']));
+      allow update: if isModerator() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'reviewCount', 'updatedAt']));
       allow create: if isAdmin();
+
+      // Reviews Subcollection
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        allow update, delete: if isModerator() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      }
+    }
+
+    // Coupons
+    match /coupons/{couponId} {
+      allow list: if isModerator() || (isSignedIn() && resource.data.get('assignedEmail', '') == request.auth.token.email);
+      allow get: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Withdrawals
+    match /withdrawals/{withdrawalId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isModerator() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
     }
 
     // Orders
     match /orders/{orderId} {
-      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isModerator());
+      allow list: if isHardcodedAdmin() || isModerator() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin();
+      allow update, delete: if isModerator();
     }
 
     // Support Tickets
     match /support_tickets/{ticketId} {
       allow create: if true; // Guest can send tickets
-      allow read, write: if isAdmin();
+      allow read, write: if isModerator();
     }
 
     // Categories

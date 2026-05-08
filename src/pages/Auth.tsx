@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { auth, db, googleProvider } from "../lib/firebase";
 import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
+import { handleFirestoreError, OperationType } from "../lib/firestoreUtils";
 import { Mail, Lock, User, Github, Chrome } from "lucide-react";
 import { motion } from "motion/react";
 import { cn } from "../lib/utils";
@@ -25,15 +26,19 @@ export default function Auth() {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
       
-      const userDoc = await getDoc(doc(db, "users", user.uid));
-      if (!userDoc.exists()) {
-        await setDoc(doc(db, "users", user.uid), {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          role: "user",
-          createdAt: new Date().toISOString(),
-        });
+      try {
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (!userDoc.exists()) {
+          await setDoc(doc(db, "users", user.uid), {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            role: "user",
+            createdAt: new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
       }
       navigate(from, { replace: true });
     } catch (err) {
@@ -54,13 +59,17 @@ export default function Auth() {
       } else {
         const result = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(result.user, { displayName: name });
-        await setDoc(doc(db, "users", result.user.uid), {
-          uid: result.user.uid,
-          email,
-          displayName: name,
-          role: "user",
-          createdAt: new Date().toISOString(),
-        });
+        try {
+          await setDoc(doc(db, "users", result.user.uid), {
+            uid: result.user.uid,
+            email,
+            displayName: name,
+            role: "user",
+            createdAt: new Date().toISOString(),
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, `users/${result.user.uid}`);
+        }
       }
       navigate(from, { replace: true });
     } catch (err: any) {

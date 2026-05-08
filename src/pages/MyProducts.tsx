@@ -115,7 +115,7 @@ export default function MyProducts() {
   );
 
   return (
-    <div className="max-w-4xl mx-auto py-6 sm:py-10 px-4 sm:px-0 space-y-8 sm:space-y-12">
+    <div className="max-w-7xl mx-auto py-6 sm:py-10 px-4 sm:px-0 space-y-8 sm:space-y-12">
       <div className="flex items-center gap-3 sm:gap-4">
         <div className="p-3 sm:p-4 bg-indigo-600 text-white rounded-2xl sm:rounded-3xl shadow-xl shadow-indigo-100">
           <ShieldCheck className="w-6 h-6 sm:w-8 sm:h-8" />

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { db, storage, auth } from "../lib/firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, setDoc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, setDoc, getDoc, serverTimestamp, updateDoc, query, where, increment } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { Plus, Package, Users, DollarSign, Trash2, Edit, Star, Database, Settings as SettingsIcon, Save, ShoppingBag, Clock, CheckCircle, Copy, Link as LinkIcon, Inbox, Mail, Search, ShieldCheck, TrendingUp, Calendar, Eye, EyeOff, ExternalLink, ImagePlus, Upload, Loader2, Phone } from "lucide-react";
 import { motion } from "motion/react";
@@ -19,15 +19,29 @@ import {
 } from 'recharts';
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<"products" | "settings" | "orders" | "pages" | "tickets" | "categories">("products");
+  const [activeTab, setActiveTab] = useState<"products" | "settings" | "orders" | "pages" | "tickets" | "categories" | "coupons" | "withdrawals" | "users">("products");
   const [revenueTimeframe, setRevenueTimeframe] = useState<"daily" | "weekly" | "monthly">("daily");
   const [showSalesStats, setShowSalesStats] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [pages, setPages] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
+  const [coupons, setCoupons] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAddingCoupon, setIsAddingCoupon] = useState(false);
+  const [editingCoupon, setEditingCoupon] = useState<any | null>(null);
+  const [newCoupon, setNewCoupon] = useState({
+    code: "",
+    type: "percentage" as "percentage" | "fixed",
+    value: 0,
+    bonusAmount: 0,
+    expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    isActive: true,
+    assignedEmail: ""
+  });
   const [searchTerm, setSearchTerm] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -101,7 +115,12 @@ export default function AdminDashboard() {
     stat3Label: "Success Rate",
     stat3Value: "99.9%",
     showHero: true,
-    showTicker: true,
+    heroTitleSizeMobile: "28px",
+    heroTitleSizeDesktop: "60px",
+    heroSubtitleSizeMobile: "12px",
+    heroSubtitleSizeDesktop: "18px",
+    heroTitleColor: "#ffffff",
+    heroSubtitleColor: "#ffffffcc",
     bkashNumber: "",
     nagadNumber: "",
     rocketNumber: "",
@@ -146,20 +165,38 @@ export default function AdminDashboard() {
 
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
-  const [isAdminUser, setIsAdminUser] = useState(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [isAdminChecking, setIsAdminChecking] = useState(true);
 
   const adminEmails = ['businessonline.6251@gmail.com', 'hacklone928@gmail.com'];
-  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(auth.currentUser?.email || null);
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      setIsAdminChecking(true);
       setCurrentUserEmail(user?.email || null);
+      if (user) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", user.uid));
+          if (userDoc.exists()) {
+            setCurrentUserRole(userDoc.data().role || 'user');
+          }
+        } catch (e) {
+          console.error("Error fetching user role:", e);
+        }
+      } else {
+        setCurrentUserRole(null);
+      }
+      setIsAdminChecking(false);
     });
     return () => unsubscribe();
   }, []);
 
-  const isActuallyAdmin = isAdminUser || (currentUserEmail && adminEmails.includes(currentUserEmail.toLowerCase().trim()));
+  const isSuperAdmin = currentUserRole === 'super_admin' || (currentUserEmail && adminEmails.includes(currentUserEmail.toLowerCase().trim()));
+  const isAdmin = isSuperAdmin || currentUserRole === 'admin';
+  const isModerator = isAdmin || currentUserRole === 'moderator';
+
+  const isActuallyAdmin = isModerator; // Legacy check for other parts of dashboard
 
   const toggleSelectAll = () => {
     if (activeTab === "products") {
@@ -190,7 +227,7 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteSelected = async () => {
-    if (!isActuallyAdmin) {
+    if (!isAdmin) {
       alert("Admin access required.");
       return;
     }
@@ -305,11 +342,137 @@ export default function AdminDashboard() {
     fetchSettings();
     fetchPages();
     fetchCategories();
+    fetchCoupons();
     if (isActuallyAdmin) {
       fetchOrders();
       fetchTickets();
+      fetchWithdrawals();
+      if (isSuperAdmin) fetchUsers();
     }
-  }, [isActuallyAdmin]);
+  }, [isActuallyAdmin, isSuperAdmin]);
+
+  const fetchUsers = async () => {
+    if (!isSuperAdmin) return;
+    try {
+      const snap = await getDocs(collection(db, "users"));
+      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, "users");
+    }
+  };
+
+  const handleUpdateUserRole = async (userId: string, newRole: string) => {
+    if (!isSuperAdmin) {
+      alert("Only Super Admins can change user roles.");
+      return;
+    }
+    try {
+      await updateDoc(doc(db, "users", userId), {
+        role: newRole,
+        updatedAt: serverTimestamp()
+      });
+      fetchUsers();
+      alert(`User role updated to ${newRole}`);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to update user role.");
+    }
+  };
+
+  const fetchWithdrawals = async () => {
+    try {
+      const snap = await getDocs(collection(db, "withdrawals"));
+      setWithdrawals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, "withdrawals");
+    }
+  };
+
+  const fetchCoupons = async () => {
+    try {
+      const snap = await getDocs(collection(db, "coupons"));
+      setCoupons(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, "coupons");
+    }
+  };
+
+  const handleAddCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const couponData: any = {
+        ...newCoupon,
+        code: newCoupon.code.toUpperCase().trim(),
+        value: Number(newCoupon.value),
+        usageCount: 0,
+        createdAt: serverTimestamp(),
+      };
+      
+      if (!couponData.assignedEmail) {
+        delete couponData.assignedEmail;
+      } else {
+        couponData.assignedEmail = couponData.assignedEmail.toLowerCase().trim();
+      }
+
+      await addDoc(collection(db, "coupons"), couponData);
+      setIsAddingCoupon(false);
+      setNewCoupon({
+        code: "",
+        type: "percentage",
+        value: 0,
+        bonusAmount: 0,
+        expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        isActive: true,
+        assignedEmail: ""
+      });
+      fetchCoupons();
+      alert("Coupon added successfully!");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to add coupon.");
+    }
+  };
+
+  const handleUpdateCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCoupon) return;
+    try {
+      const { id, ...data } = editingCoupon;
+      const couponData: any = {
+        ...data,
+        code: data.code.toUpperCase().trim(),
+        value: Number(data.value),
+        bonusAmount: Number(data.bonusAmount || 0),
+        updatedAt: serverTimestamp(),
+      };
+
+      if (!couponData.assignedEmail) {
+        couponData.assignedEmail = null;
+      } else {
+        couponData.assignedEmail = couponData.assignedEmail.toLowerCase().trim();
+      }
+
+      await updateDoc(doc(db, "coupons", id), couponData);
+      setEditingCoupon(null);
+      fetchCoupons();
+      alert("Coupon updated successfully!");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to update coupon.");
+    }
+  };
+
+  const handleDeleteCoupon = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this coupon?")) return;
+    try {
+      await deleteDoc(doc(db, "coupons", id));
+      fetchCoupons();
+      alert("Coupon deleted successfully!");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to delete coupon.");
+    }
+  };
 
   const fetchTickets = async () => {
     try {
@@ -320,43 +483,75 @@ export default function AdminDashboard() {
     }
   };
 
-  useEffect(() => {
-    const checkAdmin = async () => {
-      if (auth.currentUser) {
-        setIsAdminChecking(true);
-          // Method 1: Check by email directly for immediate UI feedback
-        const userEmail = auth.currentUser.email?.toLowerCase().trim();
-        const adminEmailsList = ['businessonline.6251@gmail.com', 'hacklone928@gmail.com'];
-        const isEmailAdmin = adminEmailsList.includes(userEmail || '');
+  const handleToggleFakeOrder = async (orderId: string, currentFake: boolean) => {
+    try {
+      const order = orders.find(o => o.id === orderId);
+      const isMarkingAsFake = !currentFake;
+      
+      const updates: any = {
+        isFake: isMarkingAsFake,
+        updatedAt: serverTimestamp()
+      };
+
+      // If the order had a bonus processed, we need to adjust the user's balance
+      if (order && order.bonusProcessed && order.bonusAssigneeEmail && (order.bonusAmountGiven || 0) > 0) {
+        // Find user by email
+        const uq = query(collection(db, "users"), where("email", "==", order.bonusAssigneeEmail.toLowerCase()));
+        const userSnap = await getDocs(uq);
         
-        // Method 2: Check by doc for robust role management
-        try {
-          const userDocRef = doc(db, "users", auth.currentUser.uid);
-          const userDoc = await getDoc(userDocRef);
-          let isRoleAdmin = userDoc.exists() && userDoc.data()?.role === 'admin';
+        if (!userSnap.empty) {
+          const userRef = doc(db, "users", userSnap.docs[0].id);
+          const bonusChange = isMarkingAsFake ? -order.bonusAmountGiven : order.bonusAmountGiven;
           
-          // Auto-provision admin role for master emails
-          if (isEmailAdmin && !isRoleAdmin) {
-            console.log("Auto-provisioning admin role for master email:", userEmail);
-            // We'll skip the setDoc here if it might fail due to rules, 
-            // but we'll trust the email check for the session.
-            setIsAdminUser(true);
-          } else {
-            setIsAdminUser(isEmailAdmin || isRoleAdmin);
-          }
-          console.log("Admin Check:", { isEmailAdmin, isRoleAdmin, userEmail });
-        } catch (e) {
-          console.error("Admin Doc Check Failed:", e);
-          setIsAdminUser(isEmailAdmin);
-        } finally {
-          setIsAdminChecking(false);
+          await updateDoc(userRef, {
+            bonusBalance: increment(bonusChange)
+          });
+          
+          // Optionally track the adjustment in the order
+          updates.bonusAdjustedForFake = isMarkingAsFake;
         }
-      } else {
-        setIsAdminChecking(false);
       }
-    };
-    checkAdmin();
-  }, [auth.currentUser]);
+
+      await updateDoc(doc(db, "orders", orderId), updates);
+      fetchOrders();
+      alert(`Order marked as ${isMarkingAsFake ? 'FAKE' : 'VALID'}. Bonus balance adjusted accordingly.`);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to update status.");
+    }
+  };
+
+  const handleProcessWithdrawal = async (id: string, newStatus: "completed" | "rejected") => {
+    try {
+      const withdrawal = withdrawals.find(w => w.id === id);
+      if (!withdrawal) return;
+
+      if (newStatus === "completed") {
+        // Deduct from user's balance
+        const userRef = doc(db, "users", withdrawal.userId);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const currentBalance = userSnap.data().bonusBalance || 0;
+          if (currentBalance < withdrawal.amount) {
+            alert("Warning: User has insufficient balance for this withdrawal.");
+          }
+          await updateDoc(userRef, {
+            bonusBalance: Math.max(0, currentBalance - withdrawal.amount)
+          });
+        }
+      }
+
+      await updateDoc(doc(db, "withdrawals", id), { 
+        status: newStatus,
+        updatedAt: serverTimestamp() 
+      });
+      fetchWithdrawals();
+      alert(`Withdrawal request ${newStatus}!`);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to process withdrawal.");
+    }
+  };
 
   const handleFullReset = async () => {
     if (!isActuallyAdmin) return;
@@ -426,6 +621,30 @@ export default function AdminDashboard() {
         updates.credentials = editingCredentials;
       }
 
+      // Handle bonus for coupon assignee
+      const order = orders.find(o => o.id === id);
+      if (order && order.couponCode) {
+        const q = query(collection(db, "coupons"), where("code", "==", order.couponCode));
+        const couponSnap = await getDocs(q);
+        if (!couponSnap.empty) {
+          const couponData = couponSnap.docs[0].data();
+          if (couponData.assignedEmail && couponData.bonusAmount > 0) {
+            // Find user by email
+            const uq = query(collection(db, "users"), where("email", "==", couponData.assignedEmail.toLowerCase()));
+            const userSnap = await getDocs(uq);
+            if (!userSnap.empty) {
+              const userRef = doc(db, "users", userSnap.docs[0].id);
+              await updateDoc(userRef, {
+                bonusBalance: increment(couponData.bonusAmount)
+              });
+              updates.bonusProcessed = true;
+              updates.bonusAmountGiven = couponData.bonusAmount;
+              updates.bonusAssigneeEmail = couponData.assignedEmail;
+            }
+          }
+        }
+      }
+
       await updateDoc(doc(db, "orders", id), updates);
       await fetchOrders();
       alert("Order confirmed! Product is now available to the user.");
@@ -480,7 +699,10 @@ export default function AdminDashboard() {
       callback = fetchPages;
     }
 
-    if (!collectionName || !isActuallyAdmin) return;
+    if (!collectionName || !isSuperAdmin) {
+      alert("Only Super Admins can clear all records.");
+      return;
+    }
     if (!window.confirm(confirmMsg)) return;
     const confirmation = window.prompt("Type 'DELETE' to confirm:");
     if (confirmation?.toUpperCase() !== "DELETE") return;
@@ -743,28 +965,19 @@ export default function AdminDashboard() {
               <Trash2 className="w-4 h-4" /> Delete Records ({selectedOrderIds.length})
             </button>
           )}
-          {activeTab !== "settings" && (
+          {activeTab !== "settings" && isSuperAdmin && (
             <button 
               onClick={() => {
-                if (!isActuallyAdmin) {
-                  alert("Action Denied: You do not have administrator permissions.");
-                  return;
-                }
                 handleClearAll();
               }}
-              className={cn(
-                "border px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-2 hover:-translate-y-0.5 active:scale-95",
-                isActuallyAdmin 
-                  ? "border-red-100 bg-red-50/50 text-red-600 hover:bg-red-50 hover:border-red-200" 
-                  : "border-gray-100 text-gray-300 cursor-not-allowed"
-              )}
+              className="border px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-2 hover:-translate-y-0.5 active:scale-95 border-red-100 bg-red-50/50 text-red-600 hover:bg-red-50 hover:border-red-200"
             >
               <Trash2 className="w-4 h-4" /> Clear All {activeTab === "tickets" ? "Inbox" : activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
             </button>
           )}
           <button 
             onClick={() => {
-              if (!isActuallyAdmin) {
+              if (!isAdmin) {
                 alert("Action Denied: You do not have administrator permissions.");
                 return;
               }
@@ -772,7 +985,7 @@ export default function AdminDashboard() {
             }}
             className={cn(
               "px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-2 hover:-translate-y-0.5 active:scale-95 flex-1 sm:flex-none",
-              isActuallyAdmin 
+              isAdmin 
                 ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200" 
                 : "bg-gray-100 text-gray-400 shadow-none cursor-not-allowed"
             )}
@@ -931,6 +1144,17 @@ export default function AdminDashboard() {
             Sales
           </button>
           <button 
+            onClick={() => setActiveTab("withdrawals")}
+            className={cn(
+              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
+              activeTab === "withdrawals" 
+                ? "bg-white text-indigo-600 shadow-sm" 
+                : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+            )}
+          >
+            Withdrawals
+          </button>
+          <button 
             onClick={() => setActiveTab("categories")}
             className={cn(
               "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
@@ -940,6 +1164,17 @@ export default function AdminDashboard() {
             )}
           >
             Categories
+          </button>
+          <button 
+            onClick={() => setActiveTab("coupons")}
+            className={cn(
+              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
+              activeTab === "coupons" 
+                ? "bg-white text-indigo-600 shadow-sm" 
+                : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+            )}
+          >
+            Coupons
           </button>
           <button 
             onClick={() => setActiveTab("pages")}
@@ -963,17 +1198,32 @@ export default function AdminDashboard() {
           >
             Tickets
           </button>
-          <button 
-            onClick={() => setActiveTab("settings")}
-            className={cn(
-              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
-              activeTab === "settings" 
-                ? "bg-white text-indigo-600 shadow-sm" 
-                : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-            )}
-          >
-            Site Logic
-          </button>
+          {isSuperAdmin && (
+            <button 
+              onClick={() => setActiveTab("users")}
+              className={cn(
+                "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
+                activeTab === "users" 
+                  ? "bg-white text-indigo-600 shadow-sm" 
+                  : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              )}
+            >
+              Users
+            </button>
+          )}
+          {isAdmin && (
+            <button 
+              onClick={() => setActiveTab("settings")}
+              className={cn(
+                "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
+                activeTab === "settings" 
+                  ? "bg-white text-indigo-600 shadow-sm" 
+                  : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              )}
+            >
+              Site Logic
+            </button>
+          )}
         </div>
 
         {activeTab === "categories" ? (
@@ -1007,6 +1257,10 @@ export default function AdminDashboard() {
                       key={catName}
                       type="button"
                       onClick={() => {
+                        if (!isAdmin) {
+                          alert("Action Denied: Admin permissions required.");
+                          return;
+                        }
                         const currentHidden = siteSettings.hiddenCategories || [];
                         const nextHidden = isHidden 
                           ? currentHidden.filter(name => name !== catName)
@@ -1074,14 +1328,32 @@ export default function AdminDashboard() {
                       </div>
                       <div className="flex gap-2">
                         <button 
-                          onClick={() => setEditingCategory(category)}
-                          className="p-2 text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-colors"
+                          onClick={() => {
+                            if (!isAdmin) {
+                              alert("Action Denied: Admin permissions required.");
+                              return;
+                            }
+                            setEditingCategory(category);
+                          }}
+                          className={cn(
+                            "p-2 rounded-xl transition-colors",
+                            isAdmin ? "text-indigo-600 bg-indigo-50 hover:bg-indigo-100" : "text-gray-200 bg-gray-50/50 cursor-not-allowed"
+                          )}
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button 
-                          onClick={() => handleDeleteCategory(category.id)}
-                          className="p-2 text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-colors"
+                          onClick={() => {
+                            if (!isAdmin) {
+                              alert("Action Denied: Admin permissions required.");
+                              return;
+                            }
+                            handleDeleteCategory(category.id);
+                          }}
+                          className={cn(
+                            "p-2 rounded-xl transition-colors",
+                            isAdmin ? "text-red-600 bg-red-50 hover:bg-red-100" : "text-gray-200 bg-gray-50/50 cursor-not-allowed"
+                          )}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -1124,7 +1396,7 @@ export default function AdminDashboard() {
                     <Trash2 className="w-3.5 h-3.5" /> Delete ({selectedProductIds.length})
                   </button>
                 )}
-                {isActuallyAdmin && products.length > 0 && (
+                {isSuperAdmin && products.length > 0 && (
                   <button 
                     onClick={handleClearAll}
                     className="bg-gray-100 text-gray-500 hover:text-red-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-50 transition-colors flex items-center gap-2"
@@ -1206,7 +1478,7 @@ export default function AdminDashboard() {
                 <div className="flex justify-end gap-1">
                   <button 
                     onClick={() => {
-                      if (!isActuallyAdmin) {
+                      if (!isAdmin) {
                         alert("Action Denied: You do not have administrator permissions.");
                         return;
                       }
@@ -1219,7 +1491,7 @@ export default function AdminDashboard() {
                   </button>
                   <button 
                     onClick={async () => {
-                      if (!isActuallyAdmin) {
+                      if (!isAdmin) {
                         alert("Administrator access required for this action.");
                         return;
                       }
@@ -1239,7 +1511,7 @@ export default function AdminDashboard() {
                     title="Delete Product"
                     className={cn(
                       "p-2 sm:p-3 transition-all rounded-xl sm:rounded-2xl border border-transparent active:scale-90",
-                      isActuallyAdmin ? "text-gray-400 hover:text-red-600 hover:bg-red-50 hover:border-red-100 shadow-sm hover:shadow-red-50" : "text-gray-200 bg-gray-50/50 cursor-not-allowed"
+                      isAdmin ? "text-gray-400 hover:text-red-600 hover:bg-red-50 hover:border-red-100 shadow-sm hover:shadow-red-50" : "text-gray-200 bg-gray-50/50 cursor-not-allowed"
                     )}
                   >
                     <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -1399,13 +1671,34 @@ export default function AdminDashboard() {
                           <td className="px-3 sm:px-6 py-3 sm:py-4">
                             <div className="flex flex-col max-w-[100px] sm:max-w-none">
                               <span className="text-xs sm:text-sm font-bold text-gray-900 truncate">{o.customerName || "Anonymous"}</span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] sm:text-xs text-gray-500 truncate">{o.customerEmail || o.email}</span>
-                                {o.deliveryAddress && (
-                                  <span className="flex items-center gap-0.5 text-[8px] font-black bg-purple-50 text-purple-600 px-1 rounded uppercase tracking-tighter">
-                                    <ShoppingBag className="w-2 h-2" />
-                                    Details
-                                  </span>
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] sm:text-xs text-gray-500 truncate">{o.customerEmail || o.email}</span>
+                                  {o.deliveryAddress && (
+                                    <span className="flex items-center gap-0.5 text-[8px] font-black bg-purple-50 text-purple-600 px-1 rounded uppercase tracking-tighter">
+                                      <ShoppingBag className="w-2 h-2" />
+                                      Details
+                                    </span>
+                                  )}
+                                </div>
+                                {o.couponCode && (
+                                  <div className="mt-1 flex items-center gap-1">
+                                    <span className="text-[9px] font-black bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded uppercase tracking-widest border border-indigo-100/50">
+                                      Coupon: {o.couponCode}
+                                    </span>
+                                    {(o.discountAmount || 0) > 0 && (
+                                      <span className="text-[9px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded uppercase tracking-widest border border-emerald-100/50 font-mono">
+                                        -৳{o.discountAmount.toLocaleString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                                {o.isFake && (
+                                  <div className="mt-1 flex items-center gap-1">
+                                    <span className="text-[9px] font-black bg-red-50 text-red-600 px-1.5 py-0.5 rounded uppercase tracking-widest border border-red-200">
+                                      FAKE ORDER
+                                    </span>
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -1443,6 +1736,16 @@ export default function AdminDashboard() {
                           <td className="px-3 sm:px-6 py-3 sm:py-4 text-right border-l border-gray-50">
                             <div className="flex justify-end gap-1">
                               <button 
+                                onClick={() => handleToggleFakeOrder(o.id, o.isFake)}
+                                title={o.isFake ? "Mark as Valid" : "Mark as Fake"}
+                                className={cn(
+                                  "p-2 sm:p-3 rounded-xl sm:rounded-2xl transition-all border border-transparent shadow-sm active:scale-90",
+                                  o.isFake ? "text-emerald-500 bg-emerald-50 hover:bg-emerald-100" : "text-amber-500 bg-amber-50 hover:bg-amber-100"
+                                )}
+                              >
+                                <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                              </button>
+                              <button 
                                 onClick={() => {
                                   setSelectedOrder(o);
                                   setEditingCredentials(o.credentials || {});
@@ -1476,6 +1779,197 @@ export default function AdminDashboard() {
                 </div>
               </section>
             )}
+          </section>
+        ) : activeTab === "withdrawals" ? (
+          <section className="space-y-6">
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex justify-between items-center bg-gray-50/50">
+                <div>
+                  <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">Withdrawal Requests</h3>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Review and process user bonus withdrawals</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full uppercase tracking-widest">
+                    {withdrawals.filter(w => w.status === 'pending').length} Pending
+                  </span>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-gray-50 text-[10px] uppercase font-black text-gray-400 tracking-widest">
+                    <tr>
+                      <th className="px-6 py-5">User</th>
+                      <th className="px-6 py-5">Amount</th>
+                      <th className="px-6 py-5">Payment Details</th>
+                      <th className="px-6 py-5">Status</th>
+                      <th className="px-6 py-5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {withdrawals
+                      .sort((a, b) => (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0))
+                      .map(w => (
+                      <tr key={w.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="font-black text-gray-900 text-sm">{w.userEmail}</div>
+                          <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                            {w.createdAt?.toDate?.().toLocaleDateString() || "Recently"}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-lg font-black text-indigo-600">৳{w.amount.toLocaleString()}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                             <div className={cn(
+                               "px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-tight shadow-sm",
+                               w.method === 'bkash' ? "bg-pink-100 text-pink-600" : "bg-indigo-100 text-indigo-600"
+                             )}>
+                               {w.method}
+                             </div>
+                             <span className="font-mono text-xs font-bold text-gray-700">{w.accountNumber}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className={cn(
+                            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest",
+                            w.status === 'completed' ? "bg-emerald-50 text-emerald-600" : 
+                            w.status === 'pending' ? "bg-amber-50 text-amber-600" : "bg-red-50 text-red-600"
+                          )}>
+                             <Clock className="w-3 h-3" />
+                             {w.status}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          {w.status === 'pending' ? (
+                            <div className="flex justify-end gap-2">
+                              <button 
+                                onClick={() => handleProcessWithdrawal(w.id, "rejected")}
+                                className="px-4 py-2 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-all active:scale-95 border border-red-100"
+                              >
+                                Reject
+                              </button>
+                              <button 
+                                onClick={() => handleProcessWithdrawal(w.id, "completed")}
+                                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-emerald-700 transition-all active:scale-95"
+                              >
+                                Complete Payment
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">Processed</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {withdrawals.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-20 text-center text-gray-400 font-bold uppercase tracking-widest text-[10px]">
+                           No withdrawal requests found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        ) : activeTab === "coupons" ? (
+          <section className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+              <div>
+                <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">Coupon Management</h3>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Manage discount codes and promotions</p>
+              </div>
+              <button 
+                onClick={() => setIsAddingCoupon(true)}
+                className="bg-indigo-600 text-white px-6 py-3 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" /> Create Coupon
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {coupons.map(coupon => (
+                <div key={coupon.id} className="bg-white rounded-[32px] p-6 border border-gray-100 shadow-sm relative group overflow-hidden">
+                   <div className="absolute top-0 right-0 p-4 flex gap-1">
+                     <button 
+                       onClick={() => setEditingCoupon(coupon)}
+                       className="p-2 text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
+                     >
+                       <Edit className="w-4 h-4" />
+                     </button>
+                     <button 
+                       onClick={() => handleDeleteCoupon(coupon.id)}
+                       className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                     >
+                       <Trash2 className="w-4 h-4" />
+                     </button>
+                   </div>
+
+                   <div className="space-y-4">
+                     <div className="flex items-center justify-between">
+                       <div className="flex items-center gap-3">
+                         <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
+                            <Database className="w-5 h-5" />
+                         </div>
+                         <div>
+                           <div className="text-lg font-black text-gray-900 tracking-tight">{coupon.code}</div>
+                           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{coupon.type} Discount</div>
+                         </div>
+                       </div>
+                       {!coupon.isActive && (
+                         <span className="text-[8px] font-black bg-red-50 text-red-600 px-2 py-0.5 rounded-full uppercase tracking-widest">Inactive</span>
+                       )}
+                     </div>
+
+                     {coupon.assignedEmail && (
+                       <div className="flex items-center gap-2 bg-amber-50 px-3 py-2 rounded-xl border border-amber-100">
+                         <Mail className="w-3.5 h-3.5 text-amber-600" />
+                         <div className="flex flex-col">
+                           <span className="text-[8px] font-black text-amber-500 uppercase tracking-widest leading-none">Assigned To</span>
+                           <span className="text-[10px] font-bold text-amber-900 truncate max-w-[150px]">{coupon.assignedEmail}</span>
+                         </div>
+                       </div>
+                     )}
+
+                     <div className="grid grid-cols-3 gap-2 pt-4 border-t border-gray-50">
+                        <div>
+                          <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Value</div>
+                          <div className="text-xl font-black text-indigo-600">
+                             {coupon.type === 'percentage' ? `${coupon.value}%` : `৳${coupon.value.toLocaleString()}`}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Uses</div>
+                          <div className="text-xl font-black text-gray-900">{coupon.usageCount || 0}</div>
+                        </div>
+                     </div>
+
+                     <div className="flex items-center justify-between pt-4">
+                        <div className="flex items-center gap-1.5">
+                           <Clock className="w-3 h-3 text-gray-400" />
+                           <span className="text-[10px] font-bold text-gray-500">Expires: {new Date(coupon.expiryDate).toLocaleDateString()}</span>
+                        </div>
+                        <span className={cn(
+                          "px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest",
+                          new Date(coupon.expiryDate) < new Date() ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"
+                        )}>
+                          {new Date(coupon.expiryDate) < new Date() ? "Expired" : "Active"}
+                        </span>
+                     </div>
+                   </div>
+                </div>
+              ))}
+
+              {coupons.length === 0 && (
+                <div className="col-span-full py-20 text-center bg-gray-50/50 rounded-[40px] border-2 border-dashed border-gray-200">
+                  <Database className="w-12 h-12 text-gray-200 mx-auto mb-4" />
+                  <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">No coupons found. Create one to get started.</p>
+                </div>
+              )}
+            </div>
           </section>
         ) : activeTab === "pages" ? (
           <section className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
@@ -1650,6 +2144,86 @@ export default function AdminDashboard() {
               </table>
             </div>
           </section>
+        ) : activeTab === "users" ? (
+          <section className="space-y-6">
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex justify-between items-center bg-gray-50/50">
+                <div>
+                  <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">User Management</h3>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Manage user roles and permissions</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full uppercase tracking-widest">
+                    {users.length} Total Users
+                  </span>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-gray-50 text-[10px] uppercase font-black text-gray-400 tracking-widest">
+                    <tr>
+                      <th className="px-6 py-5">User</th>
+                      <th className="px-6 py-5">Balance</th>
+                      <th className="px-6 py-5">Role</th>
+                      <th className="px-6 py-5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {users
+                      .sort((a, b) => (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0))
+                      .map(u => (
+                      <tr key={u.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-xs">
+                              {u.displayName?.charAt(0).toUpperCase() || u.email?.charAt(0).toUpperCase() || "?"}
+                            </div>
+                            <div>
+                              <div className="font-black text-gray-900 text-sm">{u.displayName || "Anonymous User"}</div>
+                              <div className="text-[10px] font-bold text-gray-400 lowercase tracking-tight">
+                                {u.email}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-indigo-600 font-black text-sm">৳{(u.bonusBalance || 0).toLocaleString()}</div>
+                          <div className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Bonus</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className={cn(
+                            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest",
+                            u.role === 'super_admin' ? "bg-purple-100 text-purple-600" :
+                            u.role === 'admin' ? "bg-indigo-100 text-indigo-600" :
+                            u.role === 'moderator' ? "bg-emerald-100 text-emerald-600" : "bg-gray-100 text-gray-500"
+                          )}>
+                             <ShieldCheck className="w-3 h-3" />
+                             {u.role || 'user'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex justify-end gap-2">
+                             <select 
+                               value={u.role || 'user'} 
+                               onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
+                               disabled={u.email === currentUserEmail}
+                               className="bg-gray-50 border-none rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
+                             >
+                               <option value="user">User</option>
+                               <option value="moderator">Moderator</option>
+                               <option value="admin">Admin</option>
+                               <option value="super_admin">Super Admin</option>
+                             </select>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
         ) : (
           <section className="bg-white rounded-3xl border border-gray-100 p-8 shadow-sm">
             <div className="flex items-center gap-4 mb-8">
@@ -1662,28 +2236,23 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div className="flex justify-between items-center bg-red-50 border border-red-100 p-6 rounded-2xl">
-              <div>
-                <h4 className="text-sm font-bold text-red-900">Danger Zone</h4>
-                <p className="text-xs text-red-600">Wipe all data and reset the marketplace to factory defaults.</p>
+            {isSuperAdmin && (
+              <div className="flex justify-between items-center bg-red-50 border border-red-100 p-6 rounded-2xl">
+                <div>
+                  <h4 className="text-sm font-bold text-red-900">Danger Zone</h4>
+                  <p className="text-xs text-red-600">Wipe all data and reset the marketplace to factory defaults.</p>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    handleFullReset();
+                  }}
+                  className="bg-red-600 text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all hover:bg-red-700 shadow-lg shadow-red-100"
+                >
+                  Reset Website
+                </button>
               </div>
-              <button 
-                type="button"
-                onClick={() => {
-                  if (!isActuallyAdmin) {
-                    alert("Action Denied: You do not have administrator permissions.");
-                    return;
-                  }
-                  handleFullReset();
-                }}
-                className={cn(
-                  "px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
-                  isActuallyAdmin ? "bg-red-600 text-white hover:bg-red-700 shadow-lg shadow-red-100" : "bg-gray-100 text-gray-400"
-                )}
-              >
-                Reset Website
-              </button>
-            </div>
+            )}
 
             <form onSubmit={handleUpdateSettings} className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-4">
@@ -1734,6 +2303,105 @@ export default function AdminDashboard() {
                     onChange={e => setSiteSettings({...siteSettings, heroSubtitle: e.target.value})}
                     className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
                   />
+                </div>
+
+                <div className="md:col-span-2 pt-6 border-t border-gray-100">
+                  <h4 className="font-bold text-gray-900 border-l-4 border-indigo-600 pl-3 mb-4 uppercase text-sm tracking-tighter">Hero Text Styling</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 bg-gray-50/50 p-6 rounded-3xl border border-gray-100">
+                    <div className="space-y-4">
+                      <h5 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Title Styling</h5>
+                      <div>
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1 block">Title Color</label>
+                        <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-gray-100">
+                          <input 
+                            type="color" 
+                            value={siteSettings.heroTitleColor || "#ffffff"}
+                            onChange={e => setSiteSettings({...siteSettings, heroTitleColor: e.target.value})}
+                            className="h-8 w-8 rounded-lg bg-transparent border-none cursor-pointer"
+                          />
+                          <input 
+                            type="text" 
+                            value={siteSettings.heroTitleColor || "#ffffff"}
+                            onChange={e => setSiteSettings({...siteSettings, heroTitleColor: e.target.value})}
+                            className="text-xs font-mono bg-transparent border-none outline-none w-20"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Mobile Size</label>
+                          <input 
+                            type="text" 
+                            value={siteSettings.heroTitleSizeMobile || "28px"}
+                            onChange={e => setSiteSettings({...siteSettings, heroTitleSizeMobile: e.target.value})}
+                            placeholder="28px"
+                            className="w-full bg-white border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Desktop Size</label>
+                          <input 
+                            type="text" 
+                            value={siteSettings.heroTitleSizeDesktop || "60px"}
+                            onChange={e => setSiteSettings({...siteSettings, heroTitleSizeDesktop: e.target.value})}
+                            placeholder="60px"
+                            className="w-full bg-white border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <h5 className="text-[10px] font-black text-purple-600 uppercase tracking-widest">Subtitle Styling</h5>
+                      <div>
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1 block">Subtitle Color</label>
+                        <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-gray-100">
+                          <input 
+                            type="color" 
+                            value={siteSettings.heroSubtitleColor || "#ffffffcc"}
+                            onChange={e => setSiteSettings({...siteSettings, heroSubtitleColor: e.target.value})}
+                            className="h-8 w-8 rounded-lg bg-transparent border-none cursor-pointer"
+                          />
+                          <input 
+                            type="text" 
+                            value={siteSettings.heroSubtitleColor || "#ffffffcc"}
+                            onChange={e => setSiteSettings({...siteSettings, heroSubtitleColor: e.target.value})}
+                            className="text-xs font-mono bg-transparent border-none outline-none w-20"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Mobile Size</label>
+                          <input 
+                            type="text" 
+                            value={siteSettings.heroSubtitleSizeMobile || "12px"}
+                            onChange={e => setSiteSettings({...siteSettings, heroSubtitleSizeMobile: e.target.value})}
+                            placeholder="12px"
+                            className="w-full bg-white border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Desktop Size</label>
+                          <input 
+                            type="text" 
+                            value={siteSettings.heroSubtitleSizeDesktop || "18px"}
+                            onChange={e => setSiteSettings({...siteSettings, heroSubtitleSizeDesktop: e.target.value})}
+                            placeholder="18px"
+                            className="w-full bg-white border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <h5 className="text-[10px] font-black text-gray-900 uppercase tracking-widest">Guide</h5>
+                      <p className="text-[9px] text-gray-500 leading-relaxed bg-indigo-50/50 p-3 rounded-xl border border-indigo-100/50">
+                        Use standard CSS values like <code className="text-indigo-600 font-bold px-1">28px</code>, <code className="text-indigo-600 font-bold px-1">3.5rem</code>, or <code className="text-indigo-600 font-bold px-1">2vw</code>. 
+                        Colors can be Hex codes or names. Changes apply globally to all Hero sliders.
+                      </p>
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Footer Description</label>
@@ -2279,11 +2947,36 @@ export default function AdminDashboard() {
                 )}
               </div>
               <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 text-right">
-                <div className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Payment</div>
-                <div className="font-black text-indigo-600 text-base sm:text-lg">৳{selectedOrder.amount.toLocaleString()}</div>
-                <div className="flex items-center justify-end gap-2 mt-2">
+                <div className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-200 pb-2">Financial Summary</div>
+                
+                <div className="space-y-2 mt-2">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Order Subtotal</span>
+                    <span className="font-mono font-bold text-gray-600 text-xs">৳{(selectedOrder.amount + (selectedOrder.discountAmount || 0)).toLocaleString()}</span>
+                  </div>
+                  
+                  {selectedOrder.couponCode && (
+                    <div className="flex justify-between items-baseline text-emerald-600">
+                      <div className="flex flex-col items-start">
+                        <span className="text-[9px] font-black uppercase tracking-widest">Coupon Discount</span>
+                        <span className="text-[8px] font-medium bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">CODE: {selectedOrder.couponCode}</span>
+                      </div>
+                      <span className="font-mono font-black text-xs">-৳{(selectedOrder.discountAmount || 0).toLocaleString()}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between items-baseline pt-2 border-t border-gray-200 border-dashed">
+                    <span className="text-[10px] font-black text-gray-900 uppercase tracking-widest">Net Payment</span>
+                    <div className="text-right">
+                      <div className="font-black text-indigo-600 text-base sm:text-xl">৳{selectedOrder.amount.toLocaleString()}</div>
+                      <div className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Total Paid</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 mt-4">
                   <span className={cn(
-                    "px-2 sm:px-3 py-1 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest",
+                    "px-2 sm:px-3 py-1.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm",
                     selectedOrder.status === "completed" ? "bg-emerald-100 text-emerald-700" : 
                     selectedOrder.status === "pending" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600"
                   )}>
@@ -3115,6 +3808,239 @@ export default function AdminDashboard() {
                 </button>
               </div>
             </form>
+          </motion.div>
+        </div>
+      )}
+      {/* Add Coupon Modal */}
+      {isAddingCoupon && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white w-full max-w-md rounded-[32px] overflow-hidden shadow-2xl"
+          >
+             <div className="p-8 border-b border-gray-50">
+               <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">Create Discount Coupon</h3>
+               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Set up a new discount code for your store</p>
+             </div>
+             
+             <form onSubmit={handleAddCoupon} className="p-8 space-y-6">
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Coupon Code</label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="E.G. SAVE20"
+                      value={newCoupon.code}
+                      onChange={e => setNewCoupon({...newCoupon, code: e.target.value})}
+                      className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Discount Type</label>
+                      <select 
+                        value={newCoupon.type}
+                        onChange={e => setNewCoupon({...newCoupon, type: e.target.value as any})}
+                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                      >
+                        <option value="percentage">Percentage (%)</option>
+                        <option value="fixed">Fixed Amount (৳)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Value</label>
+                      <input 
+                        type="number" 
+                        required
+                        value={newCoupon.value}
+                        onChange={e => setNewCoupon({...newCoupon, value: Number(e.target.value)})}
+                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Bonus for Assignee (৳)</label>
+                    <input 
+                      type="number" 
+                      placeholder="Amount to pay to user"
+                      value={newCoupon.bonusAmount || 0}
+                      onChange={e => setNewCoupon({...newCoupon, bonusAmount: Number(e.target.value)})}
+                      className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                    />
+                    <p className="text-[8px] text-gray-400 mt-1 ml-1 uppercase font-bold tracking-tight">The user assigned to this coupon will receive this bonus per use.</p>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Expiry Date</label>
+                    <input 
+                      type="date" 
+                      required
+                      value={newCoupon.expiryDate}
+                      onChange={e => setNewCoupon({...newCoupon, expiryDate: e.target.value})}
+                      className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Assign to Email (Optional)</label>
+                    <input 
+                      type="email" 
+                      placeholder="user@example.com"
+                      value={newCoupon.assignedEmail}
+                      onChange={e => setNewCoupon({...newCoupon, assignedEmail: e.target.value})}
+                      className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                    <p className="text-[8px] text-gray-400 mt-1 ml-1 uppercase font-bold tracking-tight">Only this user will be able to see and use this coupon.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 px-1">
+                  <input 
+                    type="checkbox" 
+                    id="isCouponActiveNew"
+                    checked={newCoupon.isActive}
+                    onChange={e => setNewCoupon({...newCoupon, isActive: e.target.checked})}
+                    className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <label htmlFor="isCouponActiveNew" className="text-[10px] font-bold text-gray-600 uppercase tracking-widest cursor-pointer">Coupon is Active</label>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button 
+                    type="button"
+                    onClick={() => setIsAddingCoupon(false)}
+                    className="flex-1 py-4 text-xs font-black text-gray-400 uppercase tracking-widest hover:bg-gray-50 rounded-2xl transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit"
+                    className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
+                  >
+                    Save Coupon
+                  </button>
+                </div>
+             </form>
+          </motion.div>
+        </div>
+      )}
+      {/* Edit Coupon Modal */}
+      {editingCoupon && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white w-full max-w-md rounded-[32px] overflow-hidden shadow-2xl"
+          >
+             <div className="p-8 border-b border-gray-50">
+               <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">Edit Discount Coupon</h3>
+               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Modify existing coupon details</p>
+             </div>
+             
+             <form onSubmit={handleUpdateCoupon} className="p-8 space-y-6">
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Coupon Code</label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="E.G. SAVE20"
+                      value={editingCoupon.code}
+                      onChange={e => setEditingCoupon({...editingCoupon, code: e.target.value})}
+                      className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Discount Type</label>
+                      <select 
+                        value={editingCoupon.type}
+                        onChange={e => setEditingCoupon({...editingCoupon, type: e.target.value as any})}
+                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                      >
+                        <option value="percentage">Percentage (%)</option>
+                        <option value="fixed">Fixed Amount (৳)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Value</label>
+                      <input 
+                        type="number" 
+                        required
+                        value={editingCoupon.value}
+                        onChange={e => setEditingCoupon({...editingCoupon, value: Number(e.target.value)})}
+                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Bonus for Assignee (৳)</label>
+                    <input 
+                      type="number" 
+                      placeholder="Amount to pay to user"
+                      value={editingCoupon.bonusAmount || 0}
+                      onChange={e => setEditingCoupon({...editingCoupon, bonusAmount: Number(e.target.value)})}
+                      className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                    />
+                    <p className="text-[8px] text-gray-400 mt-1 ml-1 uppercase font-bold tracking-tight">The user assigned to this coupon will receive this bonus per use.</p>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Expiry Date</label>
+                    <input 
+                      type="date" 
+                      required
+                      value={editingCoupon.expiryDate}
+                      onChange={e => setEditingCoupon({...editingCoupon, expiryDate: e.target.value})}
+                      className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Assign to Email (Optional)</label>
+                    <input 
+                      type="email" 
+                      placeholder="user@example.com"
+                      value={editingCoupon.assignedEmail || ""}
+                      onChange={e => setEditingCoupon({...editingCoupon, assignedEmail: e.target.value})}
+                      className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3 px-1">
+                    <input 
+                      type="checkbox" 
+                      id="isCouponActiveEdit"
+                      checked={editingCoupon.isActive}
+                      onChange={e => setEditingCoupon({...editingCoupon, isActive: e.target.checked})}
+                      className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <label htmlFor="isCouponActiveEdit" className="text-[10px] font-bold text-gray-600 uppercase tracking-widest cursor-pointer">Coupon is Active</label>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button 
+                    type="button"
+                    onClick={() => setEditingCoupon(null)}
+                    className="flex-1 py-4 text-xs font-black text-gray-400 uppercase tracking-widest hover:bg-gray-50 rounded-2xl transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit"
+                    className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
+                  >
+                    Update Coupon
+                  </button>
+                </div>
+             </form>
           </motion.div>
         </div>
       )}

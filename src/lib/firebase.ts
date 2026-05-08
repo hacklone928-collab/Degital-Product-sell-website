@@ -9,3 +9,19 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
+
+// Test connection to verify project configuration
+import { doc, getDocFromServer } from "firebase/firestore";
+async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, "test", "connection"));
+    console.log("Firestore connection successful");
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("offline")) {
+      console.error("Firestore is offline. Please check your Firebase configuration.");
+    } else {
+      console.error("Firestore connection error:", error);
+    }
+  }
+}
+testConnection();

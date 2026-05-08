@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase";
+import { handleFirestoreError, OperationType } from "./firestoreUtils";
 
 interface SiteSettings {
   siteName: string;
@@ -35,6 +36,12 @@ interface SiteSettings {
   nagadLogo?: string;
   rocketLogo?: string;
   heroBannerUrl?: string;
+  heroTitleSizeMobile?: string;
+  heroTitleSizeDesktop?: string;
+  heroSubtitleSizeMobile?: string;
+  heroSubtitleSizeDesktop?: string;
+  heroTitleColor?: string;
+  heroSubtitleColor?: string;
   enableStripe?: boolean;
   enableLocal?: boolean;
   enableCOD?: boolean;
@@ -73,6 +80,12 @@ const defaultSettings: SiteSettings = {
   nagadLogo: "https://freelogopng.com/images/all_img/1679248787nagad-logo-png.png",
   rocketLogo: "https://freelogopng.com/images/all_img/1679249767rocket-logo-png.png",
   heroBannerUrl: "",
+  heroTitleSizeMobile: "28px",
+  heroTitleSizeDesktop: "60px",
+  heroSubtitleSizeMobile: "12px",
+  heroSubtitleSizeDesktop: "18px",
+  heroTitleColor: "#ffffff",
+  heroSubtitleColor: "#ffffffcc",
   enableStripe: true,
   enableLocal: true,
   enableCOD: true,
@@ -108,6 +121,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         }
       }
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, "settings/site");
     });
 
     return () => unsub();
