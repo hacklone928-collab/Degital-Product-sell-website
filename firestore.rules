@@ -32,10 +32,17 @@ service cloud.firestore {
     }
     function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
 
-    // Settings
+    // Settings (Super Admin Only)
     match /settings/site {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSuperAdmin();
+    }
+
+    // Admin Logs (Super Admin Only)
+    match /admin_logs/{logId} {
+      allow read: if isSuperAdmin();
+      allow create: if isModerator(); // Admins/Moderators can log their own actions
+      allow update, delete: if false;
     }
 
     // Connection Test
@@ -43,25 +50,33 @@ service cloud.firestore {
       allow read: if true;
     }
 
-    // Pages
+    // Pages (Super Admin Only)
     match /pages/{pageId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSuperAdmin();
     }
 
     // Users
     match /users/{userId} {
       allow read: if isOwner(userId) || isModerator();
       allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'bonusBalance']));
-      allow update: if isSuperAdmin(); // Only Super Admin can change roles or manually edit users
+      allow update: if (isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'bonusBalance']))) || 
+                   (isSuperAdmin()) ||
+                   (isAdmin() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']) && resource.data.role != 'super_admin');
+      
+      // Separate rule for role management
+      allow update: if isAdmin() && 
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'updatedAt']) &&
+                    request.resource.data.role in ['user', 'moderator', 'admin'] &&
+                    resource.data.role != 'super_admin';
     }
 
     // Products
     match /products/{productId} {
       allow read: if true;
       allow delete: if isAdmin();
-      allow update: if isModerator() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'reviewCount', 'updatedAt']));
+      allow update: if isAdmin() || (isModerator() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt', 'views']));
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'reviewCount', 'updatedAt', 'views']);
       allow create: if isAdmin();
 
       // Reviews Subcollection
@@ -95,6 +110,17 @@ service cloud.firestore {
       allow update, delete: if isModerator();
     }
 
+    // Affiliate Commissions
+    match /commissions/{commissionId} {
+      allow read: if isModerator() || (isSignedIn() && resource.data.affiliateId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    // Revenue Statistics
+    match /stats/{statId} {
+      allow read, write: if isAdmin();
+    }
+
     // Support Tickets
     match /support_tickets/{ticketId} {
       allow create: if true; // Guest can send tickets
@@ -105,6 +131,14 @@ service cloud.firestore {
     match /categories/{categoryId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // Active Sessions
+    match /active_sessions/{sessionId} {
+      allow list: if isAdmin();
+      allow get: if isAdmin();
+      allow create, update: if true; // Allow guests and users to track presence
+      allow delete: if true; // Sessions are short-lived
     }
   }
 }

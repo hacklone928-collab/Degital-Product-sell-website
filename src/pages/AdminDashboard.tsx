@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { db, storage, auth } from "../lib/firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, setDoc, getDoc, serverTimestamp, updateDoc, query, where, increment } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, setDoc, getDoc, serverTimestamp, updateDoc, query, where, increment, onSnapshot, orderBy, limit } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { Plus, Package, Users, DollarSign, Trash2, Edit, Star, Database, Settings as SettingsIcon, Save, ShoppingBag, Clock, CheckCircle, Copy, Link as LinkIcon, Inbox, Mail, Search, ShieldCheck, TrendingUp, Calendar, Eye, EyeOff, ExternalLink, ImagePlus, Upload, Loader2, Phone } from "lucide-react";
+import { Plus, Package, Users, DollarSign, Trash2, Edit, Star, Database, Settings as SettingsIcon, Save, ShoppingBag, Clock, CheckCircle, Copy, Link as LinkIcon, Inbox, Mail, Search, ShieldCheck, TrendingUp, Calendar, Eye, EyeOff, ExternalLink, ImagePlus, Upload, Loader2, Phone, Ticket, Facebook, Twitter, Instagram, Youtube, Linkedin, Github, Share2, Send, Music, Pin, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion } from "motion/react";
+import { useNavigate } from "react-router-dom";
 import { cn } from "../lib/utils";
 import { handleFirestoreError, OperationType } from "../lib/firestoreUtils";
 import { 
@@ -19,17 +20,26 @@ import {
 } from 'recharts';
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<"products" | "settings" | "orders" | "pages" | "tickets" | "categories" | "coupons" | "withdrawals" | "users">("products");
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<"products" | "settings" | "orders" | "pages" | "tickets" | "categories" | "coupons" | "withdrawals" | "users" | "analytics" | "logs">("analytics");
   const [revenueTimeframe, setRevenueTimeframe] = useState<"daily" | "weekly" | "monthly">("daily");
+  const [datePreset, setDatePreset] = useState<"today" | "yesterday" | "last7" | "last30" | "thisMonth" | "thisYear" | "custom">("thisMonth");
+  const [selectedCalendarMonth, setSelectedCalendarMonth] = useState(new Date());
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<any | null>(null);
+  const [revenueTablePage, setRevenueTablePage] = useState(1);
+  const [revenueSearch, setRevenueSearch] = useState("");
+  const revenueTablePageSize = 10;
   const [showSalesStats, setShowSalesStats] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [logs, setLogs] = useState<any[]>([]);
   const [pages, setPages] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
   const [coupons, setCoupons] = useState<any[]>([]);
+  const [activeSessions, setActiveSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddingCoupon, setIsAddingCoupon] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState<any | null>(null);
@@ -37,10 +47,11 @@ export default function AdminDashboard() {
     code: "",
     type: "percentage" as "percentage" | "fixed",
     value: 0,
-    bonusAmount: 0,
+    bonusPercentage: 0,
     expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     isActive: true,
-    assignedEmail: ""
+    assignedEmail: "",
+    usageLimit: 0
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -137,7 +148,20 @@ export default function AdminDashboard() {
     enableStripe: true,
     enableLocal: true,
     enableCOD: true,
-    hiddenCategories: [] as string[]
+    hiddenCategories: [] as string[],
+    cartText: "Cart",
+    viewText: "View",
+    buyText: "Buy",
+    cartColor: "#f9fafb",
+    viewColor: "#f9fafb",
+    buyColor: "#4f46e5",
+    cartTextColor: "#6b7280",
+    viewTextColor: "#6b7280",
+    buyTextColor: "#ffffff",
+    brandColor: "#4f46e5",
+    brandSecondaryColor: "#818cf8",
+    useBrandGradient: false,
+    socialLinks: [] as { platform: string, url: string, icon: string }[]
   });
   const [newProduct, setNewProduct] = useState({
     name: "",
@@ -193,10 +217,51 @@ export default function AdminDashboard() {
   }, []);
 
   const isSuperAdmin = currentUserRole === 'super_admin' || (currentUserEmail && adminEmails.includes(currentUserEmail.toLowerCase().trim()));
-  const isAdmin = isSuperAdmin || currentUserRole === 'admin';
-  const isModerator = isAdmin || currentUserRole === 'moderator';
+  const isAdminRole = isSuperAdmin || currentUserRole === 'admin';
+  const isModeratorRole = isAdminRole || currentUserRole === 'moderator';
 
-  const isActuallyAdmin = isModerator; // Legacy check for other parts of dashboard
+  // For backward compatibility with existing code
+  const isAdmin = isAdminRole;
+  const isActuallyAdmin = isAdminRole;
+
+  // Role-based path/tab restriction
+  useEffect(() => {
+    if (!isAdminChecking && !isModeratorRole) {
+      navigate("/");
+    }
+  }, [isAdminChecking, isModeratorRole, navigate]);
+
+  const tabs = [
+    { id: "analytics", label: "Analytics", icon: TrendingUp, roles: ["super_admin", "admin", "moderator"] },
+    { id: "products", label: "Products", icon: Package, roles: ["super_admin", "admin"] },
+    { id: "orders", label: "Orders", icon: ShoppingBag, roles: ["super_admin", "admin", "moderator"] },
+    { id: "users", label: "User Management", icon: Users, roles: ["super_admin", "admin"] },
+    { id: "withdrawals", label: "Withdrawals", icon: DollarSign, roles: ["super_admin", "admin"] },
+    { id: "coupons", label: "Coupons", icon: Ticket, roles: ["super_admin", "admin"] },
+    { id: "tickets", label: "Support Tickets", icon: Inbox, roles: ["super_admin", "admin", "moderator"] },
+    { id: "categories", label: "Categories", icon: Pin, roles: ["super_admin", "admin"] },
+    { id: "logs", label: "Activity Logs", icon: Clock, roles: ["super_admin"] },
+    { id: "pages", label: "CMS Pages", icon: Database, roles: ["super_admin"] },
+    { id: "settings", label: "System Settings", icon: SettingsIcon, roles: ["super_admin"] },
+  ] as const;
+
+  const allowedTabs = tabs.filter(t => t.roles.includes(currentUserRole || ''));
+
+  const logAdminAction = async (action: string, details: any) => {
+    try {
+      await addDoc(collection(db, "admin_logs"), {
+        adminId: auth.currentUser?.uid,
+        adminEmail: auth.currentUser?.email,
+        adminRole: currentUserRole,
+        action,
+        details,
+        createdAt: serverTimestamp(),
+        ip: "untracked"
+      });
+    } catch (e) {
+      console.error("Failed to log admin action:", e);
+    }
+  };
 
   const toggleSelectAll = () => {
     if (activeTab === "products") {
@@ -271,88 +336,499 @@ export default function AdminDashboard() {
     }
   };
 
-  const stats = [
-    { label: "Total Revenue", value: `৳${orders.reduce((sum, o) => sum + (o.amount || 0), 0).toLocaleString()}`, icon: DollarSign, color: "text-green-600", bg: "bg-green-50" },
-    { label: "Total Orders", value: orders.length, icon: ShoppingBag, color: "text-indigo-600", bg: "bg-indigo-50" },
-    { label: "Products", value: products.length, icon: Package, color: "text-purple-600", bg: "bg-purple-50" },
-  ];
-
-  const getRevenueStats = () => {
-    const data: { [key: string]: number } = {};
-    
-    orders.forEach(order => {
-      if (!order.createdAt) return;
-      const date = order.createdAt.toDate ? order.createdAt.toDate() : new Date();
-      
-      let key = "";
-      if (revenueTimeframe === "daily") {
-        key = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-      } else if (revenueTimeframe === "weekly") {
-        const d = new Date(date);
-        d.setHours(0, 0, 0, 0);
-        d.setDate(d.getDate() + 4 - (d.getDay() || 7));
-        const yearStart = new Date(d.getFullYear(), 0, 1);
-        const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-        key = `Week ${weekNo}, ${d.getFullYear()}`;
-      } else {
-        key = date.toLocaleDateString('en-GB', { month: 'long', year: '2-digit' });
-      }
-      
-      data[key] = (data[key] || 0) + (order.amount || 0);
-    });
-
-    const result = Object.entries(data).map(([name, total]) => ({
-      name,
-      revenue: total,
-    }));
-
-    if (revenueTimeframe === "daily") return result.slice(-14);
-    if (revenueTimeframe === "weekly") return result.slice(-8);
-    return result.slice(-12);
-  };
-
-  const calculateDetailedStats = () => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const thisWeek = today - (7 * 24 * 60 * 60 * 1000);
-    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-
-    let daily = 0;
-    let weekly = 0;
-    let monthly = 0;
-
-    orders.forEach(order => {
-      if (!order.createdAt) return;
-      const time = order.createdAt.toDate ? order.createdAt.toDate().getTime() : 0;
-      const amount = order.amount || 0;
-
-      if (time >= today) daily += amount;
-      if (time >= thisWeek) weekly += amount;
-      if (time >= thisMonth) monthly += amount;
-    });
-
-    return { daily, weekly, monthly };
-  };
-
-  const detailedStats = calculateDetailedStats();
-  const chartData = getRevenueStats();
+  const [revStats, setRevStats] = useState({
+    gross: 0,
+    discount: 0,
+    net: 0,
+    bonus: 0,
+    profit: 0,
+    count: 0
+  });
 
   useEffect(() => {
-    fetchProducts();
+    if (orders.length > 0) {
+      const computed = orders.reduce((acc, o) => {
+        // Only count completed/confirmed orders for revenue
+        if (o.status !== 'completed' && o.status !== 'delivered') return acc;
+        
+        const gross = o.grossAmount || o.amount || 0;
+        const discount = o.discountAmount || 0;
+        const net = o.netAmount || (gross - discount);
+        const bonus = o.affiliateBonus || 0;
+        const profit = net - bonus;
+        
+        return {
+          gross: acc.gross + gross,
+          discount: acc.discount + discount,
+          net: acc.net + net,
+          bonus: acc.bonus + bonus,
+          profit: acc.profit + profit,
+          count: acc.count + 1
+        };
+      }, { gross: 0, discount: 0, net: 0, bonus: 0, profit: 0, count: 0 });
+      setRevStats(computed);
+    } else {
+      setRevStats({ gross: 0, discount: 0, net: 0, bonus: 0, profit: 0, count: 0 });
+    }
+  }, [orders]);
+
+  useEffect(() => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let start = "";
+    let end = "";
+
+    switch (datePreset) {
+      case "today":
+        start = today.toISOString().split("T")[0];
+        end = now.toISOString().split("T")[0];
+        break;
+      case "yesterday":
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        start = yesterday.toISOString().split("T")[0];
+        end = yesterday.toISOString().split("T")[0];
+        break;
+      case "last7":
+        const l7 = new Date(today);
+        l7.setDate(l7.getDate() - 7);
+        start = l7.toISOString().split("T")[0];
+        end = now.toISOString().split("T")[0];
+        break;
+      case "last30":
+        const l30 = new Date(today);
+        l30.setDate(l30.getDate() - 30);
+        start = l30.toISOString().split("T")[0];
+        end = now.toISOString().split("T")[0];
+        break;
+      case "thisMonth":
+        start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+        end = now.toISOString().split("T")[0];
+        break;
+      case "thisYear":
+        start = new Date(now.getFullYear(), 0, 1).toISOString().split("T")[0];
+        end = now.toISOString().split("T")[0];
+        break;
+      case "custom":
+        return;
+      default:
+        return;
+    }
+
+    setAnalyticsFilters(prev => ({
+      ...prev,
+      startDate: start,
+      endDate: end
+    }));
+  }, [datePreset]);
+
+  const [analyticsFilters, setAnalyticsFilters] = useState({
+    coupon: "",
+    product: "",
+    email: "",
+    startDate: "",
+    endDate: ""
+  });
+
+  const getAdvancedAnalytics = () => {
+    const couponMap = new Map();
+    coupons.forEach(c => {
+      if (analyticsFilters.coupon && c.code !== analyticsFilters.coupon) return;
+      couponMap.set(c.code, {
+        ...c,
+        actualUsage: 0,
+        grossRevenue: 0,
+        discountGiven: 0,
+        netRevenue: 0,
+        affiliateBonus: 0,
+        lastUsed: null,
+        products: new Map()
+      });
+    });
+
+    orders.forEach(order => {
+      if (order.status !== 'completed' && order.status !== 'delivered') return;
+      
+      const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : (order.createdAt instanceof Date ? order.createdAt : new Date());
+      if (analyticsFilters.startDate && orderDate < new Date(analyticsFilters.startDate)) return;
+      if (analyticsFilters.endDate && orderDate > new Date(analyticsFilters.endDate)) return;
+      if (analyticsFilters.product && order.productId !== analyticsFilters.product) return;
+      if (analyticsFilters.email && order.bonusAssigneeEmail?.toLowerCase() !== analyticsFilters.email.toLowerCase()) return;
+
+      const code = order.couponCode?.toUpperCase().trim();
+      if (code && couponMap.has(code)) {
+        const stats = couponMap.get(code);
+        stats.actualUsage++;
+        stats.grossRevenue += (order.grossAmount || order.amount || 0);
+        stats.discountGiven += (order.discountAmount || 0);
+        stats.netRevenue += (order.netAmount || 0);
+        stats.affiliateBonus += (order.affiliateBonus || 0);
+        
+        if (!stats.lastUsed || orderDate > stats.lastUsed) {
+          stats.lastUsed = orderDate;
+        }
+
+        const productId = order.productId;
+        if (productId) {
+          const prod = products.find(p => p.id === productId);
+          if (!stats.products.has(productId)) {
+            stats.products.set(productId, {
+              id: productId,
+              name: prod?.name || 'Unknown Product',
+              sold: 0,
+              gross: 0,
+              discount: 0,
+              net: 0
+            });
+          }
+          const pStats = stats.products.get(productId);
+          pStats.sold++;
+          pStats.gross += (order.grossAmount || order.amount || 0);
+          pStats.discount += (order.discountAmount || 0);
+          pStats.net += (order.netAmount || 0);
+        }
+      }
+    });
+
+    return Array.from(couponMap.values())
+      .filter(c => c.actualUsage > 0 || !analyticsFilters.coupon)
+      .map(c => ({
+        ...c,
+        productBreakdown: Array.from(c.products.values())
+      })).sort((a, b) => b.netRevenue - a.netRevenue);
+  };
+
+  const getProductEarningStats = () => {
+    const productMap = new Map();
+    const startOfTime = analyticsFilters.startDate ? new Date(analyticsFilters.startDate) : null;
+    if (startOfTime) startOfTime.setHours(0, 0, 0, 0);
+    const endOfTime = analyticsFilters.endDate ? new Date(analyticsFilters.endDate) : null;
+    if (endOfTime) endOfTime.setHours(23, 59, 59, 999);
+
+    orders.forEach(order => {
+      const isPaid = order.status === 'completed' || order.status === 'delivered' || order.paymentStatus === 'paid';
+      if (!isPaid) return;
+
+      const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : (order.createdAt instanceof Date ? order.createdAt : null);
+      if (!orderDate) return;
+
+      if (startOfTime && orderDate < startOfTime) return;
+      if (endOfTime && orderDate > endOfTime) return;
+
+      const productId = order.productId;
+      if (!productId) return;
+
+      if (!productMap.has(productId)) {
+        const prod = products.find(p => p.id === productId);
+        productMap.set(productId, {
+          id: productId,
+          name: prod?.name || 'Unknown Product',
+          sold: 0,
+          gross: 0,
+          discount: 0,
+          net: 0,
+          bonus: 0
+        });
+      }
+
+      const stats = productMap.get(productId);
+      const qty = Number(order.quantity || 1);
+      stats.sold += qty;
+      stats.gross += Number(order.grossAmount || order.amount || 0);
+      stats.discount += Number(order.discountAmount || 0);
+      stats.net += Number(order.netAmount || 0);
+      stats.bonus += Number(order.affiliateBonus || 0);
+    });
+    return Array.from(productMap.values()).sort((a, b) => b.sold - a.sold);
+  };
+
+  const getAffiliateLeaderboard = () => {
+    const affiliateMap = new Map();
+    const startOfTime = analyticsFilters.startDate ? new Date(analyticsFilters.startDate) : null;
+    if (startOfTime) startOfTime.setHours(0, 0, 0, 0);
+    const endOfTime = analyticsFilters.endDate ? new Date(analyticsFilters.endDate) : null;
+    if (endOfTime) endOfTime.setHours(23, 59, 59, 999);
+
+    orders.forEach(order => {
+      const isPaid = order.status === 'completed' || order.status === 'delivered' || order.paymentStatus === 'paid';
+      if (!isPaid) return;
+
+      const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : (order.createdAt instanceof Date ? order.createdAt : null);
+      if (!orderDate) return;
+
+      if (startOfTime && orderDate < startOfTime) return;
+      if (endOfTime && orderDate > endOfTime) return;
+      
+      if (analyticsFilters.product && order.productId !== analyticsFilters.product) return;
+      if (analyticsFilters.coupon && order.couponCode?.toUpperCase().trim() !== analyticsFilters.coupon?.toUpperCase().trim() && analyticsFilters.coupon) return;
+
+      const email = order.bonusAssigneeEmail;
+      if (!email) return;
+      if (analyticsFilters.email && email.toLowerCase() !== analyticsFilters.email.toLowerCase()) return;
+
+      if (!affiliateMap.has(email)) {
+        affiliateMap.set(email, {
+          email,
+          displayName: email.split('@')[0],
+          totalBonus: 0,
+          conversions: 0,
+          grossGenerated: 0
+        });
+      }
+
+      const stats = affiliateMap.get(email);
+      stats.totalBonus += (order.bonusAmountGiven || order.affiliateBonus || 0);
+      stats.conversions++;
+      stats.grossGenerated += (order.grossAmount || order.amount || 0);
+    });
+    return Array.from(affiliateMap.values()).sort((a, b) => b.totalBonus - a.totalBonus);
+  };
+
+  const getHeatmapData = () => {
+    const year = selectedCalendarMonth.getFullYear();
+    const month = selectedCalendarMonth.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const heatmap: { [key: string]: any } = {};
+
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+      heatmap[dateStr] = {
+        date: dateStr,
+        day: i,
+        gross: 0,
+        net: 0,
+        discount: 0,
+        commission: 0,
+        orders: 0
+      };
+    }
+
+    orders.forEach(order => {
+      if (order.status !== 'completed' && order.status !== 'delivered') return;
+      const date = order.createdAt?.toDate ? order.createdAt.toDate() : (order.createdAt instanceof Date ? order.createdAt : null);
+      if (!date) return;
+      if (date.getFullYear() !== year || date.getMonth() !== month) return;
+
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      if (heatmap[dateStr]) {
+        heatmap[dateStr].gross += (order.grossAmount || order.amount || 0);
+        heatmap[dateStr].discount += (order.discountAmount || 0);
+        heatmap[dateStr].net += (order.netAmount || (order.amount || 0) - (order.discountAmount || 0));
+        heatmap[dateStr].commission += (order.affiliateBonus || 0);
+        heatmap[dateStr].orders++;
+      }
+    });
+
+    return Object.values(heatmap);
+  };
+
+  const getDetailedRevenueAnalytics = () => {
+    const dailyMap = new Map();
+    const startOfTime = analyticsFilters.startDate ? new Date(analyticsFilters.startDate) : null;
+    if (startOfTime) startOfTime.setHours(0, 0, 0, 0);
+    
+    const endOfTime = analyticsFilters.endDate ? new Date(analyticsFilters.endDate) : null;
+    if (endOfTime) endOfTime.setHours(23, 59, 59, 999);
+
+    orders.forEach(order => {
+      // Precise status check for revenue
+      const isPaid = order.status === 'completed' || order.status === 'delivered' || order.paymentStatus === 'paid';
+      if (!isPaid) return;
+
+      const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : (order.createdAt instanceof Date ? order.createdAt : null);
+      if (!orderDate) return;
+
+      if (startOfTime && orderDate < startOfTime) return;
+      if (endOfTime && orderDate > endOfTime) return;
+
+      const dateKey = orderDate.toISOString().split('T')[0];
+      if (!dailyMap.has(dateKey)) {
+        dailyMap.set(dateKey, {
+          date: dateKey,
+          gross: 0,
+          net: 0,
+          discount: 0,
+          commission: 0,
+          orders: 0,
+          profit: 0,
+          units: 0
+        });
+      }
+
+      const stats = dailyMap.get(dateKey);
+      const gross = Number(order.grossAmount || order.amount || 0);
+      const discount = Number(order.discountAmount || 0);
+      const net = Number(order.netAmount || gross - discount);
+      const commission = Number(order.affiliateBonus || 0);
+      const profit = net - commission;
+      const qty = Number(order.quantity || 1);
+
+      stats.gross += gross;
+      stats.net += net;
+      stats.discount += discount;
+      stats.commission += commission;
+      stats.orders++;
+      stats.profit += profit;
+      stats.units += qty;
+    });
+
+    return Array.from(dailyMap.values()).sort((a, b) => b.date.localeCompare(a.date));
+  };
+
+  const heatmapData = getHeatmapData();
+  const dailyAnalyticsList = getDetailedRevenueAnalytics();
+  const analyticsData = getAdvancedAnalytics();
+  const productStats = getProductEarningStats();
+  const affiliateStats = getAffiliateLeaderboard();
+
+  // These are for the new Revenue Statistics tab
+  const filteredRevenueTable = dailyAnalyticsList.filter(item => {
+    if (!revenueSearch) return true;
+    return item.date.includes(revenueSearch);
+  });
+
+  const paginatedRevenue = filteredRevenueTable.slice(
+    (revenueTablePage - 1) * revenueTablePageSize,
+    revenueTablePage * revenueTablePageSize
+  );
+
+  const revenueStatsSummary = dailyAnalyticsList.reduce((acc, curr) => ({
+    gross: acc.gross + curr.gross,
+    net: acc.net + curr.net,
+    discount: acc.discount + curr.discount,
+    commission: acc.commission + curr.commission,
+    orders: acc.orders + curr.orders,
+    profit: acc.profit + curr.profit,
+    units: acc.units + (curr.units || 0)
+  }), { gross: 0, net: 0, discount: 0, commission: 0, orders: 0, profit: 0, units: 0 });
+
+  const getRevenueChartData = () => {
+    if (revenueTimeframe === "daily") {
+      return Array.from(dailyAnalyticsList).reverse();
+    }
+
+    const aggregated = new Map();
+    dailyAnalyticsList.forEach(day => {
+      const date = new Date(day.date);
+      let key = "";
+      
+      if (revenueTimeframe === "weekly") {
+        // Get the start of the week (Sunday)
+        const d = new Date(date);
+        const dayNum = d.getDay();
+        const diff = d.getDate() - dayNum;
+        const startOfWeek = new Date(d.setDate(diff));
+        key = startOfWeek.toISOString().split('T')[0];
+      } else {
+        // Monthly
+        key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
+      }
+
+      if (!aggregated.has(key)) {
+        aggregated.set(key, { date: key, gross: 0, net: 0, profit: 0, orders: 0, discount: 0, commission: 0, units: 0 });
+      }
+      const existing = aggregated.get(key);
+      existing.gross += day.gross;
+      existing.net += day.net;
+      existing.profit += day.profit;
+      existing.orders += day.orders;
+      existing.discount += day.discount;
+      existing.commission += day.commission;
+      existing.units += (day.units || 0);
+    });
+
+    return Array.from(aggregated.values()).sort((a, b) => a.date.localeCompare(b.date));
+  };
+
+  const chartData = getRevenueChartData();
+
+  const mostViewedProducts = [...products].sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 8);
+
+  const stats = [
+    { label: "Gross Sales", value: `৳${revenueStatsSummary.gross.toLocaleString()}`, icon: TrendingUp, color: "text-indigo-600", bg: "bg-indigo-50" },
+    { label: "Net Revenue", value: `৳${revenueStatsSummary.net.toLocaleString()}`, icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-50" },
+    { label: "Total Profit", value: `৳${revenueStatsSummary.profit.toLocaleString()}`, icon: CheckCircle, color: "text-blue-600", bg: "bg-blue-50" },
+    { label: "Total Orders", value: revenueStatsSummary.orders.toLocaleString(), icon: ShoppingBag, color: "text-purple-600", bg: "bg-purple-50" },
+    { label: "Total Bonuses", value: `৳${revenueStatsSummary.commission.toLocaleString()}`, icon: Users, color: "text-amber-600", bg: "bg-amber-50" },
+    { label: "Total Discount", value: `৳${revenueStatsSummary.discount.toLocaleString()}`, icon: ShoppingBag, color: "text-red-600", bg: "bg-red-50" },
+  ];
+
+  const detailedStats = {
+    daily: heatmapData.find(d => d.day === new Date().getDate())?.gross || 0,
+    weekly: revenueStatsSummary.gross / 4,
+    monthly: revenueStatsSummary.gross
+  };
+
+  useEffect(() => {
     fetchSettings();
     fetchPages();
     fetchCategories();
-    fetchCoupons();
+
+    // Real-time Listeners
+    const unsubProducts = onSnapshot(collection(db, "products"), (snap) => {
+      setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, "products"));
+
+    const unsubCoupons = onSnapshot(collection(db, "coupons"), (snap) => {
+      setCoupons(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, "coupons"));
+
+    const unsubSessions = onSnapshot(collection(db, "active_sessions"), (snap) => {
+      const now = Date.now();
+      const active = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((s: any) => {
+        const lastSeen = s.lastSeen?.toMillis ? s.lastSeen.toMillis() : (s.lastSeen?.seconds ? s.lastSeen.seconds * 1000 : 0);
+        return now - lastSeen < 5 * 60 * 1000;
+      });
+      setActiveSessions(active);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, "active_sessions"));
+
+    let unsubOrders: (() => void) | undefined;
+    let unsubTickets: (() => void) | undefined;
+    let unsubWithdrawals: (() => void) | undefined;
+    let unsubUsers: (() => void) | undefined;
+    let unsubLogs: (() => void) | undefined;
+
     if (isActuallyAdmin) {
-      fetchOrders();
-      fetchTickets();
-      fetchWithdrawals();
-      if (isSuperAdmin) fetchUsers();
+      unsubOrders = onSnapshot(query(collection(db, "orders"), orderBy("createdAt", "desc")), (snap) => {
+        setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }, (error) => handleFirestoreError(error, OperationType.LIST, "orders"));
+
+      unsubTickets = onSnapshot(collection(db, "support_tickets"), (snap) => {
+        setTickets(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }, (error) => handleFirestoreError(error, OperationType.LIST, "support_tickets"));
+
+      unsubWithdrawals = onSnapshot(collection(db, "withdrawals"), (snap) => {
+        setWithdrawals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }, (error) => handleFirestoreError(error, OperationType.LIST, "withdrawals"));
+
+      if (isAdminRole) {
+        unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
+          setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, (error) => handleFirestoreError(error, OperationType.LIST, "users"));
+      }
+
+      if (isSuperAdmin) {
+        unsubLogs = onSnapshot(query(collection(db, "admin_logs"), orderBy("createdAt", "desc"), limit(50)), (snap) => {
+          setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, (error) => handleFirestoreError(error, OperationType.LIST, "admin_logs"));
+      }
     }
+
+    return () => {
+      unsubProducts();
+      unsubCoupons();
+      unsubSessions();
+      unsubOrders?.();
+      unsubTickets?.();
+      unsubWithdrawals?.();
+      unsubUsers?.();
+      unsubLogs?.();
+    };
   }, [isActuallyAdmin, isSuperAdmin]);
 
   const fetchUsers = async () => {
-    if (!isSuperAdmin) return;
+    if (!isAdminRole) return;
     try {
       const snap = await getDocs(collection(db, "users"));
       setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -362,15 +838,23 @@ export default function AdminDashboard() {
   };
 
   const handleUpdateUserRole = async (userId: string, newRole: string) => {
+    if (!isAdminRole) return;
+    
+    // Safety: Only super admin can create super admins or demote them
+    const targetUser = users.find(u => u.id === userId);
     if (!isSuperAdmin) {
-      alert("Only Super Admins can change user roles.");
-      return;
+      if (newRole === 'super_admin' || targetUser?.role === 'super_admin') {
+        alert("Only Super Admins can manage Super Admin accounts.");
+        return;
+      }
     }
+
     try {
       await updateDoc(doc(db, "users", userId), {
         role: newRole,
         updatedAt: serverTimestamp()
       });
+      await logAdminAction('update_user_role', { userId, newRole });
       fetchUsers();
       alert(`User role updated to ${newRole}`);
     } catch (error) {
@@ -404,6 +888,8 @@ export default function AdminDashboard() {
         ...newCoupon,
         code: newCoupon.code.toUpperCase().trim(),
         value: Number(newCoupon.value),
+        bonusPercentage: Number(newCoupon.bonusPercentage),
+        usageLimit: Number(newCoupon.usageLimit),
         usageCount: 0,
         createdAt: serverTimestamp(),
       };
@@ -420,10 +906,11 @@ export default function AdminDashboard() {
         code: "",
         type: "percentage",
         value: 0,
-        bonusAmount: 0,
+        bonusPercentage: 0,
         expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         isActive: true,
-        assignedEmail: ""
+        assignedEmail: "",
+        usageLimit: 0
       });
       fetchCoupons();
       alert("Coupon added successfully!");
@@ -442,7 +929,8 @@ export default function AdminDashboard() {
         ...data,
         code: data.code.toUpperCase().trim(),
         value: Number(data.value),
-        bonusAmount: Number(data.bonusAmount || 0),
+        bonusPercentage: Number(data.bonusPercentage || 0),
+        usageLimit: Number(data.usageLimit || 0),
         updatedAt: serverTimestamp(),
       };
 
@@ -545,6 +1033,7 @@ export default function AdminDashboard() {
         status: newStatus,
         updatedAt: serverTimestamp() 
       });
+      await logAdminAction('process_withdrawal', { withdrawalId: id, status: newStatus });
       fetchWithdrawals();
       alert(`Withdrawal request ${newStatus}!`);
     } catch (error) {
@@ -596,6 +1085,7 @@ export default function AdminDashboard() {
       });
 
       alert("Website reset successfully! Everything has been cleared.");
+      await logAdminAction('system_full_reset', { timestamp: new Date().toISOString() });
       window.location.reload();
     } catch (error) {
       console.error(error);
@@ -627,25 +1117,53 @@ export default function AdminDashboard() {
         const q = query(collection(db, "coupons"), where("code", "==", order.couponCode));
         const couponSnap = await getDocs(q);
         if (!couponSnap.empty) {
-          const couponData = couponSnap.docs[0].data();
-          if (couponData.assignedEmail && couponData.bonusAmount > 0) {
-            // Find user by email
-            const uq = query(collection(db, "users"), where("email", "==", couponData.assignedEmail.toLowerCase()));
-            const userSnap = await getDocs(uq);
-            if (!userSnap.empty) {
-              const userRef = doc(db, "users", userSnap.docs[0].id);
-              await updateDoc(userRef, {
-                bonusBalance: increment(couponData.bonusAmount)
-              });
-              updates.bonusProcessed = true;
-              updates.bonusAmountGiven = couponData.bonusAmount;
-              updates.bonusAssigneeEmail = couponData.assignedEmail;
+          const couponDoc = couponSnap.docs[0];
+          const couponData = couponDoc.data();
+          
+          if (couponData.assignedEmail && (couponData.bonusPercentage > 0 || couponData.bonusAmount > 0)) {
+            // Calculate bonus based on net sale
+            // NET SALE = (Original Price - Discount)
+            const netSale = order.netAmount || order.amount || 0;
+            const bonusPercentage = couponData.bonusPercentage || 0;
+            const bonusAmount = bonusPercentage > 0 
+              ? (netSale * bonusPercentage) / 100 
+              : (couponData.bonusAmount || 0);
+
+            if (bonusAmount > 0) {
+              // Find user by email
+              const uq = query(collection(db, "users"), where("email", "==", couponData.assignedEmail.toLowerCase().trim()));
+              const userSnap = await getDocs(uq);
+              if (!userSnap.empty) {
+                const userDoc = userSnap.docs[0];
+                const userRef = doc(db, "users", userDoc.id);
+                
+                await updateDoc(userRef, {
+                  bonusBalance: increment(bonusAmount)
+                });
+                
+                // Track commission
+                await addDoc(collection(db, "commissions"), {
+                  affiliateId: userDoc.id,
+                  affiliateEmail: couponData.assignedEmail,
+                  orderId: id,
+                  amount: bonusAmount,
+                  status: "paid",
+                  createdAt: serverTimestamp()
+                });
+
+                updates.affiliateBonus = bonusAmount;
+                updates.affiliateId = userDoc.id;
+                updates.bonusProcessed = true;
+                updates.bonusAmountGiven = bonusAmount;
+                updates.bonusAssigneeEmail = couponData.assignedEmail;
+              }
             }
           }
         }
       }
 
       await updateDoc(doc(db, "orders", id), updates);
+      await logAdminAction('confirm_order', { orderId: id });
       await fetchOrders();
       alert("Order confirmed! Product is now available to the user.");
       setSelectedOrder(null);
@@ -831,6 +1349,7 @@ export default function AdminDashboard() {
   const handleUpdateSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     await setDoc(doc(db, "settings", "site"), siteSettings);
+    await logAdminAction('update_site_settings', { timestamp: new Date().toISOString() });
     alert("Settings updated successfully!");
   };
 
@@ -1072,9 +1591,13 @@ export default function AdminDashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
                 <defs>
-                  <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="colorGross" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1}/>
                     <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorNet" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
@@ -1097,16 +1620,26 @@ export default function AdminDashboard() {
                     boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
                     padding: '12px'
                   }}
-                  itemStyle={{ fontWeight: 800, color: '#4f46e5' }}
+                  itemStyle={{ fontWeight: 800 }}
                   labelStyle={{ marginBottom: '4px', fontWeight: 600, color: '#111827' }}
                 />
                 <Area 
                   type="monotone" 
-                  dataKey="revenue" 
+                  dataKey="gross" 
+                  name="Gross Sales"
                   stroke="#4f46e5" 
                   strokeWidth={3}
                   fillOpacity={1} 
-                  fill="url(#colorRev)" 
+                  fill="url(#colorGross)" 
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="net" 
+                  name="Net Revenue"
+                  stroke="#10b981" 
+                  strokeWidth={3}
+                  fillOpacity={1} 
+                  fill="url(#colorNet)" 
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -1116,6 +1649,78 @@ export default function AdminDashboard() {
               <p className="text-sm font-medium">No sales data found to visualize yet</p>
             </div>
           )}
+        </div>
+
+        {/* Coupon & Affiliate Analytics */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-8 border-t border-gray-100">
+          <div className="space-y-4">
+             <div className="flex items-center gap-2 mb-2">
+                <Ticket className="w-5 h-5 text-indigo-600" />
+                <h4 className="font-bold text-gray-900 uppercase text-xs tracking-widest">Top Coupons</h4>
+             </div>
+             <div className="space-y-3">
+                {coupons
+                  .sort((a, b) => (b.usageCount || 0) - (a.usageCount || 0))
+                  .slice(0, 5)
+                  .map((coupon, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl border border-gray-100">
+                      <div className="flex items-center gap-3">
+                         <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center border border-gray-100 font-mono font-bold text-[10px] text-indigo-600">
+                           {i + 1}
+                         </div>
+                         <div>
+                            <div className="text-xs font-black text-gray-900 tracking-tight">{coupon.code}</div>
+                            <div className="text-[10px] text-gray-500 font-medium">{coupon.usageCount || 0} uses</div>
+                         </div>
+                      </div>
+                      <div className="text-xs font-bold text-indigo-600">
+                        ৳{orders
+                          .filter(o => o.couponCode === coupon.code && (o.status === 'completed' || o.status === 'delivered'))
+                          .reduce((sum, o) => sum + (o.discountAmount || 0), 0)
+                          .toLocaleString()} saved
+                      </div>
+                    </div>
+                  ))}
+                {coupons.length === 0 && (
+                  <p className="text-xs text-gray-400 italic">No coupons found.</p>
+                )}
+             </div>
+          </div>
+
+          <div className="space-y-4">
+             <div className="flex items-center gap-2 mb-2">
+                <Users className="w-5 h-5 text-emerald-600" />
+                <h4 className="font-bold text-gray-900 uppercase text-xs tracking-widest">Top Earners</h4>
+             </div>
+             <div className="space-y-3">
+                {Array.from(new Set(orders.map(o => o.bonusAssigneeEmail).filter(Boolean)))
+                  .map(email => {
+                    const totalBonus = orders
+                      .filter(o => o.bonusAssigneeEmail === email && (o.status === 'completed' || o.status === 'delivered'))
+                      .reduce((sum, o) => sum + (o.bonusAmountGiven || 0), 0);
+                    const orderCount = orders.filter(o => o.bonusAssigneeEmail === email).length;
+                    return { email, totalBonus, orderCount };
+                  })
+                  .sort((a, b) => b.totalBonus - a.totalBonus)
+                  .slice(0, 5)
+                  .map((earner, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 bg-emerald-50/50 rounded-2xl border border-emerald-100">
+                      <div className="flex items-center gap-3">
+                         <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center border border-emerald-100 font-mono font-bold text-[10px] text-emerald-600">
+                           {i + 1}
+                         </div>
+                         <div>
+                            <div className="text-xs font-black text-gray-900 tracking-tight max-w-[150px] truncate">{earner.email}</div>
+                            <div className="text-[10px] text-gray-500 font-medium">{earner.orderCount} conversions</div>
+                         </div>
+                      </div>
+                      <div className="text-xs font-bold text-emerald-600">
+                        ৳{earner.totalBonus.toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+             </div>
+          </div>
         </div>
       </div>
 
@@ -1177,6 +1782,17 @@ export default function AdminDashboard() {
             Coupons
           </button>
           <button 
+            onClick={() => setActiveTab("analytics")}
+            className={cn(
+              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
+              activeTab === "analytics" 
+                ? "bg-white text-indigo-600 shadow-sm" 
+                : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+            )}
+          >
+            Analytics
+          </button>
+          <button 
             onClick={() => setActiveTab("pages")}
             className={cn(
               "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
@@ -1226,7 +1842,804 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {activeTab === "categories" ? (
+        {activeTab === "analytics" ? (
+          <section className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+            {/* Professional Analytics Header */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 bg-white p-8 sm:p-10 rounded-[40px] border border-gray-100 shadow-sm relative overflow-hidden">
+               <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full blur-3xl -mr-32 -mt-32" />
+               <div className="relative z-10 space-y-2">
+                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 rounded-full">
+                   <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />
+                   <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Real-time Attribution</span>
+                 </div>
+                 <h3 className="text-3xl font-black text-gray-900 tracking-tighter uppercase">Revenue Statistics</h3>
+                 <p className="text-xs font-bold text-gray-400 uppercase tracking-widest max-w-md leading-relaxed">
+                   Comprehensive financial performance monitoring and marketing ROI tracking
+                 </p>
+               </div>
+
+               <div className="relative z-10 flex flex-wrap items-center gap-3">
+                  <div className="flex bg-gray-50 p-1.5 rounded-2xl border border-gray-100">
+                    {[
+                      { id: "today", label: "24h" },
+                      { id: "yesterday", label: "Fixed" },
+                      { id: "last7", label: "7 Days" },
+                      { id: "last30", label: "30 Days" },
+                      { id: "thisMonth", label: "Month" },
+                      { id: "thisYear", label: "Year" },
+                      { id: "custom", label: "Range" }
+                    ].map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => setDatePreset(p.id as any)}
+                        className={cn(
+                          "px-4 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all",
+                          datePreset === p.id 
+                            ? "bg-white text-indigo-600 shadow-md shadow-indigo-200/20" 
+                            : "text-gray-400 hover:text-gray-600"
+                        )}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                 </div>
+                 <button 
+                  onClick={() => {
+                    const csvContent = "Date,Gross,Discount,Net,Commission,Profit,Orders\n" + 
+                      dailyAnalyticsList.map(row => `${row.date},${row.gross},${row.discount},${row.net},${row.commission},${row.profit},${row.orders}`).join("\n");
+                    const blob = new Blob([csvContent], { type: 'text/csv' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.setAttribute('hidden', '');
+                    a.setAttribute('href', url);
+                    a.setAttribute('download', `revenue_report_${new Date().toISOString().split('T')[0]}.csv`);
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                  }}
+                  className="flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-800 transition-all active:scale-95"
+                 >
+                   <Save className="w-4 h-4" />
+                   Export Report
+                 </button>
+               </div>
+            </div>
+
+            {/* Detailed Filters Expandable */}
+            <div className="bg-white p-6 sm:p-8 rounded-[40px] border border-gray-100 shadow-sm relative overflow-hidden">
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                 <div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block ml-1 flex items-center gap-2">
+                       <Ticket className="w-3 h-3" />
+                       Filter by Coupon
+                    </label>
+                    <select 
+                      value={analyticsFilters.coupon}
+                      onChange={e => setAnalyticsFilters({...analyticsFilters, coupon: e.target.value})}
+                      className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-xs font-black focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    >
+                      <option value="">All Marketing Channels</option>
+                      {coupons.map(c => <option key={c.id} value={c.code}>{c.code}</option>)}
+                    </select>
+                 </div>
+                 <div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block ml-1 flex items-center gap-2">
+                       <Package className="w-3 h-3" />
+                       Filter by Product
+                    </label>
+                    <select 
+                      value={analyticsFilters.product}
+                      onChange={e => setAnalyticsFilters({...analyticsFilters, product: e.target.value})}
+                      className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-xs font-black focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    >
+                      <option value="">All Product Categories</option>
+                      {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                 </div>
+                 {datePreset === "custom" && (
+                   <>
+                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block ml-1">From Date</label>
+                       <input 
+                         type="date"
+                         value={analyticsFilters.startDate}
+                         onChange={e => setAnalyticsFilters({...analyticsFilters, startDate: e.target.value})}
+                         className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-xs font-black focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                       />
+                    </motion.div>
+                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block ml-1">To Date</label>
+                       <input 
+                         type="date"
+                         value={analyticsFilters.endDate}
+                         onChange={e => setAnalyticsFilters({...analyticsFilters, endDate: e.target.value})}
+                         className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-xs font-black focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                       />
+                    </motion.div>
+                   </>
+                 )}
+                 {datePreset !== "custom" && (
+                   <div className="lg:col-span-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block ml-1 flex items-center gap-2">
+                         <Mail className="w-3 h-3" />
+                         Search Affiliate
+                      </label>
+                      <input 
+                        type="text"
+                        placeholder="Search by affiliate email address..."
+                        value={analyticsFilters.email}
+                        onChange={e => setAnalyticsFilters({...analyticsFilters, email: e.target.value})}
+                        className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-xs font-black focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                      />
+                   </div>
+                 )}
+               </div>
+            </div>
+
+            {/* Core Revenue Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 sm:gap-6">
+              {[
+                { label: "Total Gross Sales", value: revenueStatsSummary.gross, icon: TrendingUp, color: "text-indigo-600", bg: "bg-indigo-50", desc: "Total before discounts", live: true },
+                { label: "Total Net Revenue", value: revenueStatsSummary.net, icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-50", desc: "Revenue after discounts", live: true },
+                { label: "Total Profit", value: revenueStatsSummary.profit, icon: ShieldCheck, color: "text-blue-600", bg: "bg-blue-50", desc: "Net minus commissions", live: true },
+                { label: "Total Orders", value: revenueStatsSummary.orders, icon: ShoppingBag, color: "text-purple-600", bg: "bg-purple-50", desc: "Successful conversions", isCount: true, live: true },
+                { label: "Total Affiliate/Referral Commission", value: revenueStatsSummary.commission, icon: Users, color: "text-amber-600", bg: "bg-amber-50", desc: "Affiliate payouts" },
+                { label: "Total Coupon Discounts", value: revenueStatsSummary.discount, icon: Ticket, color: "text-rose-600", bg: "bg-rose-50", desc: "Total value of coupons" },
+              ].map((s, i) => (
+                <motion.div 
+                  key={i}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm relative overflow-hidden group hover:shadow-xl hover:shadow-indigo-500/5 transition-all"
+                >
+                  {s.live && (
+                    <div className="absolute top-4 right-4 flex items-center gap-1">
+                      <div className="w-1 h-1 rounded-full bg-emerald-500 animate-ping" />
+                      <span className="text-[6px] font-black text-emerald-500 uppercase tracking-tighter">Live</span>
+                    </div>
+                  )}
+                  <div className={cn("inline-flex p-3 rounded-2xl mb-4 group-hover:scale-110 group-hover:rotate-6 transition-all duration-300", s.bg, s.color)}>
+                    <s.icon className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{s.label}</div>
+                    <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tighter">
+                      {s.isCount ? "" : "৳"}{s.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </div>
+                    {s.label === "Total Orders" && (
+                      <div className="text-[10px] font-black text-purple-400 uppercase tracking-tighter mt-1 flex items-center gap-1">
+                        <Package className="w-3 h-3" />
+                        {revenueStatsSummary.units.toLocaleString()} Units Sold
+                      </div>
+                    )}
+                    <p className="text-[8px] font-bold text-gray-300 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">{s.desc}</p>
+                  </div>
+                </motion.div>
+              ))}
+
+              {/* Real-time Active Pulse */}
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="col-span-2 lg:col-span-3 xl:col-span-12 bg-gray-900 p-8 rounded-[45px] border border-gray-800 shadow-2xl shadow-indigo-900/10 relative overflow-hidden group"
+              >
+                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-[80px] -mr-32 -mt-32 pointer-events-none" />
+                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-8">
+                  <div className="flex items-center gap-6">
+                    <div className="relative">
+                      <div className="w-16 h-16 bg-indigo-500/10 rounded-[28px] border border-indigo-500/20 flex items-center justify-center">
+                        <Users className="w-8 h-8 text-indigo-400" />
+                      </div>
+                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-4 border-gray-900 animate-pulse" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-2xl font-black text-white tracking-tighter uppercase italic">Active Operations</h3>
+                        <span className="bg-emerald-500/10 text-emerald-400 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-500/20">LIVE</span>
+                      </div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Real-time pulse of your digital marketplace</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-6 md:gap-12">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest block">Real-time Pulse</span>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-4xl font-black text-white tracking-tighter">{activeSessions.length}</span>
+                        <span className="text-xs font-bold text-indigo-400 uppercase">Users Online</span>
+                      </div>
+                    </div>
+                    
+                    <div className="hidden sm:block h-10 w-px bg-gray-800" />
+
+                    <div className="flex -space-x-3 overflow-hidden">
+                      {activeSessions.slice(0, 5).map((s, i) => (
+                        <div key={i} className="w-10 h-10 rounded-full border-2 border-gray-900 bg-gray-800 flex items-center justify-center overflow-hidden ring-2 ring-indigo-500/20 group-hover:translate-x-1 transition-transform cursor-pointer" title={s.email || "Guest"}>
+                          <img src={`https://ui-avatars.com/api/?name=${s.email || i}&background=random&color=fff&size=64`} className="w-full h-full object-cover" />
+                        </div>
+                      ))}
+                      {activeSessions.length > 5 && (
+                        <div className="w-10 h-10 rounded-full border-2 border-gray-900 bg-gray-800 flex items-center justify-center text-[10px] font-black text-gray-400 ring-2 ring-indigo-500/20">
+                          +{activeSessions.length - 5}
+                        </div>
+                      )}
+                    </div>
+
+                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest max-w-[180px] leading-relaxed hidden lg:block">
+                      {activeSessions.length > 0 ? (
+                        <>Current global traffic distributed across <span className="text-white">{new Set(activeSessions.map(s => s.path)).size} unique entry points</span></>
+                      ) : "Searching for active user heartbeat..."}
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+
+            {/* Real-time Order Stream & Product Performance */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+               <div className="lg:col-span-6">
+                  <div className="bg-white p-8 rounded-[45px] border border-gray-100 shadow-sm overflow-hidden flex flex-col h-full">
+                     <div className="flex items-center gap-6 mb-8">
+                        <div className="w-16 h-16 bg-emerald-50 rounded-[28px] flex items-center justify-center flex-shrink-0">
+                           <ShoppingBag className="w-8 h-8 text-emerald-600" />
+                        </div>
+                        <div>
+                           <h3 className="text-xl font-black text-gray-900 tracking-tighter uppercase italic">Best Sellers</h3>
+                           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Real-time sales distribution</p>
+                        </div>
+                     </div>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {productStats.slice(0, 6).map((p, i) => (
+                           <div key={i} className="bg-gray-50 px-6 py-4 rounded-[24px] border border-gray-100 flex items-center gap-4 hover:bg-emerald-50 hover:border-emerald-100 transition-all cursor-default group">
+                              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform flex-shrink-0">
+                                 <Package className="w-5 h-5 text-emerald-500" />
+                              </div>
+                              <div className="min-w-0">
+                                 <div className="text-[10px] font-black text-gray-900 uppercase tracking-tighter truncate">{p.name}</div>
+                                 <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-[10px] font-black text-emerald-600">{p.sold} Sold</span>
+                                    <div className="w-1 h-1 rounded-full bg-gray-200" />
+                                    <span className="text-[10px] font-black text-gray-400">
+                                      {!isSuperAdmin && currentUserRole === 'moderator' ? '৳••••••' : `৳${p.net.toLocaleString()}`}
+                                    </span>
+                                 </div>
+                              </div>
+                           </div>
+                        ))}
+                     </div>
+                  </div>
+               </div>
+
+               <div className="lg:col-span-6">
+                  <div className="bg-white p-8 rounded-[45px] border border-gray-100 shadow-sm overflow-hidden flex flex-col h-full">
+                     <div className="flex items-center gap-6 mb-8">
+                        <div className="w-16 h-16 bg-indigo-50 rounded-[28px] flex items-center justify-center flex-shrink-0">
+                           <Eye className="w-8 h-8 text-indigo-600" />
+                        </div>
+                        <div>
+                           <h3 className="text-xl font-black text-gray-900 tracking-tighter uppercase italic">Most Seen</h3>
+                           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Hottest items by visitor interest</p>
+                        </div>
+                     </div>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {mostViewedProducts.slice(0, 6).map((p, i) => (
+                           <div key={i} className="bg-gray-50 px-6 py-4 rounded-[24px] border border-gray-100 flex items-center gap-4 hover:bg-indigo-50 hover:border-indigo-100 transition-all cursor-default group">
+                              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform flex-shrink-0">
+                                 <Eye className="w-5 h-5 text-indigo-500" />
+                              </div>
+                              <div className="min-w-0">
+                                 <div className="text-[10px] font-black text-gray-900 uppercase tracking-tighter truncate">{p.name}</div>
+                                 <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-[10px] font-black text-indigo-600">{p.views || 0} Views</span>
+                                    <div className="w-1 h-1 rounded-full bg-gray-200" />
+                                    <span className="text-[10px] font-black text-gray-400 truncate">{p.category}</span>
+                                 </div>
+                              </div>
+                           </div>
+                        ))}
+                     </div>
+                  </div>
+               </div>
+            </div>
+
+            {/* Interactive Charts & Calendar Heatmap */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+               {/* Left: Line Charts */}
+               <div className="xl:col-span-8 space-y-8">
+                  <div className="bg-white p-8 sm:p-10 rounded-[45px] border border-gray-100 shadow-sm space-y-8">
+                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                           <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center">
+                              <TrendingUp className="w-6 h-6 text-indigo-600" />
+                           </div>
+                           <div>
+                              <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">Earnings Performance</h3>
+                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
+                                {revenueTimeframe === "daily" ? "Daily" : revenueTimeframe === "weekly" ? "Weekly" : "Monthly"} revenue & profit tracking
+                              </p>
+                           </div>
+                        </div>
+                        <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-2xl border border-gray-100 self-start">
+                          {(["daily", "weekly", "monthly"] as const).map((t) => (
+                            <button
+                              key={t}
+                              onClick={() => setRevenueTimeframe(t)}
+                              className={cn(
+                                "px-4 py-2 text-[8px] font-black uppercase tracking-widest rounded-xl transition-all",
+                                revenueTimeframe === t ? "bg-white text-indigo-600 shadow-sm" : "text-gray-400 hover:text-gray-600"
+                              )}
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                     </div>
+
+                     <div className="flex items-center gap-4 flex-wrap">
+                           <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-indigo-600" />
+                              <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Gross</span>
+                           </div>
+                           <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                              <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Net Revenue</span>
+                           </div>
+                           <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-blue-500" />
+                              <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Net Profit</span>
+                           </div>
+                        </div>
+                      <div className="h-[350px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={chartData}>
+                            <defs>
+                              <linearGradient id="colorGross" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1}/>
+                                <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                              </linearGradient>
+                              <linearGradient id="colorNet" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
+                                <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                              </linearGradient>
+                              <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                            <XAxis 
+                              dataKey="date" 
+                              axisLine={false} 
+                              tickLine={false} 
+                              tick={{ fontSize: 9, fontWeight: 800, fill: '#9ca3af' }}
+                              tickFormatter={(val) => {
+                                const d = new Date(val);
+                                if (revenueTimeframe === "daily") return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+                                if (revenueTimeframe === "weekly") return `Week ${Math.ceil(d.getDate() / 7)} ${d.toLocaleDateString('en-GB', { month: 'short' })}`;
+                                return d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' });
+                              }}
+                            />
+                            <YAxis 
+                              axisLine={false} 
+                              tickLine={false} 
+                              tick={{ fontSize: 9, fontWeight: 800, fill: '#9ca3af' }}
+                              tickFormatter={(val) => `৳${val >= 1000 ? (val/1000).toFixed(val % 1000 === 0 ? 0 : 1) + 'k' : val}`}
+                            />
+                            <Tooltip 
+                              contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', padding: '16px' }}
+                              labelStyle={{ fontWeight: 900, marginBottom: '8px', color: '#111827', fontSize: '12px' }}
+                              itemStyle={{ fontSize: '11px', fontWeight: 800 }}
+                              formatter={(value: any) => [`৳${Number(value).toLocaleString()}`, '']}
+                              labelFormatter={(label) => new Date(label).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                            />
+                            <Area type="monotone" dataKey="gross" name="Gross Sales" stroke="#4f46e5" strokeWidth={4} fillOpacity={1} fill="url(#colorGross)" />
+                            <Area type="monotone" dataKey="net" name="Net Revenue" stroke="#10b981" strokeWidth={4} fillOpacity={1} fill="url(#colorNet)" />
+                            <Area type="monotone" dataKey="profit" name="Net Profit" stroke="#3b82f6" strokeWidth={4} fillOpacity={1} fill="url(#colorProfit)" />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                     <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm space-y-6">
+                        <div className="flex items-center gap-3 border-l-4 border-amber-400 pl-4 py-1">
+                          <div>
+                            <h3 className="text-lg font-black text-gray-900 uppercase tracking-tighter">Coupon Contribution</h3>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Marketing efficiency metrics</p>
+                          </div>
+                        </div>
+                        <div className="h-[250px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={chartData}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                              <XAxis dataKey="date" hide />
+                              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 800, fill: '#9ca3af' }} />
+                              <Tooltip cursor={{fill: '#f9fafb'}} contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} />
+                              <Bar dataKey="discount" name="Discount" fill="#f59e0b" radius={[8, 8, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                     </div>
+                     <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm space-y-6">
+                        <div className="flex items-center gap-3 border-l-4 border-indigo-400 pl-4 py-1">
+                          <div>
+                            <h3 className="text-lg font-black text-gray-900 uppercase tracking-tighter">Order Volume</h3>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Customer activity trends</p>
+                          </div>
+                        </div>
+                        <div className="h-[250px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={chartData}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                              <XAxis dataKey="date" hide />
+                              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 800, fill: '#9ca3af' }} />
+                              <Tooltip contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} />
+                              <Area type="stepAfter" dataKey="orders" name="Orders" stroke="#6366f1" fill="#e0e7ff" strokeWidth={3} />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+
+               {/* Right: Revenue Heatmap */}
+               <div className="xl:col-span-4 space-y-8">
+                 <div className="bg-white p-8 rounded-[45px] border border-gray-100 shadow-sm">
+                    <div className="flex items-center justify-between mb-8">
+                       <h3 className="text-lg font-black text-gray-900 uppercase tracking-tighter flex items-center gap-2">
+                          <Calendar className="w-5 h-5 text-indigo-600" />
+                          Calendar Heatmap
+                       </h3>
+                       <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl">
+                          <button onClick={() => setSelectedCalendarMonth(new Date(selectedCalendarMonth.setMonth(selectedCalendarMonth.getMonth() - 1)))} className="p-1 hover:bg-white rounded-lg transition-colors"><Plus className="w-3 h-3 rotate-45" /></button>
+                          <span className="text-[10px] font-black uppercase tracking-widest px-2 min-w-[100px] text-center">
+                            {selectedCalendarMonth.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+                          </span>
+                          <button onClick={() => setSelectedCalendarMonth(new Date(selectedCalendarMonth.setMonth(selectedCalendarMonth.getMonth() + 1)))} className="p-1 hover:bg-white rounded-lg transition-colors"><Plus className="w-3 h-3" /></button>
+                       </div>
+                    </div>
+
+                    <div className="grid grid-cols-7 gap-2">
+                       {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                         <div key={day} className="text-[9px] font-black text-gray-300 uppercase text-center mb-2">{day}</div>
+                       ))}
+                       {Array.from({ length: new Date(selectedCalendarMonth.getFullYear(), selectedCalendarMonth.getMonth(), 1).getDay() }).map((_, i) => (
+                         <div key={`empty-${i}`} className="aspect-square" />
+                       ))}
+                       {heatmapData.map((d, i) => {
+                         const intensity = d.gross === 0 ? 0 : (d.gross > 10000 ? 4 : d.gross > 5000 ? 3 : d.gross > 1000 ? 2 : 1);
+                         const colors = [
+                           "bg-gray-50 text-gray-300 shadow-inner",
+                           "bg-indigo-50 text-indigo-400 border border-indigo-100",
+                           "bg-indigo-200 text-indigo-600",
+                           "bg-indigo-400 text-white",
+                           "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                         ];
+                         return (
+                           <motion.button
+                             key={i}
+                             whileHover={{ scale: 1.1, zIndex: 10 }}
+                             onClick={() => setSelectedCalendarDay(d)}
+                             className={cn(
+                               "aspect-square rounded-xl flex items-center justify-center text-[10px] font-black transition-all",
+                               colors[intensity]
+                             )}
+                           >
+                             {d.day}
+                           </motion.button>
+                         );
+                       })}
+                    </div>
+
+                    <div className="mt-8 p-6 bg-gray-50 rounded-3xl border border-gray-100 min-h-[160px] flex flex-col justify-center">
+                       {selectedCalendarDay ? (
+                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+                            <div className="flex items-center justify-between">
+                               <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{new Date(selectedCalendarDay.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+                               <div className="text-[10px] font-black text-indigo-600 uppercase bg-indigo-50 px-2 py-0.5 rounded-full">{selectedCalendarDay.orders} Orders</div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                               <div>
+                                  <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Gross</div>
+                                  <div className="text-sm font-black text-gray-900">৳{selectedCalendarDay.gross.toLocaleString()}</div>
+                               </div>
+                               <div>
+                                  <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Net</div>
+                                  <div className="text-sm font-black text-emerald-600">৳{selectedCalendarDay.net.toLocaleString()}</div>
+                               </div>
+                            </div>
+                            <div className="pt-3 border-t border-gray-200 flex items-center justify-between">
+                               <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Discount: ৳{selectedCalendarDay.discount.toLocaleString()}</div>
+                               <div className="text-[8px] font-black text-amber-600 uppercase">Comm: ৳{selectedCalendarDay.commission.toLocaleString()}</div>
+                            </div>
+                         </motion.div>
+                       ) : (
+                         <div className="text-center space-y-2 py-4">
+                            <Calendar className="w-8 h-8 text-gray-200 mx-auto" />
+                            <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Select a day to view details</p>
+                         </div>
+                       )}
+                    </div>
+                 </div>
+
+                 <div className="bg-gradient-to-br from-gray-900 to-indigo-950 p-8 rounded-[45px] text-white shadow-xl relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl -mr-16 -mt-16" />
+                    <h4 className="text-lg font-black tracking-tighter uppercase mb-2">Business Health</h4>
+                    <div className="space-y-6 mt-6">
+                       <div className="space-y-2">
+                          <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
+                             <span>Margin Retention</span>
+                             <span>{((revenueStatsSummary.profit / (revenueStatsSummary.gross || 1)) * 100).toFixed(1)}%</span>
+                          </div>
+                          <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                             <motion.div 
+                               initial={{ width: 0 }}
+                               animate={{ width: `${(revenueStatsSummary.profit / (revenueStatsSummary.gross || 1)) * 100}%` }}
+                               className="h-full bg-emerald-500" 
+                             />
+                          </div>
+                       </div>
+                       <div className="space-y-2">
+                          <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
+                             <span>Coupon Burn Rate</span>
+                             <span>{((revenueStatsSummary.discount / (revenueStatsSummary.gross || 1)) * 100).toFixed(1)}%</span>
+                          </div>
+                          <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                             <motion.div 
+                               initial={{ width: 0 }}
+                               animate={{ width: `${(revenueStatsSummary.discount / (revenueStatsSummary.gross || 1)) * 100}%` }}
+                               className="h-full bg-amber-500" 
+                             />
+                          </div>
+                       </div>
+                    </div>
+                    <p className="text-[9px] text-white/40 font-bold uppercase tracking-widest mt-8 leading-relaxed">
+                       Calculated based on current filtering settings. Profit is defined as Net Revenue minus all affiliate payouts.
+                    </p>
+                 </div>
+               </div>
+            </div>
+
+            {/* Master Analytics Table */}
+            <div className="bg-white rounded-[50px] border border-gray-100 shadow-sm overflow-hidden">
+               <div className="p-8 sm:p-10 border-b border-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-gray-50/20">
+                  <div className="space-y-1">
+                    <h3 className="text-xl font-black text-gray-900 tracking-tighter uppercase">Detailed Revenue Ledger</h3>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Full transactional breakdown by date</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                     <div className="relative">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input 
+                          type="text" 
+                          placeholder="Search dates (YYYY-MM-DD)..."
+                          value={revenueSearch}
+                          onChange={e => setRevenueSearch(e.target.value)}
+                          className="pl-12 pr-6 py-3 bg-white border border-gray-100 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 min-w-[250px] shadow-sm"
+                        />
+                     </div>
+                  </div>
+               </div>
+
+               <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                     <thead>
+                        <tr className="bg-white border-b border-gray-50">
+                           <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">Analytics Period</th>
+                           <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Gross Sales</th>
+                           <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Marketing Cost</th>
+                           <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Net Revenue</th>
+                           <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Affiliate Bonus</th>
+                           <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Estimated Profit</th>
+                           <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Volume</th>
+                        </tr>
+                     </thead>
+                     <tbody className="divide-y divide-gray-50">
+                        {paginatedRevenue.map((row, i) => (
+                           <tr key={i} className="hover:bg-gray-50/50 transition-colors group">
+                              <td className="px-10 py-6">
+                                 <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-mono font-black text-xs">
+                                       {new Date(row.date).getDate()}
+                                    </div>
+                                    <div>
+                                       <div className="text-xs font-black text-gray-900 uppercase tracking-tight">{new Date(row.date).toLocaleDateString('en-GB', { weekday: 'long' })}</div>
+                                       <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{row.date}</div>
+                                    </div>
+                                 </div>
+                              </td>
+                              <td className="px-10 py-6 text-right font-bold text-xs text-gray-800">৳{row.gross.toLocaleString()}</td>
+                              <td className="px-10 py-6 text-right font-bold text-xs text-rose-500">-৳{row.discount.toLocaleString()}</td>
+                              <td className="px-10 py-6 text-right">
+                                 <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg font-black text-xs">
+                                    ৳{row.net.toLocaleString()}
+                                 </span>
+                              </td>
+                              <td className="px-10 py-6 text-right font-bold text-xs text-amber-600">৳{row.commission.toLocaleString()}</td>
+                              <td className="px-10 py-6 text-right">
+                                 <div className="text-sm font-black text-indigo-600 tracking-tighter">৳{row.profit.toLocaleString()}</div>
+                              </td>
+                              <td className="px-10 py-6 text-center">
+                                 <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-xl">
+                                    <ShoppingBag className="w-3 h-3 text-gray-400" />
+                                    <span className="text-[10px] font-black text-gray-900">{row.orders}</span>
+                                 </div>
+                              </td>
+                           </tr>
+                        ))}
+                     </tbody>
+                  </table>
+               </div>
+
+               {/* Table Pagination */}
+               <div className="p-8 bg-gray-50/30 border-t border-gray-50 flex items-center justify-between">
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                     Showing {Math.min(filteredRevenueTable.length, (revenueTablePage - 1) * revenueTablePageSize + 1)} - {Math.min(filteredRevenueTable.length, revenueTablePage * revenueTablePageSize)} of {filteredRevenueTable.length} entries
+                  </div>
+                  <div className="flex items-center gap-2">
+                     <button 
+                       disabled={revenueTablePage === 1}
+                       onClick={() => setRevenueTablePage(p => p - 1)}
+                       className="p-2 border border-gray-200 rounded-xl hover:bg-white disabled:opacity-30 transition-all"
+                     >
+                       <ChevronLeft className="w-4 h-4" />
+                     </button>
+                     <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.ceil(filteredRevenueTable.length / revenueTablePageSize) }).slice(0, 5).map((_, i) => (
+                           <button 
+                             key={i} 
+                             onClick={() => setRevenueTablePage(i + 1)}
+                             className={cn("w-8 h-8 rounded-xl text-[10px] font-black transition-all", revenueTablePage === i + 1 ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" : "text-gray-400 hover:bg-white hover:text-gray-600")}
+                           >
+                             {i + 1}
+                           </button>
+                        ))}
+                     </div>
+                     <button 
+                       disabled={revenueTablePage === Math.ceil(filteredRevenueTable.length / revenueTablePageSize)}
+                       onClick={() => setRevenueTablePage(p => p + 1)}
+                       className="p-2 border border-gray-200 rounded-xl hover:bg-white disabled:opacity-30 transition-all"
+                     >
+                       <ChevronRight className="w-4 h-4" />
+                     </button>
+                  </div>
+               </div>
+            </div>
+
+            {/* Performance Drill-down Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+               {/* 1. Coupon Analytics */}
+               <div className="bg-white rounded-[45px] border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                  <div className="p-8 border-b border-gray-50 bg-indigo-50/20">
+                     <h3 className="text-lg font-black text-gray-900 tracking-tighter uppercase">Coupon ROI</h3>
+                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Marketing efficiency attribution</p>
+                  </div>
+                  <div className="flex-1 overflow-y-auto max-h-[500px] p-2">
+                     <div className="space-y-2">
+                        {analyticsData.map((data, i) => (
+                           <div key={i} className="p-6 hover:bg-gray-50 rounded-[35px] transition-all border border-transparent hover:border-indigo-100 group">
+                              <div className="flex items-center justify-between mb-4">
+                                 <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-black text-xs shadow-lg shadow-indigo-500/20">
+                                       {data.code[0]}
+                                    </div>
+                                    <div>
+                                       <div className="text-sm font-black text-gray-900 uppercase tracking-tighter">{data.code}</div>
+                                       <div className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">{data.type} discount</div>
+                                    </div>
+                                 </div>
+                                 <div className="text-right">
+                                    <div className="text-sm font-black text-indigo-600">৳{data.netRevenue.toLocaleString()}</div>
+                                    <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Net Revenue</div>
+                                 </div>
+                              </div>
+                              <div className="grid grid-cols-3 gap-2">
+                                 <div className="bg-white p-2.5 rounded-2xl border border-gray-50 text-center">
+                                    <div className="text-[8px] font-black text-gray-300 uppercase mb-0.5">Uses</div>
+                                    <div className="text-[11px] font-black text-gray-900">{data.actualUsage}</div>
+                                 </div>
+                                 <div className="bg-white p-2.5 rounded-2xl border border-gray-50 text-center">
+                                    <div className="text-[8px] font-black text-gray-300 uppercase mb-0.5">Discount</div>
+                                    <div className="text-[11px] font-black text-rose-500">৳{data.discountGiven.toLocaleString()}</div>
+                                 </div>
+                                 <div className="bg-white p-2.5 rounded-2xl border border-gray-50 text-center">
+                                    <div className="text-[8px] font-black text-gray-300 uppercase mb-0.5">Earnings</div>
+                                    <div className="text-[11px] font-black text-emerald-600">৳{(data.netRevenue - data.affiliateBonus).toLocaleString()}</div>
+                                 </div>
+                              </div>
+                           </div>
+                        ))}
+                     </div>
+                  </div>
+               </div>
+
+               {/* 2. Product Performance */}
+               <div className="bg-white rounded-[45px] border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                  <div className="p-8 border-b border-gray-50 bg-emerald-50/20">
+                     <h3 className="text-lg font-black text-gray-900 tracking-tighter uppercase">Product Volume</h3>
+                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Inventory performance & revenue</p>
+                  </div>
+                  <div className="flex-1 overflow-y-auto max-h-[500px] p-2">
+                     <div className="space-y-2">
+                        {productStats.map((data, i) => (
+                           <div key={i} className="p-6 hover:bg-gray-50 rounded-[35px] transition-all border border-transparent hover:border-emerald-100 group">
+                              <div className="flex items-center justify-between mb-4">
+                                 <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center font-black text-[10px]">
+                                       {i + 1}
+                                    </div>
+                                    <div className="min-w-0">
+                                       <div className="text-sm font-black text-gray-900 truncate tracking-tighter max-w-[120px]">{data.name}</div>
+                                       <div className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">{data.sold} Units Sold</div>
+                                    </div>
+                                 </div>
+                                 <div className="text-right">
+                                    <div className="text-sm font-black text-emerald-600">৳{data.net.toLocaleString()}</div>
+                                    <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Net Sales</div>
+                                 </div>
+                              </div>
+                              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                 <motion.div 
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${(data.net / (productStats[0].net || 1)) * 100}%` }}
+                                    className="h-full bg-emerald-500" 
+                                 />
+                              </div>
+                              <div className="flex justify-between items-center mt-3 text-[9px] font-black uppercase tracking-widest text-gray-400">
+                                 <span>Net Profit: ৳{(data.net - data.bonus).toLocaleString()}</span>
+                                 <span>Share: {((data.net / (revenueStatsSummary.net || 1)) * 100).toFixed(1)}%</span>
+                              </div>
+                           </div>
+                        ))}
+                     </div>
+                  </div>
+               </div>
+
+               {/* 3. Top Affiliates */}
+               <div className="bg-white rounded-[45px] border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                  <div className="p-8 border-b border-gray-50 bg-amber-50/20">
+                     <h3 className="text-lg font-black text-gray-900 tracking-tighter uppercase">Top Promoters</h3>
+                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Growth engine & conversion rates</p>
+                  </div>
+                  <div className="flex-1 overflow-y-auto max-h-[500px] p-2">
+                     <div className="space-y-2">
+                        {affiliateStats.map((data, i) => (
+                           <div key={i} className="p-6 hover:bg-gray-50 rounded-[35px] transition-all border border-transparent hover:border-amber-100 group">
+                              <div className="flex items-center justify-between mb-4">
+                                 <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center">
+                                       <Users className="w-5 h-5 text-amber-500" />
+                                    </div>
+                                    <div>
+                                       <div className="text-sm font-black text-gray-900 tracking-tighter">{data.displayName}</div>
+                                       <div className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">{data.conversions} Conversions</div>
+                                    </div>
+                                 </div>
+                                 <div className="text-right">
+                                    <div className="text-sm font-black text-amber-600">৳{data.totalBonus.toLocaleString()}</div>
+                                    <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Total Payout</div>
+                                 </div>
+                              </div>
+                              <div className="flex items-center gap-2 p-2.5 bg-white rounded-2xl border border-gray-50">
+                                 <div className="flex-1 space-y-1">
+                                    <div className="text-[8px] font-black text-gray-300 uppercase tracking-widest">Gross Captured</div>
+                                    <div className="text-xs font-black text-gray-700">৳{data.grossGenerated.toLocaleString()}</div>
+                                 </div>
+                                 <div className="h-8 w-px bg-gray-50" />
+                                 <div className="px-4 text-center">
+                                    <div className="text-[8px] font-black text-gray-300 uppercase tracking-widest">ROI</div>
+                                    <div className="text-xs font-black text-amber-500">x{((data.grossGenerated / (data.totalBonus || 1)).toFixed(1))}</div>
+                                 </div>
+                              </div>
+                           </div>
+                        ))}
+                     </div>
+                  </div>
+               </div>
+            </div>
+          </section>
+        ) : activeTab === "categories" ? (
           <section className="space-y-6">
             <div className="flex justify-between items-center bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
               <div>
@@ -1942,8 +3355,16 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                         <div>
+                          <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Bonus</div>
+                          <div className="text-xl font-black text-emerald-600">
+                             {coupon.bonusPercentage || 0}%
+                          </div>
+                        </div>
+                        <div>
                           <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Uses</div>
-                          <div className="text-xl font-black text-gray-900">{coupon.usageCount || 0}</div>
+                          <div className="text-sm font-black text-gray-900">
+                            {coupon.usageCount || 0} / {coupon.usageLimit > 0 ? coupon.usageLimit : '∞'}
+                          </div>
                         </div>
                      </div>
 
@@ -2144,6 +3565,71 @@ export default function AdminDashboard() {
               </table>
             </div>
           </section>
+         ) : activeTab === "logs" ? (
+          <section className="space-y-6">
+            <div className="bg-white p-8 rounded-[45px] border border-gray-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
+                <div>
+                  <h3 className="text-2xl font-black text-gray-900 tracking-tighter uppercase italic">System Activity Logs</h3>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Audit trail of all administrative actions</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="bg-indigo-50 px-4 py-2 rounded-2xl border border-indigo-100 text-center">
+                    <div className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Logged Events</div>
+                    <div className="text-xl font-black text-indigo-600">Live</div>
+                  </div>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-[45px] border border-gray-100 overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-gray-50 text-[10px] uppercase font-black text-gray-400 tracking-widest border-b border-gray-100">
+                    <tr>
+                      <th className="px-8 py-6">Admin</th>
+                      <th className="px-8 py-6">Action</th>
+                      <th className="px-8 py-6">Target</th>
+                      <th className="px-8 py-6">Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {logs.length === 0 ? (
+                      <tr className="hover:bg-gray-50/50 transition-colors">
+                        <td colSpan={4} className="px-8 py-20 text-center text-gray-400 font-bold italic">
+                          No activity logs found. Administrative actions will appear here in real-time.
+                        </td>
+                      </tr>
+                    ) : (
+                      logs.map(log => (
+                        <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="px-8 py-6">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-[10px] font-black text-gray-500 uppercase">
+                                {log.adminEmail?.charAt(0).toUpperCase()}
+                              </div>
+                              <span className="text-[11px] font-bold text-gray-700">{log.adminEmail}</span>
+                            </div>
+                          </td>
+                          <td className="px-8 py-6">
+                            <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full uppercase tracking-widest border border-indigo-100">
+                              {log.action?.replace(/_/g, ' ')}
+                            </span>
+                          </td>
+                          <td className="px-8 py-6">
+                            <code className="text-[9px] font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded-md max-w-[200px] truncate block">
+                              {JSON.stringify(log.details)}
+                            </code>
+                          </td>
+                          <td className="px-8 py-6 text-[10px] font-bold text-gray-400">
+                            {log.createdAt?.toDate ? log.createdAt.toDate().toLocaleString() : 'Just now'}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
         ) : activeTab === "users" ? (
           <section className="space-y-6">
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex justify-between items-center bg-gray-50/50">
@@ -2207,13 +3693,13 @@ export default function AdminDashboard() {
                              <select 
                                value={u.role || 'user'} 
                                onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
-                               disabled={u.email === currentUserEmail}
+                               disabled={u.email === currentUserEmail || (!isSuperAdmin && u.role === 'super_admin')}
                                className="bg-gray-50 border-none rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
                              >
                                <option value="user">User</option>
                                <option value="moderator">Moderator</option>
                                <option value="admin">Admin</option>
-                               <option value="super_admin">Super Admin</option>
+                               {isSuperAdmin && <option value="super_admin">Super Admin</option>}
                              </select>
                           </div>
                         </td>
@@ -2256,14 +3742,57 @@ export default function AdminDashboard() {
 
             <form onSubmit={handleUpdateSettings} className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Website Name</label>
-                  <input 
-                    type="text" 
-                    value={siteSettings.siteName}
-                    onChange={e => setSiteSettings({...siteSettings, siteName: e.target.value})}
-                    className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Website Name</label>
+                    <input 
+                      type="text" 
+                      value={siteSettings.siteName}
+                      onChange={e => setSiteSettings({...siteSettings, siteName: e.target.value})}
+                      className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1 mb-1 block">Brand Name Style</label>
+                    <div className="flex flex-wrap items-center gap-3 bg-gray-50 p-2.5 rounded-2xl border border-gray-100/50">
+                      <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-sm border border-gray-100">
+                        <input 
+                          type="color" 
+                          value={siteSettings.brandColor || "#4f46e5"} 
+                          onChange={e => setSiteSettings({...siteSettings, brandColor: e.target.value})} 
+                          className="w-6 h-6 rounded border-none cursor-pointer" 
+                        />
+                        <span className="text-[10px] font-mono font-bold text-gray-600">{siteSettings.brandColor || "#4f46e5"}</span>
+                      </div>
+                      
+                      <div className="h-6 w-px bg-gray-200" />
+
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <div className="relative">
+                          <input 
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={siteSettings.useBrandGradient || false}
+                            onChange={e => setSiteSettings({...siteSettings, useBrandGradient: e.target.checked})}
+                          />
+                          <div className="w-8 h-4 bg-gray-200 rounded-full peer peer-checked:bg-indigo-600 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-4" />
+                        </div>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 group-hover:text-gray-600 transition-colors">Gradient</span>
+                      </label>
+
+                      {siteSettings.useBrandGradient && (
+                        <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-300 bg-white px-3 py-1.5 rounded-xl shadow-sm border border-gray-100">
+                          <input 
+                            type="color" 
+                            value={siteSettings.brandSecondaryColor || "#818cf8"} 
+                            onChange={e => setSiteSettings({...siteSettings, brandSecondaryColor: e.target.value})} 
+                            className="w-6 h-6 rounded border-none cursor-pointer" 
+                          />
+                          <span className="text-[10px] font-mono font-bold text-gray-600">{siteSettings.brandSecondaryColor || "#818cf8"}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Logo URL</label>
@@ -2424,6 +3953,130 @@ export default function AdminDashboard() {
                   />
                 </div>
 
+                <div className="md:col-span-2 space-y-4 pt-6 border-t border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
+                        <Share2 className="w-3 h-3 text-indigo-600" />
+                        Social Media Links
+                      </h4>
+                      <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">Add your social profiles for the footer</p>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        const current = siteSettings.socialLinks || [];
+                        setSiteSettings({
+                          ...siteSettings,
+                          socialLinks: [...current, { platform: "Facebook", url: "", icon: "Facebook" }]
+                        });
+                      }}
+                      className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-indigo-100 transition-colors flex items-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Link
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {(siteSettings.socialLinks || []).map((social, idx) => (
+                      <div key={idx} className="bg-gray-50 p-4 rounded-2xl space-y-3 relative group border border-transparent hover:border-indigo-100 transition-colors">
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            const next = [...siteSettings.socialLinks!];
+                            next.splice(idx, 1);
+                            setSiteSettings({ ...siteSettings, socialLinks: next });
+                          }}
+                          className="absolute -top-2 -right-2 w-6 h-6 bg-red-50 text-red-500 rounded-full flex items-center justify-center hover:bg-red-100 transition-colors opacity-0 group-hover:opacity-100 shadow-sm"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1">
+                            <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Platform</label>
+                            <select 
+                              value={social.platform}
+                              onChange={(e) => {
+                                const next = [...siteSettings.socialLinks!];
+                                const platformMap: {[key: string]: string} = {
+                                  'Facebook': 'Facebook',
+                                  'Twitter': 'Twitter',
+                                  'Instagram': 'Instagram',
+                                  'YouTube': 'Youtube',
+                                  'LinkedIn': 'Linkedin',
+                                  'GitHub': 'Github',
+                                  'WhatsApp': 'Phone',
+                                  'Telegram': 'Send',
+                                  'TikTok': 'Music',
+                                  'Pinterest': 'Pin'
+                                };
+                                next[idx] = { 
+                                  ...social, 
+                                  platform: e.target.value,
+                                  icon: platformMap[e.target.value] || 'ExternalLink'
+                                };
+                                setSiteSettings({ ...siteSettings, socialLinks: next });
+                              }}
+                              className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                            >
+                              <option value="Facebook">Facebook</option>
+                              <option value="Twitter">Twitter</option>
+                              <option value="Instagram">Instagram</option>
+                              <option value="YouTube">YouTube</option>
+                              <option value="LinkedIn">LinkedIn</option>
+                              <option value="GitHub">GitHub</option>
+                              <option value="WhatsApp">WhatsApp</option>
+                              <option value="Telegram">Telegram</option>
+                              <option value="TikTok">TikTok</option>
+                              <option value="Pinterest">Pinterest</option>
+                            </select>
+                          </div>
+                          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-gray-100 mt-4">
+                            {React.createElement(
+                              social.platform === "Facebook" ? Facebook : 
+                              social.platform === "Twitter" ? Twitter :
+                              social.platform === "Instagram" ? Instagram :
+                              social.platform === "YouTube" ? Youtube :
+                              social.platform === "LinkedIn" ? Linkedin :
+                              social.platform === "GitHub" ? Github :
+                              social.platform === "WhatsApp" ? Phone :
+                              social.platform === "TikTok" ? Music :
+                              social.platform === "Pinterest" ? Pin :
+                              social.platform === "Telegram" ? Send : ExternalLink,
+                              { className: "w-5 h-5 text-indigo-500" }
+                            )}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Profile URL</label>
+                          <input 
+                            type="url" 
+                            value={social.url}
+                            onChange={(e) => {
+                              const next = [...siteSettings.socialLinks!];
+                              next[idx] = { ...social, url: e.target.value };
+                              setSiteSettings({ ...siteSettings, socialLinks: next });
+                            }}
+                            placeholder="https://..."
+                            className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {(siteSettings.socialLinks || []).length === 0 && (
+                      <div className="col-span-full py-8 border-2 border-dashed border-gray-100 rounded-4xl flex flex-col items-center justify-center gap-2 group">
+                        <div className="w-10 h-10 rounded-2xl bg-gray-50 flex items-center justify-center group-hover:bg-indigo-50 transition-colors">
+                          <Share2 className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 transition-colors" />
+                        </div>
+                        <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">No social links added</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="md:col-span-2 pt-6 border-t border-gray-100">
                   <div className="bg-gray-900 rounded-3xl p-6 sm:p-8 text-white relative overflow-hidden group">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl -mr-32 -mt-32" />
@@ -2510,6 +4163,98 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                       )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="md:col-span-2 pt-6 border-t border-gray-100">
+                  <h4 className="font-bold text-gray-900 border-l-4 border-indigo-600 pl-3 mb-4 uppercase text-sm tracking-tighter">Marketplace Buttons</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 bg-indigo-50/30 p-6 rounded-3xl border border-indigo-100/50">
+                    <div className="space-y-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                      <h5 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Cart/Add Button</h5>
+                      <div>
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Button Text</label>
+                        <input 
+                          type="text" 
+                          value={siteSettings.cartText || "Cart"}
+                          onChange={e => setSiteSettings({...siteSettings, cartText: e.target.value})}
+                          className="w-full bg-gray-50 border-none rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Background</label>
+                          <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-100">
+                             <input type="color" value={siteSettings.cartColor || "#f9fafb"} onChange={e => setSiteSettings({...siteSettings, cartColor: e.target.value})} className="w-6 h-6 rounded border-none cursor-pointer" />
+                             <span className="text-[9px] font-mono text-gray-400">{siteSettings.cartColor || "#f9fafb"}</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Text Color</label>
+                          <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-100">
+                             <input type="color" value={siteSettings.cartTextColor || "#6b7280"} onChange={e => setSiteSettings({...siteSettings, cartTextColor: e.target.value})} className="w-6 h-6 rounded border-none cursor-pointer" />
+                             <span className="text-[9px] font-mono text-gray-400">{siteSettings.cartTextColor || "#6b7280"}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                      <h5 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">View/Details Button</h5>
+                      <div>
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Button Text</label>
+                        <input 
+                          type="text" 
+                          value={siteSettings.viewText || "View"}
+                          onChange={e => setSiteSettings({...siteSettings, viewText: e.target.value})}
+                          className="w-full bg-gray-50 border-none rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Background</label>
+                          <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-100">
+                             <input type="color" value={siteSettings.viewColor || "#f9fafb"} onChange={e => setSiteSettings({...siteSettings, viewColor: e.target.value})} className="w-6 h-6 rounded border-none cursor-pointer" />
+                             <span className="text-[9px] font-mono text-gray-400">{siteSettings.viewColor || "#f9fafb"}</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Text Color</label>
+                          <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-100">
+                             <input type="color" value={siteSettings.viewTextColor || "#6b7280"} onChange={e => setSiteSettings({...siteSettings, viewTextColor: e.target.value})} className="w-6 h-6 rounded border-none cursor-pointer" />
+                             <span className="text-[9px] font-mono text-gray-400">{siteSettings.viewTextColor || "#6b7280"}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                      <h5 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Buy/Purchase Button</h5>
+                      <div>
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Button Text</label>
+                        <input 
+                          type="text" 
+                          value={siteSettings.buyText || "Buy"}
+                          onChange={e => setSiteSettings({...siteSettings, buyText: e.target.value})}
+                          className="w-full bg-gray-50 border-none rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Background</label>
+                          <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-100">
+                             <input type="color" value={siteSettings.buyColor || "#4f46e5"} onChange={e => setSiteSettings({...siteSettings, buyColor: e.target.value})} className="w-6 h-6 rounded border-none cursor-pointer" />
+                             <span className="text-[9px] font-mono text-gray-400">{siteSettings.buyColor || "#4f46e5"}</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Text Color</label>
+                          <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-100">
+                             <input type="color" value={siteSettings.buyTextColor || "#ffffff"} onChange={e => setSiteSettings({...siteSettings, buyTextColor: e.target.value})} className="w-6 h-6 rounded border-none cursor-pointer" />
+                             <span className="text-[9px] font-mono text-gray-400">{siteSettings.buyTextColor || "#ffffff"}</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -3862,16 +5607,29 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Bonus for Assignee (৳)</label>
-                    <input 
-                      type="number" 
-                      placeholder="Amount to pay to user"
-                      value={newCoupon.bonusAmount || 0}
-                      onChange={e => setNewCoupon({...newCoupon, bonusAmount: Number(e.target.value)})}
-                      className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
-                    />
-                    <p className="text-[8px] text-gray-400 mt-1 ml-1 uppercase font-bold tracking-tight">The user assigned to this coupon will receive this bonus per use.</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Assignee Bonus (%)</label>
+                      <input 
+                        type="number" 
+                        placeholder="Commission %"
+                        value={newCoupon.bonusPercentage || 0}
+                        onChange={e => setNewCoupon({...newCoupon, bonusPercentage: Number(e.target.value)})}
+                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                      />
+                      <p className="text-[8px] text-gray-400 mt-1 ml-1 uppercase font-bold tracking-tight">Bonus from Net Sale.</p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Usage Limit</label>
+                      <input 
+                        type="number" 
+                        placeholder="0 = Unlimited"
+                        value={newCoupon.usageLimit || 0}
+                        onChange={e => setNewCoupon({...newCoupon, usageLimit: Number(e.target.value)})}
+                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                      />
+                      <p className="text-[8px] text-gray-400 mt-1 ml-1 uppercase font-bold tracking-tight">Max uses.</p>
+                    </div>
                   </div>
 
                   <div>
@@ -3979,16 +5737,27 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Bonus for Assignee (৳)</label>
-                    <input 
-                      type="number" 
-                      placeholder="Amount to pay to user"
-                      value={editingCoupon.bonusAmount || 0}
-                      onChange={e => setEditingCoupon({...editingCoupon, bonusAmount: Number(e.target.value)})}
-                      className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
-                    />
-                    <p className="text-[8px] text-gray-400 mt-1 ml-1 uppercase font-bold tracking-tight">The user assigned to this coupon will receive this bonus per use.</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Assignee Bonus (%)</label>
+                      <input 
+                        type="number" 
+                        placeholder="Commission %"
+                        value={editingCoupon.bonusPercentage || 0}
+                        onChange={e => setEditingCoupon({...editingCoupon, bonusPercentage: Number(e.target.value)})}
+                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Usage Limit</label>
+                      <input 
+                        type="number" 
+                        placeholder="0 = Unlimited"
+                        value={editingCoupon.usageLimit || 0}
+                        onChange={e => setEditingCoupon({...editingCoupon, usageLimit: Number(e.target.value)})}
+                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                      />
+                    </div>
                   </div>
 
                   <div>

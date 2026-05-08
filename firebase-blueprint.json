@@ -41,14 +41,19 @@
         "userId": { "type": "string" },
         "productId": { "type": "string" },
         "status": { "type": "string", "enum": ["pending", "completed", "failed"] },
-        "amount": { "type": "number" },
+        "amount": { "type": "number", "description": "Gross amount before discount" },
+        "discountAmount": { "type": "number", "description": "Discount applied" },
+        "netAmount": { "type": "number", "description": "Final paid amount" },
+        "affiliateBonus": { "type": "number", "description": "Bonus earned by affiliate" },
+        "affiliateId": { "type": "string", "description": "UID of the affiliate/assignee" },
+        "couponCode": { "type": "string" },
         "currency": { "type": "string" },
         "paymentIntentId": { "type": "string" },
         "downloadToken": { "type": "string" },
         "licenseKey": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["userId", "productId", "status", "amount"]
+      "required": ["userId", "productId", "status", "amount", "netAmount"]
     },
     "Settings": {
       "title": "Site Settings",
@@ -70,7 +75,16 @@
         "heroBanners": { 
           "type": "array",
           "description": "List of banner objects for the hero slider"
-        }
+        },
+        "cartText": { "type": "string" },
+        "viewText": { "type": "string" },
+        "buyText": { "type": "string" },
+        "cartColor": { "type": "string" },
+        "viewColor": { "type": "string" },
+        "buyColor": { "type": "string" },
+        "cartTextColor": { "type": "string" },
+        "viewTextColor": { "type": "string" },
+        "buyTextColor": { "type": "string" }
       },
       "required": ["siteName"]
     },
@@ -109,9 +123,11 @@
         "code": { "type": "string" },
         "type": { "type": "string", "enum": ["percentage", "fixed"] },
         "value": { "type": "number" },
+        "bonusPercentage": { "type": "number", "description": "Percentage of net sale to give as bonus" },
         "expiryDate": { "type": "string", "format": "date-time" },
         "isActive": { "type": "boolean" },
         "usageCount": { "type": "number" },
+        "usageLimit": { "type": "number" },
         "assignedEmail": { "type": "string", "format": "email", "description": "Email of the user this coupon is assigned to" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
@@ -124,9 +140,53 @@
       "properties": {
         "status": { "type": "string" }
       }
+    },
+    "AffiliateCommission": {
+      "title": "Affiliate Commission",
+      "description": "Record of earned commission by an affiliate",
+      "type": "object",
+      "properties": {
+        "affiliateId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "paid"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["affiliateId", "orderId", "amount", "status"]
+    },
+    "RevenueStatistic": {
+      "title": "Revenue Statistic",
+      "description": "Aggregated daily or monthly financial data",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date", "description": "YYYY-MM-DD" },
+        "grossSales": { "type": "number" },
+        "totalDiscount": { "type": "number" },
+        "netRevenue": { "type": "number" },
+        "totalBonus": { "type": "number" },
+        "totalProfit": { "type": "number" },
+        "orderCount": { "type": "number" }
+      },
+      "required": ["date", "grossSales", "netRevenue", "orderCount"]
+    },
+    "ActiveSession": {
+      "title": "Active Session",
+      "description": "Real-time presence tracking for users",
+      "type": "object",
+      "properties": {
+        "lastSeen": { "type": "string", "format": "date-time" },
+        "uid": { "type": ["string", "null"] },
+        "email": { "type": ["string", "null"] },
+        "path": { "type": "string" }
+      },
+      "required": ["lastSeen", "path"]
     }
   },
   "firestore": {
+    "/active_sessions/{sessionId}": {
+      "schema": "ActiveSession",
+      "description": "Real-time user presence tracking"
+    },
     "/test/connection": {
       "schema": "ConnectionTest",
       "description": "Public checkpoint for testing Firestore availability"
@@ -154,6 +214,14 @@
     "/orders/{orderId}": {
       "schema": "Order",
       "description": "Purchase records"
+    },
+    "/commissions/{commissionId}": {
+      "schema": "AffiliateCommission",
+      "description": "Affiliate earnings"
+    },
+    "/stats/{statId}": {
+      "schema": "RevenueStatistic",
+      "description": "Financial summaries"
     },
     "/categories/{categoryId}": {
       "schema": "Category",

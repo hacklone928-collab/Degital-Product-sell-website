@@ -7,7 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { auth, db } from "./lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "./lib/firestoreUtils";
 
 import { motion, AnimatePresence } from "motion/react";
@@ -33,6 +33,37 @@ function AppContent() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const { loading: settingsLoading } = useSettings();
+  const [sessionId] = useState(() => Math.random().toString(36).substring(7));
+
+  useEffect(() => {
+    const trackPresence = async () => {
+      try {
+        await setDoc(doc(db, "active_sessions", sessionId), {
+          lastSeen: serverTimestamp(),
+          uid: auth.currentUser?.uid || null,
+          email: auth.currentUser?.email || null,
+          path: window.location.pathname
+        });
+      } catch (err) {
+        console.warn("Presence tracking failed:", err);
+      }
+    };
+
+    trackPresence();
+    const interval = setInterval(trackPresence, 30000);
+
+    const handleBeforeUnload = () => {
+      // Best effort delete on close, doesn't always work but helps
+      deleteDoc(doc(db, "active_sessions", sessionId)).catch(() => {});
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      deleteDoc(doc(db, "active_sessions", sessionId)).catch(() => {});
+    };
+  }, [sessionId, user]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {

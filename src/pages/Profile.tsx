@@ -1,10 +1,20 @@
 import React, { useState, useEffect } from "react";
 import { auth, db } from "../lib/firebase";
 import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc } from "firebase/firestore";
-import { User, MapPin, Mail, Save, CheckCircle2, Loader2, ArrowLeft, Database, Copy, Check, Gift } from "lucide-react";
+import { User, MapPin, Mail, Save, CheckCircle2, Loader2, ArrowLeft, Database, Copy, Check, Gift, BarChart3, TrendingUp, Package, ShoppingBag } from "lucide-react";
 import { motion } from "motion/react";
 import { Link } from "react-router-dom";
 import { cn } from "../lib/utils";
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  Cell
+} from 'recharts';
 
 export default function Profile() {
   const [loading, setLoading] = useState(true);
@@ -20,6 +30,8 @@ export default function Profile() {
     }
   });
   const [coupons, setCoupons] = useState<any[]>([]);
+  const [affiliateStats, setAffiliateStats] = useState<any[]>([]);
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
@@ -50,13 +62,70 @@ export default function Profile() {
 
         // Fetch assigned coupons
         if (auth.currentUser.email) {
+          const email = auth.currentUser.email.toLowerCase().trim();
           const q = query(
             collection(db, "coupons"),
-            where("assignedEmail", "==", auth.currentUser.email.toLowerCase().trim()),
+            where("assignedEmail", "==", email),
             where("isActive", "==", true)
           );
           const querySnap = await getDocs(q);
-          setCoupons(querySnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          const userCoupons = querySnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+          setCoupons(userCoupons);
+
+          // Fetch affiliate orders for stats
+          const oq = query(
+            collection(db, "orders"),
+            where("bonusAssigneeEmail", "==", email)
+          );
+          const orderSnap = await getDocs(oq);
+          const orders = orderSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+
+          // Aggregate product-wise stats
+          const productMap = new Map();
+          let totalSales = 0;
+
+          orders.forEach((order: any) => {
+            if (order.status !== 'completed' && order.status !== 'delivered') return;
+            
+            totalSales += (order.grossAmount || order.amount || 0);
+            const productId = order.productId;
+            if (!productId) return;
+
+            if (!productMap.has(productId)) {
+              // Find the coupon rate for this product/user context if possible
+              const relevantCoupon = userCoupons.find((c: any) => c.code === order.couponCode);
+              
+              productMap.set(productId, {
+                name: order.productName || 'Product',
+                id: productId,
+                sold: 0,
+                bonus: 0,
+                rate: relevantCoupon ? (relevantCoupon.bonusPercentage > 0 ? `${relevantCoupon.bonusPercentage}%` : `৳${relevantCoupon.bonusAmount}`) : 'Fixed'
+              });
+            }
+
+            const stats = productMap.get(productId);
+            stats.sold++;
+            stats.bonus += (order.bonusAmountGiven || 0);
+          });
+
+          setAffiliateStats(Array.from(productMap.values()).sort((a, b) => b.bonus - a.bonus));
+          
+          const sortedOrders = orders.sort((a: any, b: any) => {
+            const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(0);
+            const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(0);
+            return dateB.getTime() - dateA.getTime();
+          });
+
+          const ordersWithRate = sortedOrders.map((order: any) => {
+            const relevantCoupon = userCoupons.find((c: any) => c.code === order.couponCode);
+            return {
+              ...order,
+              rate: relevantCoupon ? (relevantCoupon.bonusPercentage > 0 ? `${relevantCoupon.bonusPercentage}%` : `৳${relevantCoupon.bonusAmount}`) : null
+            };
+          });
+
+          setRecentOrders(ordersWithRate.slice(0, 15));
         }
 
       } catch (error) {
@@ -327,16 +396,159 @@ export default function Profile() {
         </section>
 
         {coupons.length > 0 && (
-          <section className="space-y-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-100 rounded-xl text-indigo-600">
-                <Gift className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-black text-gray-900 uppercase tracking-tight">My Exclusive Rewards</h3>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Coupons and bonuses assigned to you</p>
+          <section className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 rounded-xl text-indigo-600">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">Affiliate Partner Hub</h3>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Growth analytics & reward tracking</p>
+                </div>
               </div>
             </div>
+
+            {/* Partner Quick Stats */}
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+               {[
+                 { label: "Commission Earned", value: `৳${profile.bonusBalance.toLocaleString()}`, icon: Database, color: "text-emerald-600", bg: "bg-emerald-50" },
+                 { label: "Coupons Active", value: coupons.length, icon: Gift, color: "text-pink-600", bg: "bg-pink-50" },
+                 { label: "Products Sold", value: affiliateStats.reduce((s, a) => s + a.sold, 0), icon: Package, color: "text-amber-600", bg: "bg-amber-50" },
+               ].map((s, i) => (
+                 <div key={i} className="bg-white p-5 rounded-3xl border border-indigo-50 shadow-sm relative group overflow-hidden">
+                    <div className={cn("p-2 rounded-xl inline-flex mb-3 transition-transform group-hover:scale-110", s.bg, s.color)}>
+                      <s.icon className="w-4 h-4" />
+                    </div>
+                    <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">{s.label}</div>
+                    <div className="text-lg font-black text-gray-900 tracking-tight">{s.value}</div>
+                 </div>
+               ))}
+            </div>
+
+            {/* Performance breakdown */}
+            {affiliateStats.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                 <div className="lg:col-span-3 bg-white p-8 rounded-[40px] border border-indigo-50 shadow-sm space-y-6">
+                    <div className="flex items-center gap-2 mb-2">
+                       <BarChart3 className="w-5 h-5 text-indigo-600" />
+                       <h4 className="font-bold text-gray-900 uppercase text-xs tracking-widest">Earnings by Product</h4>
+                    </div>
+                    <div className="h-[250px]">
+                       <ResponsiveContainer width="100%" height="100%">
+                         <BarChart data={affiliateStats}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                            <XAxis dataKey="name" hide />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 800 }} />
+                            <Tooltip 
+                               contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}
+                               itemStyle={{ fontWeight: 900 }}
+                            />
+                            <Bar dataKey="bonus" name="Bonus Earned" fill="#4f46e5" radius={[8, 8, 0, 0]}>
+                               {affiliateStats.map((entry, index) => (
+                                 <Cell key={`cell-${index}`} fill={['#4f46e5', '#10b981', '#f59e0b', '#ec4899', '#3b82f6'][index % 5]} />
+                               ))}
+                            </Bar>
+                         </BarChart>
+                       </ResponsiveContainer>
+                    </div>
+                 </div>
+
+                 <div className="lg:col-span-2 space-y-4">
+                    <div className="flex items-center gap-2 mb-2">
+                       <Package className="w-5 h-5 text-amber-600" />
+                       <h4 className="font-bold text-gray-900 uppercase text-xs tracking-widest">Earnings by Product</h4>
+                    </div>
+                    <div className="space-y-3">
+                       {affiliateStats.slice(0, 10).map((item, idx) => (
+                         <div key={idx} className="bg-white p-4 rounded-3xl border border-gray-100 flex items-center justify-between group hover:border-indigo-200 transition-colors">
+                            <div className="flex items-center gap-3 overflow-hidden">
+                               <div className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center font-mono font-black text-xs text-gray-400 group-hover:text-indigo-600 transition-colors flex-shrink-0">
+                                  {idx + 1}
+                               </div>
+                               <div className="min-w-0">
+                                  <div className="text-[11px] font-black text-gray-900 uppercase tracking-tight truncate">{item.name}</div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-[9px] font-bold text-gray-400 shrink-0">{item.sold} units sold</div>
+                                    <div className="w-1 h-1 rounded-full bg-gray-200" />
+                                    <div className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">{item.rate} Bonus</div>
+                                  </div>
+                               </div>
+                            </div>
+                            <div className="text-right flex-shrink-0 ml-2">
+                               <div className="text-sm font-black text-emerald-600">৳{item.bonus.toLocaleString()}</div>
+                               <div className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Commission</div>
+                            </div>
+                         </div>
+                       ))}
+                    </div>
+                 </div>
+              </div>
+            )}
+
+            {/* Detailed Sales List */}
+            {recentOrders.length > 0 && (
+              <div className="bg-white p-8 rounded-[40px] border border-indigo-50 shadow-sm space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShoppingBag className="w-5 h-5 text-indigo-600" />
+                    <h4 className="font-bold text-gray-900 uppercase text-xs tracking-widest">Recent Conversions</h4>
+                  </div>
+                  <div className="text-[10px] font-bold text-gray-400">Showing last 15 sales</div>
+                </div>
+                <div className="overflow-x-auto -mx-8 px-8">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left py-4 text-[9px] font-black text-gray-400 uppercase tracking-widest">Product</th>
+                        <th className="text-center py-4 text-[9px] font-black text-gray-400 uppercase tracking-widest">Date</th>
+                        <th className="text-center py-4 text-[9px] font-black text-gray-400 uppercase tracking-widest">Status</th>
+                        <th className="text-right py-4 text-[9px] font-black text-gray-400 uppercase tracking-widest">Commission</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {recentOrders.map((order, idx) => (
+                        <tr key={idx} className="group hover:bg-gray-50/50 transition-colors">
+                          <td className="py-4">
+                            <div className="text-xs font-bold text-gray-900 truncate max-w-[150px]">{order.productName || 'Product'}</div>
+                            <div className="flex items-center gap-2">
+                              <div className="text-[9px] font-black text-indigo-500 uppercase">Code: {order.couponCode || 'N/A'}</div>
+                              {order.rate && (
+                                <>
+                                  <div className="w-1 h-1 rounded-full bg-gray-200" />
+                                  <div className="text-[9px] font-black text-emerald-500 uppercase">{order.rate} Bonus</div>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-4 text-center text-[10px] font-medium text-gray-500 whitespace-nowrap px-4">
+                            {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString() : 'N/A'}
+                          </td>
+                          <td className="py-4 text-center">
+                            <span className={cn(
+                              "text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-lg",
+                              order.status === 'completed' || order.status === 'delivered' 
+                                ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                                : order.status === 'pending'
+                                ? "bg-amber-50 text-amber-600 border border-amber-100"
+                                : "bg-gray-50 text-gray-400 border border-gray-100"
+                            )}>
+                              {order.status}
+                            </span>
+                          </td>
+                          <td className="py-4 text-right">
+                             <div className="text-xs font-black text-indigo-600">৳{(order.bonusAmountGiven || 0).toLocaleString()}</div>
+                             {order.status !== 'completed' && order.status !== 'delivered' && (
+                               <div className="text-[7px] font-bold text-amber-500 uppercase tracking-tighter">Estimated</div>
+                             )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {coupons.map(coupon => (
@@ -376,7 +588,10 @@ export default function Profile() {
                       <div>
                         <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Your Bonus</div>
                         <div className="text-xl font-black text-emerald-600">
-                          ৳{(coupon.bonusAmount || 0).toLocaleString()} <span className="text-[10px] text-gray-400">/use</span>
+                          {coupon.bonusPercentage > 0 
+                            ? `${coupon.bonusPercentage}%` 
+                            : `৳${(coupon.bonusAmount || 0).toLocaleString()}`}
+                          <span className="text-[10px] text-gray-400 ml-1">/{coupon.bonusPercentage > 0 ? "sale" : "use"}</span>
                         </div>
                       </div>
                       <div className="text-right">

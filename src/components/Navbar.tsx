@@ -41,7 +41,18 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 sm:h-20 items-center gap-2 sm:gap-4">
             <div className="flex items-center gap-2 sm:gap-6 shrink-0 min-w-0">
-              <Link to="/" className="text-xl sm:text-2xl font-black tracking-tighter text-indigo-600 flex items-center gap-2 shrink-0">
+              <Link 
+                to="/" 
+                className="text-xl sm:text-2xl font-black tracking-tighter flex items-center gap-2 shrink-0 transition-opacity hover:opacity-90"
+                style={{ 
+                  color: settings.useBrandGradient ? 'transparent' : (settings.brandColor || "#4f46e5"),
+                  backgroundImage: settings.useBrandGradient 
+                    ? `linear-gradient(to right, ${settings.brandColor || "#4f46e5"}, ${settings.brandSecondaryColor || "#818cf8"})` 
+                    : 'none',
+                  backgroundClip: settings.useBrandGradient ? 'text' : 'border-box',
+                  WebkitBackgroundClip: settings.useBrandGradient ? 'text' : 'border-box',
+                }}
+              >
                 {settings.logoUrl && settings.logoUrl.trim() !== "" && (
                   <img src={settings.logoUrl} alt="Logo" className="w-6 h-6 sm:w-10 sm:h-10 object-contain" />
                 )}
@@ -265,9 +276,10 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
                       setIsCartOpen(false);
                       navigate("/cart-checkout");
                     }}
-                    className="w-full py-3.5 sm:py-4 bg-indigo-600 text-white rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 flex items-center justify-center gap-3 active:scale-95"
+                    className="w-full py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm uppercase tracking-[0.2em] hover:opacity-90 transition-all shadow-xl flex items-center justify-center gap-3 active:scale-95"
+                    style={{ backgroundColor: settings.buyColor || "#4f46e5", color: settings.buyTextColor || "#ffffff" }}
                   >
-                    Complete Checkout
+                    {settings.buyText || "Buy"}
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>

@@ -223,6 +223,12 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
         if (expiryDate < new Date()) {
           setCouponError("This coupon has expired.");
           setAppliedCoupon(null);
+        } else if (couponData.usageLimit > 0 && couponData.usageCount >= couponData.usageLimit) {
+          setCouponError("Coupon usage limit reached.");
+          setAppliedCoupon(null);
+        } else if (couponData.assignedEmail && couponData.assignedEmail.toLowerCase().trim() !== user?.email?.toLowerCase().trim()) {
+          setCouponError("This coupon is not assigned to you.");
+          setAppliedCoupon(null);
         } else {
           setAppliedCoupon({ id: snap.docs[0].id, ...couponData });
           setCouponError(null);
@@ -617,6 +623,7 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
                   products={products}
                   userId={user?.uid!}
                   customerInfo={customerInfo}
+                  subtotal={subtotal}
                   amount={totalAmount}
                   appliedCoupon={appliedCoupon}
                   discountAmount={discountAmount}
@@ -636,6 +643,7 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
                       products={products}
                       userId={user?.uid!} 
                       customerInfo={customerInfo}
+                      subtotal={subtotal}
                       amount={totalAmount} 
                       appliedCoupon={appliedCoupon}
                       discountAmount={discountAmount}
@@ -657,6 +665,7 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
                   products={products}
                   userId={user?.uid!} 
                   customerInfo={customerInfo}
+                  subtotal={subtotal}
                   amount={totalAmount}
                   appliedCoupon={appliedCoupon}
                   discountAmount={discountAmount}
@@ -671,7 +680,7 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
   );
 }
 
-function CODForm({ products, userId, customerInfo, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
+function CODForm({ products, userId, customerInfo, subtotal, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, subtotal: number, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -701,9 +710,13 @@ function CODForm({ products, userId, customerInfo, amount, appliedCoupon, discou
         deliveryAddress: customerInfo.address,
         paymentMethod: "cod",
         status: "pending",
-        amount,
-        couponCode: appliedCoupon?.code || null,
+        amount: subtotal,
+        grossAmount: subtotal,
         discountAmount: discountAmount || 0,
+        netAmount: amount,
+        couponCode: appliedCoupon?.code || null,
+        bonusAssigneeEmail: appliedCoupon?.assignedEmail || null,
+        bonusAmountGiven: appliedCoupon?.assignedEmail ? (appliedCoupon.bonusPercentage > 0 ? (amount * appliedCoupon.bonusPercentage / 100) : (appliedCoupon.bonusAmount || 0)) : 0,
         createdAt: serverTimestamp(),
       });
 
@@ -741,7 +754,7 @@ function CODForm({ products, userId, customerInfo, amount, appliedCoupon, discou
   );
 }
 
-function StripeForm({ products, userId, customerInfo, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
+function StripeForm({ products, userId, customerInfo, subtotal, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, subtotal: number, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
   const productIds = products.map(p => p.id);
   const stripe = useStripe();
   const elements = useElements();
@@ -788,9 +801,13 @@ function StripeForm({ products, userId, customerInfo, amount, appliedCoupon, dis
           customerPhone: customerInfo.phone,
           deliveryAddress: customerInfo.address,
           status: "completed",
-          amount,
-          couponCode: appliedCoupon?.code || null,
+          amount: subtotal,
+          grossAmount: subtotal,
           discountAmount: discountAmount || 0,
+          netAmount: amount,
+          couponCode: appliedCoupon?.code || null,
+          bonusAssigneeEmail: appliedCoupon?.assignedEmail || null,
+          bonusAmountGiven: appliedCoupon?.assignedEmail ? (appliedCoupon.bonusPercentage > 0 ? (amount * appliedCoupon.bonusPercentage / 100) : (appliedCoupon.bonusAmount || 0)) : 0,
           paymentIntentId: paymentIntent.id,
           downloadToken,
           gateway: "stripe",
@@ -823,7 +840,7 @@ function StripeForm({ products, userId, customerInfo, amount, appliedCoupon, dis
   );
 }
 
-function LocalForm({ products, userId, customerInfo, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
+function LocalForm({ products, userId, customerInfo, subtotal, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, subtotal: number, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
   const { settings } = useSettings();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -878,9 +895,13 @@ function LocalForm({ products, userId, customerInfo, amount, appliedCoupon, disc
         transactionId: transactionId,
         paymentMethod: selectedMethod,
         status: "pending", // Set to pending for manual confirmation
-        amount,
-        couponCode: appliedCoupon?.code || null,
+        amount: subtotal,
+        grossAmount: subtotal,
         discountAmount: discountAmount || 0,
+        netAmount: amount,
+        couponCode: appliedCoupon?.code || null,
+        bonusAssigneeEmail: appliedCoupon?.assignedEmail || null,
+        bonusAmountGiven: appliedCoupon?.assignedEmail ? (appliedCoupon.bonusPercentage > 0 ? (amount * appliedCoupon.bonusPercentage / 100) : (appliedCoupon.bonusAmount || 0)) : 0,
         createdAt: serverTimestamp(),
       });
 

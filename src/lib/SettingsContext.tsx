@@ -47,6 +47,19 @@ interface SiteSettings {
   enableCOD?: boolean;
   heroBanners?: { id: string, imageUrl: string, title?: string, subtitle?: string, link?: string, buttonText?: string }[];
   hiddenCategories?: string[];
+  cartText?: string;
+  viewText?: string;
+  buyText?: string;
+  cartColor?: string;
+  viewColor?: string;
+  buyColor?: string;
+  cartTextColor?: string;
+  viewTextColor?: string;
+  buyTextColor?: string;
+  brandColor?: string;
+  brandSecondaryColor?: string;
+  useBrandGradient?: boolean;
+  socialLinks?: { platform: string; url: string; icon: string }[];
 }
 
 const defaultSettings: SiteSettings = {
@@ -90,7 +103,20 @@ const defaultSettings: SiteSettings = {
   enableLocal: true,
   enableCOD: true,
   heroBanners: [],
-  hiddenCategories: []
+  hiddenCategories: [],
+  cartText: "Cart",
+  viewText: "View",
+  buyText: "Buy",
+  cartColor: "#f9fafb",
+  viewColor: "#f9fafb",
+  buyColor: "#4f46e5",
+  cartTextColor: "#6b7280",
+  viewTextColor: "#6b7280",
+  buyTextColor: "#ffffff",
+  brandColor: "#4f46e5",
+  brandSecondaryColor: "#818cf8",
+  useBrandGradient: false,
+  socialLinks: [],
 };
 
 const SettingsContext = createContext<{ settings: SiteSettings; loading: boolean }>({
@@ -106,18 +132,21 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     const unsub = onSnapshot(doc(db, "settings", "site"), (snap) => {
       if (snap.exists()) {
         const data = snap.data() as SiteSettings;
-        setSettings({ ...defaultSettings, ...data });
+        const mergedSettings = { ...defaultSettings, ...data };
+        setSettings(mergedSettings);
         
         // Dynamic Title and Favicon
-        if (data.siteName) document.title = data.siteName;
-        if (data.faviconUrl) {
+        if (mergedSettings.siteName) {
+          document.title = mergedSettings.siteName;
+        }
+        if (mergedSettings.faviconUrl) {
           let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
           if (!link) {
             link = document.createElement('link');
             link.rel = 'icon';
             document.getElementsByTagName('head')[0].appendChild(link);
           }
-          link.href = data.faviconUrl;
+          link.href = mergedSettings.faviconUrl;
         }
       }
       setLoading(false);

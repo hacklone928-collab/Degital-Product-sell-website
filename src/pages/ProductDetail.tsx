@@ -3,8 +3,8 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { doc, getDoc, updateDoc, increment, serverTimestamp, collection, addDoc, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
 import { handleFirestoreError, OperationType } from "../lib/firestoreUtils";
-import { Star, ShieldCheck, Download, Zap, Share2, Heart, ArrowLeft, CheckCircle2, ShoppingCart, CheckCircle, MessageSquare, Info, Settings, Users, StarHalf } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { Star, ShieldCheck, Download, Zap, Share2, Heart, ArrowLeft, CheckCircle2, ShoppingCart, CheckCircle, MessageSquare, Info, Settings, Users, StarHalf, Maximize2, Minimize2, RotateCcw, Box, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { motion, AnimatePresence, useMotionValue, useTransform } from "motion/react";
 import { cn } from "../lib/utils";
 import { useCart } from "../lib/CartContext";
 import { useSettings } from "../lib/SettingsContext";
@@ -85,6 +85,36 @@ export default function ProductDetail() {
   };
 
   const [activeImage, setActiveImage] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [is360Mode, setIs360Mode] = useState(false);
+  const [rotationIndex, setRotationIndex] = useState(0);
+
+  const allImages = product ? [
+    product.imageUrl,
+    ...(product.additionalImageUrls?.split(',').map((u: string) => u.trim()).filter((u: string) => u) || [])
+  ].filter(u => u) as string[] : [];
+
+  const handleDragUpdate = (_: any, info: any) => {
+    if (!is360Mode || allImages.length < 2) return;
+    const sensitivity = 20; // pixels per image change
+    const newIndex = Math.floor(info.offset.x / sensitivity);
+    setRotationIndex(() => {
+      let idx = (allImages.length - (newIndex % allImages.length)) % allImages.length;
+      return idx;
+    });
+  };
+
+  const handleMainDragEnd = (_: any, info: any) => {
+    if (is360Mode || allImages.length < 2) return;
+    const swipeThreshold = 50;
+    if (info.offset.x > swipeThreshold) {
+      const idx = allImages.indexOf(activeImage || allImages[0]);
+      setActiveImage(allImages[(idx - 1 + allImages.length) % allImages.length]);
+    } else if (info.offset.x < -swipeThreshold) {
+      const idx = allImages.indexOf(activeImage || allImages[0]);
+      setActiveImage(allImages[(idx + 1) % allImages.length]);
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -123,9 +153,17 @@ export default function ProductDetail() {
       handleFirestoreError(error, OperationType.LIST, `products/${id}/reviews`);
     });
 
+    // Increment views
+    const timer = setTimeout(() => {
+      updateDoc(productRef, {
+        views: increment(1)
+      }).catch(err => console.error("Error updating views:", err));
+    }, 2000); // 2 second delay to count as a "view"
+
     return () => {
       unsubscribeProduct();
       unsubscribeReviews();
+      clearTimeout(timer);
     };
   }, [id, settings]);
 
@@ -198,11 +236,6 @@ export default function ProductDetail() {
     </div>
   );
 
-  const allImages = [
-    product.imageUrl,
-    ...(product.additionalImageUrls?.split(',').map(u => u.trim()).filter(u => u) || [])
-  ].filter(u => u) as string[];
-
   const features = [
     "Lifetime Updates",
     "Commercial License",
@@ -219,43 +252,125 @@ export default function ProductDetail() {
         <ArrowLeft className="w-3.5 h-3.5" /> Back
       </button>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-10 xl:gap-16">
-        {/* Gallery */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 sm:gap-12 xl:gap-20">
+        {/* Gallery Section */}
         <motion.div 
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-3 sm:space-y-5"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="lg:col-span-7 space-y-6"
         >
-          <div className="aspect-[1.4/1] rounded-2xl sm:rounded-[32px] overflow-hidden bg-gray-50 border border-gray-100 shadow-sm">
-            <img 
-              src={activeImage || product.imageUrl || `https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=1000&q=80`} 
-              alt={product.name}
-              className="w-full h-full object-cover"
-            />
+          {/* Main Stage */}
+          <div className="relative group">
+            <div className="aspect-[4/3] sm:aspect-[16/10] rounded-[2rem] sm:rounded-[3rem] overflow-hidden bg-white border border-gray-100 shadow-2xl shadow-indigo-100/50 flex items-center justify-center p-4 sm:p-8 relative">
+              {/* Glassmorphism Background Decoration */}
+              <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+                <div className="absolute -top-1/2 -left-1/4 w-full h-full bg-indigo-50/50 rounded-full blur-[120px]" />
+                <div className="absolute -bottom-1/2 -right-1/4 w-full h-full bg-emerald-50/50 rounded-full blur-[120px]" />
+              </div>
+
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={is360Mode ? `360-${rotationIndex}` : activeImage}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 1.1 }}
+                  transition={{ duration: 0.4, ease: "circOut" }}
+                  className="w-full h-full flex items-center justify-center z-10 cursor-grab active:cursor-grabbing"
+                  drag="x"
+                  onDrag={is360Mode ? handleDragUpdate : undefined}
+                  onDragEnd={handleMainDragEnd}
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0.1}
+                >
+                  <img 
+                    src={is360Mode ? allImages[rotationIndex] : (activeImage || allImages[0])} 
+                    alt={product.name}
+                    className="w-full h-full object-contain pointer-events-none drop-shadow-2xl"
+                    loading="eager"
+                  />
+                </motion.div>
+              </AnimatePresence>
+
+              {/* Controls */}
+              <div className="absolute bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-3 z-20">
+                {allImages.length > 2 && (
+                  <button
+                    onClick={() => {
+                      setIs360Mode(!is360Mode);
+                      if (!is360Mode) setRotationIndex(allImages.indexOf(activeImage!));
+                    }}
+                    className={cn(
+                      "p-3 sm:p-4 rounded-full backdrop-blur-md shadow-xl transition-all border flex items-center gap-2",
+                      is360Mode 
+                        ? "bg-indigo-600 border-indigo-500 text-white" 
+                        : "bg-white/80 border-white text-gray-900 hover:bg-white"
+                    )}
+                  >
+                    <Box className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span className="text-[10px] font-black uppercase tracking-widest px-1">
+                      {is360Mode ? "Exit 360°" : "360° View"}
+                    </span>
+                  </button>
+                )}
+                
+                <button
+                  onClick={() => setIsFullscreen(true)}
+                  className="p-3 sm:p-4 rounded-full bg-white/80 backdrop-blur-md border border-white text-gray-900 shadow-xl hover:bg-white transition-all"
+                >
+                  <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+              </div>
+
+              {/* Navigation Arrows for non-360 */}
+              {!is360Mode && allImages.length > 1 && (
+                <>
+                  <button 
+                    onClick={() => {
+                      const idx = allImages.indexOf(activeImage || allImages[0]);
+                      setActiveImage(allImages[(idx - 1 + allImages.length) % allImages.length]);
+                    }}
+                    className="absolute left-4 sm:left-8 top-1/2 -translate-y-1/2 p-3 sm:p-4 rounded-full bg-white/50 backdrop-blur-sm border border-white/50 text-gray-900 opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-white z-20"
+                  >
+                    <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const idx = allImages.indexOf(activeImage || allImages[0]);
+                      setActiveImage(allImages[(idx + 1) % allImages.length]);
+                    }}
+                    className="absolute right-4 sm:right-8 top-1/2 -translate-y-1/2 p-3 sm:p-4 rounded-full bg-white/50 backdrop-blur-sm border border-white/50 text-gray-900 opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-white z-20"
+                  >
+                    <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-          {allImages.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar px-1 sm:grid sm:grid-cols-4 sm:gap-4 sm:pb-0 sm:px-0">
+
+          {/* Thumbnails */}
+          {!is360Mode && allImages.length > 1 && (
+            <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar items-center justify-center">
               {allImages.map((img, i) => (
-                <div 
+                <button 
                   key={i} 
                   onClick={() => setActiveImage(img)}
                   className={cn(
-                    "w-16 h-16 sm:w-auto aspect-square rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all border-2 flex-shrink-0 shadow-sm",
-                    activeImage === img ? "border-indigo-600 ring-2 ring-indigo-50" : "border-transparent opacity-60 hover:opacity-100"
+                    "w-16 h-16 sm:w-20 sm:h-20 rounded-2xl sm:rounded-[1.5rem] overflow-hidden cursor-pointer transition-all border-2 flex-shrink-0 bg-white p-1",
+                    activeImage === img ? "border-indigo-600 shadow-xl shadow-indigo-100" : "border-gray-50 opacity-50 hover:opacity-100 hover:border-gray-200"
                   )}
                 >
-                  <img src={img} className="w-full h-full object-cover" />
-                </div>
+                  <img src={img} className="w-full h-full object-contain rounded-xl sm:rounded-[1rem]" />
+                </button>
               ))}
             </div>
           )}
         </motion.div>
 
-        {/* Info */}
+        {/* Info Section */}
         <motion.div 
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-6 sm:space-y-8"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="lg:col-span-5 space-y-8"
         >
           <div className="space-y-3 sm:space-y-4">
             <div className="flex items-center gap-3">
@@ -379,8 +494,9 @@ export default function ProductDetail() {
                   "flex-1 py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-base uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95",
                   isInCart 
                     ? "bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-none cursor-default" 
-                    : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100"
+                    : "hover:opacity-90 shadow-indigo-100"
                 )}
+                style={!isInCart ? { backgroundColor: settings.cartColor || "#4f46e5", color: settings.cartTextColor || "#ffffff" } : {}}
               >
                 {isInCart ? (
                   <>
@@ -390,16 +506,17 @@ export default function ProductDetail() {
                 ) : (
                   <>
                     <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5" />
-                    Cart
+                    {settings.cartText || "Cart"}
                   </>
                 )}
               </button>
               
               <button 
                 onClick={handleBuyNow}
-                className="flex-1 py-4 sm:py-5 bg-gray-900 text-white rounded-xl sm:rounded-2xl font-black text-xs sm:text-base uppercase tracking-widest hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg"
+                className="flex-1 py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-base uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg"
+                style={{ backgroundColor: settings.buyColor || "#111827", color: settings.buyTextColor || "#ffffff" }}
               >
-                Buy Now
+                {settings.buyText || "Buy"}
               </button>
             </div>
             
@@ -599,16 +716,62 @@ export default function ProductDetail() {
         </div>
       </section>
 
-      {/* Sticky Mobile Buy Button (Modified) */}
-      <div className="sm:hidden fixed bottom-24 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] z-40">
-        <button 
-          onClick={handleBuyNow}
-          className="w-full py-3.5 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl shadow-indigo-500/40 flex items-center justify-center gap-2 active:scale-95 transition-all"
-        >
-          <Zap className="w-4 h-4 fill-current" />
-          Buy for ৳{getActivePrice().toLocaleString()}
-        </button>
-      </div>
+      {/* Fullscreen Preview Modal */}
+      <AnimatePresence>
+        {isFullscreen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-white/95 backdrop-blur-2xl flex items-center justify-center p-4 sm:p-12 overflow-hidden"
+          >
+            <button 
+              onClick={() => setIsFullscreen(false)}
+              className="absolute top-6 right-6 p-4 rounded-full bg-gray-100 text-gray-900 hover:bg-gray-200 transition-all z-[110]"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            
+            <div className="w-full h-full max-w-7xl mx-auto flex items-center justify-center">
+              <motion.div 
+                className="w-full h-full flex items-center justify-center relative touch-none"
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 1.2, opacity: 0 }}
+              >
+                <img 
+                  src={activeImage || allImages[0]} 
+                  alt={product.name}
+                  className="max-w-full max-h-full object-contain drop-shadow-3xl p-4 cursor-zoom-in"
+                  style={{ transform: 'scale(var(--img-zoom, 1))' }}
+                  onClick={(e: any) => {
+                    const currentScale = e.currentTarget.style.getPropertyValue('--img-zoom') || '1';
+                    e.currentTarget.style.setProperty('--img-zoom', currentScale === '1' ? '2.5' : '1');
+                  }}
+                />
+              </motion.div>
+            </div>
+
+            {/* Thumbnail selector in modal */}
+            {allImages.length > 1 && (
+              <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-3 sm:gap-4 overflow-x-auto no-scrollbar max-w-full px-8">
+                {allImages.map((img, i) => (
+                  <button 
+                    key={i} 
+                    onClick={() => setActiveImage(img)}
+                    className={cn(
+                      "w-12 h-12 sm:w-20 sm:h-20 rounded-xl overflow-hidden cursor-pointer transition-all border-2 bg-white flex-shrink-0 p-1",
+                      activeImage === img ? "border-indigo-600 shadow-xl shadow-indigo-100 scale-110" : "border-gray-100 opacity-50 hover:opacity-100"
+                    )}
+                  >
+                    <img src={img} className="w-full h-full object-contain rounded-lg" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

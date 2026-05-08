@@ -433,6 +433,8 @@ function HeroSlider({ banners, defaultTitle, defaultSubtitle, productsRef }: { b
 }
 
 function ProductCard({ product }: any) {
+  const navigate = useNavigate();
+  const { settings } = useSettings();
   const { addToCart, items } = useCart();
   const isInCart = items.some(item => item.id === product.id);
 
@@ -507,8 +509,9 @@ function ProductCard({ product }: any) {
                 "w-full py-2 sm:py-3 px-4 rounded-lg sm:rounded-xl text-center text-[9px] sm:text-[10px] font-black uppercase tracking-[0.15em] transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-sm",
                 isInCart 
                   ? "bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-none cursor-default" 
-                  : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100"
+                  : "hover:opacity-90 shadow-indigo-100"
               )}
+              style={!isInCart ? { backgroundColor: settings.cartColor || "#4f46e5", color: settings.cartTextColor || "#ffffff" } : {}}
             >
               {isInCart ? (
                 <>
@@ -518,23 +521,34 @@ function ProductCard({ product }: any) {
               ) : (
                 <>
                   <ShoppingCart className="w-3 h-3 sm:w-4 sm:h-4" />
-                  <span>Buy Asset</span>
+                  <span>{settings.cartText || "Cart"}</span>
                 </>
               )}
             </button>
             <div className="flex gap-1.5">
               <Link 
                 to={`/product/${product.id}`}
-                className="flex-1 py-1.5 sm:py-2.5 bg-gray-50 text-gray-500 rounded-lg sm:rounded-xl text-center text-[8px] sm:text-[9px] font-black uppercase tracking-widest hover:bg-gray-100 transition-all active:scale-95 flex items-center justify-center"
+                className="flex-1 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl text-center text-[8px] sm:text-[9px] font-black uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 flex items-center justify-center"
+                style={{ backgroundColor: settings.viewColor || "#f9fafb", color: settings.viewTextColor || "#6b7280" }}
               >
-                Details
+                {settings.viewText || "View"}
               </Link>
-              <Link 
-                to={product.category === "Subscription" ? `/product/${product.id}` : `/checkout?productId=${product.id}`}
-                className="flex-1 py-1.5 sm:py-2.5 bg-gray-900 text-white rounded-lg sm:rounded-xl text-center text-[8px] sm:text-[9px] font-black uppercase tracking-widest hover:bg-black transition-all active:scale-95 flex items-center justify-center"
+              <button 
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (product.category === "Subscription") {
+                    navigate(`/product/${product.id}`);
+                  } else {
+                    if (!isInCart) addToCart(product);
+                    navigate("/cart-checkout");
+                  }
+                }}
+                className="flex-1 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl text-center text-[8px] sm:text-[9px] font-black uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 flex items-center justify-center"
+                style={{ backgroundColor: settings.buyColor || "#111827", color: settings.buyTextColor || "#ffffff" }}
               >
-                Checkout
-              </Link>
+                {settings.buyText || "Buy"}
+              </button>
             </div>
           </div>
         </div>
