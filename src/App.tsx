@@ -32,8 +32,22 @@ function AppContent() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
-  const { loading: settingsLoading } = useSettings();
+  const { settings, loading: settingsLoading } = useSettings();
   const [sessionId] = useState(() => Math.random().toString(36).substring(7));
+
+  useEffect(() => {
+    if (settings) {
+      document.title = settings.siteName || "Digital Marketplace";
+      
+      let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'shortcut icon';
+        document.getElementsByTagName('head')[0].appendChild(link);
+      }
+      link.href = settings.faviconUrl || "/favicon.ico";
+    }
+  }, [settings]);
 
   useEffect(() => {
     const trackPresence = async () => {
@@ -72,7 +86,8 @@ function AppContent() {
         try {
           const userDoc = await getDoc(doc(db, "users", user.uid));
           const adminEmails = ["businessonline.6251@gmail.com", "hacklone928@gmail.com"];
-          setIsAdmin(userDoc.data()?.role === "admin" || adminEmails.includes(user.email || ""));
+          const role = userDoc.data()?.role;
+          setIsAdmin(role === "admin" || role === "super_admin" || role === "moderator" || adminEmails.includes(user.email || ""));
         } catch (err) {
           handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
           setIsAdmin(false);

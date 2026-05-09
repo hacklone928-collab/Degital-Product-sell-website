@@ -22,25 +22,32 @@ interface Order {
 
 export default function Invoice() {
   const { orderId } = useParams();
-  const [order, setOrder] = useState<Order | null>(null);
+  const [order, setOrder] = useState<Order | any>(null);
+  const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchOrder = async () => {
+    const fetchData = async () => {
       if (!orderId) return;
       try {
-        const docRef = doc(db, "orders", orderId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setOrder({ id: docSnap.id, ...docSnap.data() } as Order);
+        const [orderSnap, settingsSnap] = await Promise.all([
+          getDoc(doc(db, "orders", orderId)),
+          getDoc(doc(db, "settings", "site"))
+        ]);
+
+        if (orderSnap.exists()) {
+          setOrder({ id: orderSnap.id, ...orderSnap.data() });
+        }
+        if (settingsSnap.exists()) {
+          setSettings(settingsSnap.data());
         }
       } catch (error) {
-        console.error("Error fetching order:", error);
+        console.error("Error fetching data:", error);
       } finally {
         setLoading(false);
       }
     };
-    fetchOrder();
+    fetchData();
   }, [orderId]);
 
   if (loading) {
@@ -51,9 +58,18 @@ export default function Invoice() {
     );
   }
 
-  if (!order || (auth.currentUser?.uid !== order.userId && !auth.currentUser?.email?.includes("hacklone928"))) {
+  const superAdminEmails = ["businessonline.6251@gmail.com", "hacklone928@gmail.com"];
+  const isAuthorized = auth.currentUser?.uid === order?.userId || 
+                      superAdminEmails.includes(auth.currentUser?.email || "");
+
+  if (!order || !isAuthorized) {
     return <Navigate to="/" />;
   }
+
+  const invoiceTitle = settings?.invoiceTitle || "Official Invoice";
+  const invoiceSubtitle = settings?.invoiceSubtitle || "Digital Asset Purchase";
+  const invoiceFooter = settings?.invoiceFooter || "Thank you for choosing our platform for your digital assets.";
+  const invoiceNote = settings?.invoiceNote || "This is a computer generated invoice and does not require a physical signature.";
 
   const handlePrint = () => {
     window.print();
@@ -68,6 +84,10 @@ export default function Invoice() {
         minute: '2-digit'
       }) 
     : 'N/A';
+
+  const subtotal = order.grossAmount || order.amount || 0;
+  const discount = order.discountAmount || 0;
+  const total = order.netAmount || (subtotal - discount);
 
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4 md:px-0">
@@ -105,7 +125,7 @@ export default function Invoice() {
                   <div className="p-3 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20">
                     <ShieldCheck className="w-8 h-8" />
                   </div>
-                  <h1 className="text-3xl font-black tracking-tighter uppercase">Official Invoice</h1>
+                  <h1 className="text-3xl font-black tracking-tighter uppercase">{invoiceTitle}</h1>
                 </div>
                 <div className="flex flex-wrap gap-4">
                   <div className="flex items-center gap-2 text-indigo-100/80 text-xs font-bold uppercase tracking-widest">
@@ -117,7 +137,7 @@ export default function Invoice() {
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-4xl font-black">৳{order.amount.toLocaleString()}</div>
+                <div className="text-4xl font-black">৳{total.toLocaleString()}</div>
                 <div className="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mt-2 border border-white/30">
                   {order.status === "completed" ? "Paid" : "Pending"}
                 </div>
@@ -174,19 +194,29 @@ export default function Invoice() {
                         </div>
                         <div>
                           <div className="font-bold text-gray-900">{order.productName}</div>
-                          <div className="text-xs text-gray-500 mt-1">Digital Asset Purchase</div>
+                          <div className="text-xs text-gray-500 mt-1">{invoiceSubtitle}</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-8 text-right font-black text-gray-900">
-                      ৳{order.amount.toLocaleString()}
+                      ৳{subtotal.toLocaleString()}
                     </td>
                   </tr>
                 </tbody>
-                <tfoot className="bg-white/50">
+                <tfoot className="bg-white/50 space-y-1">
                   <tr>
-                    <td className="px-6 py-6 text-right font-bold text-gray-500 uppercase text-[10px] tracking-widest">Total Amount</td>
-                    <td className="px-6 py-6 text-right font-black text-2xl text-indigo-600">৳{order.amount.toLocaleString()}</td>
+                    <td className="px-6 py-3 text-right font-bold text-gray-400 uppercase text-[9px] tracking-widest">Subtotal</td>
+                    <td className="px-6 py-3 text-right font-bold text-gray-900 text-sm">৳{subtotal.toLocaleString()}</td>
+                  </tr>
+                  {discount > 0 && (
+                    <tr>
+                      <td className="px-6 py-3 text-right font-bold text-emerald-500 uppercase text-[9px] tracking-widest">Discount</td>
+                      <td className="px-6 py-3 text-right font-bold text-emerald-600 text-sm">-৳{discount.toLocaleString()}</td>
+                    </tr>
+                  )}
+                  <tr className="border-t border-gray-100">
+                    <td className="px-6 py-6 text-right font-bold text-gray-500 uppercase text-[10px] tracking-widest">Total Net Amount</td>
+                    <td className="px-6 py-6 text-right font-black text-2xl text-indigo-600">৳{total.toLocaleString()}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -198,7 +228,7 @@ export default function Invoice() {
                 <ShieldCheck className="w-5 h-5" /> Verified Purchase
               </div>
               <div className="text-center md:text-right">
-                <p className="text-xs text-gray-400 font-medium">Thank you for choosing our platform for your digital assets.</p>
+                <p className="text-xs text-gray-400 font-medium max-w-sm ml-auto">{invoiceFooter}</p>
                 <Link to="/" className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:underline mt-1 inline-block">Visit Marketplace</Link>
               </div>
             </div>
@@ -207,8 +237,8 @@ export default function Invoice() {
 
         {/* Note for User */}
         <div className="bg-indigo-50/50 p-6 rounded-3xl border border-indigo-100 text-center no-print">
-          <p className="text-sm text-indigo-700 font-medium italic">
-            This is a computer generated invoice and does not require a physical signature.
+          <p className="text-xs sm:text-sm text-indigo-700 font-medium italic">
+            {invoiceNote}
           </p>
         </div>
       </div>

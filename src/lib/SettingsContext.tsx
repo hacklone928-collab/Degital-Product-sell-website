@@ -60,6 +60,11 @@ interface SiteSettings {
   brandSecondaryColor?: string;
   useBrandGradient?: boolean;
   socialLinks?: { platform: string; url: string; icon: string }[];
+  invoiceTitle?: string;
+  invoiceSubtitle?: string;
+  invoiceFooter?: string;
+  invoiceNote?: string;
+  tabPermissions?: Record<string, string[]>;
 }
 
 const defaultSettings: SiteSettings = {
@@ -117,6 +122,11 @@ const defaultSettings: SiteSettings = {
   brandSecondaryColor: "#818cf8",
   useBrandGradient: false,
   socialLinks: [],
+  invoiceTitle: "Official Invoice",
+  invoiceSubtitle: "Digital Asset Purchase",
+  invoiceFooter: "Thank you for choosing our platform for your digital assets.",
+  invoiceNote: "This is a computer generated invoice and does not require a physical signature.",
+  tabPermissions: {},
 };
 
 const SettingsContext = createContext<{ settings: SiteSettings; loading: boolean }>({

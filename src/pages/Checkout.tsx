@@ -211,7 +211,7 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
     setIsValidatingCoupon(true);
     setCouponError(null);
     try {
-      const q = query(collection(db, "coupons"), where("code", "==", couponCode.toUpperCase().trim()), where("isActive", "==", true));
+      const q = query(collection(db, "coupons"), where("code", "==", couponCode.toUpperCase().trim()));
       const snap = await getDocs(q);
       
       if (snap.empty) {
@@ -219,15 +219,20 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
         setAppliedCoupon(null);
       } else {
         const couponData = snap.docs[0].data();
+        if (!couponData.isActive) {
+          setCouponError("This coupon is no longer active.");
+          setAppliedCoupon(null);
+          return;
+        }
         const expiryDate = new Date(couponData.expiryDate);
-        if (expiryDate < new Date()) {
+        // Make it valid until the end of the expiry day
+        const endOfExpiryDay = new Date(expiryDate.getFullYear(), expiryDate.getMonth(), expiryDate.getDate(), 23, 59, 59, 999);
+        
+        if (endOfExpiryDay < new Date()) {
           setCouponError("This coupon has expired.");
           setAppliedCoupon(null);
         } else if (couponData.usageLimit > 0 && couponData.usageCount >= couponData.usageLimit) {
           setCouponError("Coupon usage limit reached.");
-          setAppliedCoupon(null);
-        } else if (couponData.assignedEmail && couponData.assignedEmail.toLowerCase().trim() !== user?.email?.toLowerCase().trim()) {
-          setCouponError("This coupon is not assigned to you.");
           setAppliedCoupon(null);
         } else {
           setAppliedCoupon({ id: snap.docs[0].id, ...couponData });
@@ -235,8 +240,7 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
         }
       }
     } catch (error) {
-      console.error(error);
-      setCouponError("Failed to validate coupon.");
+      handleFirestoreError(error, OperationType.LIST, "coupons");
     } finally {
       setIsValidatingCoupon(false);
     }
@@ -244,16 +248,11 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
 
   const handleOrderSuccess = async (orderId: string) => {
     try {
-      if (appliedCoupon) {
-        await updateDoc(doc(db, "coupons", appliedCoupon.id), {
-          usageCount: increment(1)
-        });
-      }
       isCartCheckout && clearCart();
       setLastOrderId(orderId);
       setIsSuccess(true);
     } catch (error) {
-      console.error("Error updating coupon usage:", error);
+      console.error("Error finalizing checkout:", error);
       // Still set success as order was created
       isCartCheckout && clearCart();
       setLastOrderId(orderId);

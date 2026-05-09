@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { db, storage, auth } from "../lib/firebase";
 import { collection, addDoc, getDocs, deleteDoc, doc, setDoc, getDoc, serverTimestamp, updateDoc, query, where, increment, onSnapshot, orderBy, limit } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { Plus, Package, Users, DollarSign, Trash2, Edit, Star, Database, Settings as SettingsIcon, Save, ShoppingBag, Clock, CheckCircle, Copy, Link as LinkIcon, Inbox, Mail, Search, ShieldCheck, TrendingUp, Calendar, Eye, EyeOff, ExternalLink, ImagePlus, Upload, Loader2, Phone, Ticket, Facebook, Twitter, Instagram, Youtube, Linkedin, Github, Share2, Send, Music, Pin, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Package, Users, DollarSign, Trash2, Edit, Star, Database, Settings as SettingsIcon, Save, ShoppingBag, Clock, CheckCircle, Copy, Link as LinkIcon, Inbox, Mail, Search, ShieldCheck, TrendingUp, Calendar, Eye, EyeOff, ExternalLink, ImagePlus, Upload, Loader2, Phone, Ticket, Facebook, Twitter, Instagram, Youtube, Linkedin, Github, Share2, Send, Music, Pin, ChevronLeft, ChevronRight, Ban, UserX, FileText } from "lucide-react";
 import { motion } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "../lib/utils";
@@ -102,7 +102,8 @@ export default function AdminDashboard() {
   const [editingPage, setEditingPage] = useState<any | null>(null);
   const [editingCategory, setEditingCategory] = useState<any | null>(null);
   const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
-  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const selectedOrder = orders.find(o => o.id === selectedOrderId);
   const [editingCredentials, setEditingCredentials] = useState<{ [key: string]: { username?: string, password?: string } }>({});
   const [editingNote, setEditingNote] = useState("");
   const [siteSettings, setSiteSettings] = useState({
@@ -161,6 +162,11 @@ export default function AdminDashboard() {
     brandColor: "#4f46e5",
     brandSecondaryColor: "#818cf8",
     useBrandGradient: false,
+    tabPermissions: {} as Record<string, string[]>,
+    invoiceTitle: "Official Invoice",
+    invoiceSubtitle: "Digital Asset Purchase",
+    invoiceFooter: "Thank you for choosing our platform for your digital assets.",
+    invoiceNote: "This is a computer generated invoice and does not require a physical signature.",
     socialLinks: [] as { platform: string, url: string, icon: string }[]
   });
   const [newProduct, setNewProduct] = useState({
@@ -232,20 +238,55 @@ export default function AdminDashboard() {
   }, [isAdminChecking, isModeratorRole, navigate]);
 
   const tabs = [
-    { id: "analytics", label: "Analytics", icon: TrendingUp, roles: ["super_admin", "admin", "moderator"] },
-    { id: "products", label: "Products", icon: Package, roles: ["super_admin", "admin"] },
-    { id: "orders", label: "Orders", icon: ShoppingBag, roles: ["super_admin", "admin", "moderator"] },
-    { id: "users", label: "User Management", icon: Users, roles: ["super_admin", "admin"] },
-    { id: "withdrawals", label: "Withdrawals", icon: DollarSign, roles: ["super_admin", "admin"] },
-    { id: "coupons", label: "Coupons", icon: Ticket, roles: ["super_admin", "admin"] },
-    { id: "tickets", label: "Support Tickets", icon: Inbox, roles: ["super_admin", "admin", "moderator"] },
-    { id: "categories", label: "Categories", icon: Pin, roles: ["super_admin", "admin"] },
-    { id: "logs", label: "Activity Logs", icon: Clock, roles: ["super_admin"] },
-    { id: "pages", label: "CMS Pages", icon: Database, roles: ["super_admin"] },
-    { id: "settings", label: "System Settings", icon: SettingsIcon, roles: ["super_admin"] },
+    { id: "analytics", label: "Analytics", icon: TrendingUp },
+    { id: "products", label: "Inventory", icon: Package },
+    { id: "orders", label: "Sales", icon: ShoppingBag },
+    { id: "users", label: "User Management", icon: Users },
+    { id: "withdrawals", label: "Withdrawals", icon: DollarSign },
+    { id: "coupons", label: "Coupons", icon: Ticket },
+    { id: "tickets", label: "Support Tickets", icon: Inbox },
+    { id: "categories", label: "Categories", icon: Pin },
+    { id: "logs", label: "Activity Logs", icon: Clock },
+    { id: "pages", label: "CMS Pages", icon: Database },
+    { id: "settings", label: "Site Logic", icon: SettingsIcon },
   ] as const;
 
-  const allowedTabs = tabs.filter(t => t.roles.includes(currentUserRole || ''));
+  const getTabRoles = (tabId: string) => {
+    // Default fallback roles if not set in database
+    const defaults: Record<string, string[]> = {
+      analytics: ["super_admin", "admin", "moderator"],
+      products: ["super_admin", "admin", "moderator"],
+      orders: ["super_admin", "admin", "moderator"],
+      users: ["super_admin", "admin"],
+      withdrawals: ["super_admin", "admin"],
+      coupons: ["super_admin", "admin", "moderator"],
+      tickets: ["super_admin", "admin", "moderator"],
+      categories: ["super_admin", "admin", "moderator"],
+      logs: ["super_admin"],
+      pages: ["super_admin"],
+      settings: ["super_admin"],
+    };
+    return siteSettings.tabPermissions?.[tabId] || defaults[tabId] || ["super_admin"];
+  };
+
+  const allowedTabs = tabs.filter(t => {
+    if (isSuperAdmin) return true;
+    const tabRoles = getTabRoles(t.id);
+    // If user is Admin, they see everything allowed for Admin or Moderator
+    if (isAdminRole && tabRoles.includes('admin')) return true;
+    // If user is Moderator, they see everything allowed for Moderator
+    if (isModeratorRole && tabRoles.includes('moderator')) return true;
+    return false;
+  });
+
+  useEffect(() => {
+    if (!isAdminChecking) {
+      const isAllowed = allowedTabs.some(t => t.id === activeTab);
+      if (!isAllowed && allowedTabs.length > 0) {
+        setActiveTab(allowedTabs[0].id as any);
+      }
+    }
+  }, [activeTab, allowedTabs.length, isAdminChecking, isSuperAdmin]);
 
   const logAdminAction = async (action: string, details: any) => {
     try {
@@ -292,8 +333,8 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteSelected = async () => {
-    if (!isAdmin) {
-      alert("Admin access required.");
+    if (!isModeratorRole) {
+      alert("Admin/Moderator access required.");
       return;
     }
     
@@ -375,39 +416,47 @@ export default function AdminDashboard() {
   useEffect(() => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    const toLocalDateStr = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
     let start = "";
     let end = "";
 
     switch (datePreset) {
       case "today":
-        start = today.toISOString().split("T")[0];
-        end = now.toISOString().split("T")[0];
+        start = toLocalDateStr(today);
+        end = toLocalDateStr(now);
         break;
       case "yesterday":
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
-        start = yesterday.toISOString().split("T")[0];
-        end = yesterday.toISOString().split("T")[0];
+        start = toLocalDateStr(yesterday);
+        end = toLocalDateStr(yesterday);
         break;
       case "last7":
         const l7 = new Date(today);
         l7.setDate(l7.getDate() - 7);
-        start = l7.toISOString().split("T")[0];
-        end = now.toISOString().split("T")[0];
+        start = toLocalDateStr(l7);
+        end = toLocalDateStr(now);
         break;
       case "last30":
         const l30 = new Date(today);
         l30.setDate(l30.getDate() - 30);
-        start = l30.toISOString().split("T")[0];
-        end = now.toISOString().split("T")[0];
+        start = toLocalDateStr(l30);
+        end = toLocalDateStr(now);
         break;
       case "thisMonth":
-        start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-        end = now.toISOString().split("T")[0];
+        start = toLocalDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
+        end = toLocalDateStr(now);
         break;
       case "thisYear":
-        start = new Date(now.getFullYear(), 0, 1).toISOString().split("T")[0];
-        end = now.toISOString().split("T")[0];
+        start = toLocalDateStr(new Date(now.getFullYear(), 0, 1));
+        end = toLocalDateStr(now);
         break;
       case "custom":
         return;
@@ -641,7 +690,9 @@ export default function AdminDashboard() {
       if (startOfTime && orderDate < startOfTime) return;
       if (endOfTime && orderDate > endOfTime) return;
 
-      const dateKey = orderDate.toISOString().split('T')[0];
+      // Use local date for consistency in Bangladesh timezone
+      const dateKey = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${String(orderDate.getDate()).padStart(2, '0')}`;
+      
       if (!dailyMap.has(dateKey)) {
         dailyMap.set(dateKey, {
           date: dateKey,
@@ -702,30 +753,95 @@ export default function AdminDashboard() {
     units: acc.units + (curr.units || 0)
   }), { gross: 0, net: 0, discount: 0, commission: 0, orders: 0, profit: 0, units: 0 });
 
+  // Fixed period stats for quick reference (regardless of filters)
+  const getQuickStats = () => {
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    
+    // Start of week (Sunday)
+    const d = new Date(now);
+    const day = d.getDay();
+    const diff = d.getDate() - day;
+    const startOfWeek = new Date(d.setDate(diff));
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    let todayRev = 0;
+    let weekRev = 0;
+    let monthRev = 0;
+
+    orders.forEach(order => {
+      const isPaid = order.status === 'completed' || order.status === 'delivered' || order.paymentStatus === 'paid';
+      if (!isPaid) return;
+
+      const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : (order.createdAt instanceof Date ? order.createdAt : null);
+      if (!orderDate) return;
+
+      const gross = Number(order.grossAmount || order.amount || 0);
+      const discount = Number(order.discountAmount || 0);
+      const net = Number(order.netAmount || gross - discount);
+
+      // Today
+      const orderDateStr = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${String(orderDate.getDate()).padStart(2, '0')}`;
+      if (orderDateStr === todayStr) {
+        todayRev += net;
+      }
+
+      // Week
+      if (orderDate >= startOfWeek) {
+        weekRev += net;
+      }
+
+      // Month
+      if (orderDate >= startOfMonth) {
+        monthRev += net;
+      }
+    });
+
+    return { today: todayRev, week: weekRev, month: monthRev };
+  };
+
+  const quickStats = getQuickStats();
+
   const getRevenueChartData = () => {
     if (revenueTimeframe === "daily") {
-      return Array.from(dailyAnalyticsList).reverse();
+      // Sort ascending for chart
+      return Array.from(dailyAnalyticsList).sort((a, b) => a.date.localeCompare(b.date));
     }
 
     const aggregated = new Map();
     dailyAnalyticsList.forEach(day => {
-      const date = new Date(day.date);
+      // day.date is YYYY-MM-DD local format
+      const parts = day.date.split("-");
+      const date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
       let key = "";
       
       if (revenueTimeframe === "weekly") {
-        // Get the start of the week (Sunday)
+        // Start of week logic
         const d = new Date(date);
-        const dayNum = d.getDay();
-        const diff = d.getDate() - dayNum;
-        const startOfWeek = new Date(d.setDate(diff));
-        key = startOfWeek.toISOString().split('T')[0];
+        const dayOfWeek = d.getDay();
+        const diff = d.getDate() - dayOfWeek;
+        const sunday = new Date(d.setDate(diff));
+        key = `${sunday.getFullYear()}-${String(sunday.getMonth() + 1).padStart(2, '0')}-${String(sunday.getDate()).padStart(2, '0')}`;
       } else {
         // Monthly
         key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
       }
 
       if (!aggregated.has(key)) {
-        aggregated.set(key, { date: key, gross: 0, net: 0, profit: 0, orders: 0, discount: 0, commission: 0, units: 0 });
+        aggregated.set(key, { 
+          date: key, 
+          gross: 0, 
+          net: 0, 
+          profit: 0, 
+          orders: 0, 
+          discount: 0, 
+          commission: 0, 
+          units: 0,
+          label: revenueTimeframe === "weekly" ? key : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        });
       }
       const existing = aggregated.get(key);
       existing.gross += day.gross;
@@ -760,10 +876,6 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    fetchSettings();
-    fetchPages();
-    fetchCategories();
-
     // Real-time Listeners
     const unsubProducts = onSnapshot(collection(db, "products"), (snap) => {
       setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -783,13 +895,21 @@ export default function AdminDashboard() {
       setActiveSessions(active);
     }, (error) => handleFirestoreError(error, OperationType.LIST, "active_sessions"));
 
+    const unsubCategories = onSnapshot(collection(db, "categories"), (snap) => {
+      setCategories(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, "categories"));
+
+    const unsubPages = onSnapshot(collection(db, "pages"), (snap) => {
+      setPages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, "pages"));
+
     let unsubOrders: (() => void) | undefined;
     let unsubTickets: (() => void) | undefined;
     let unsubWithdrawals: (() => void) | undefined;
     let unsubUsers: (() => void) | undefined;
     let unsubLogs: (() => void) | undefined;
 
-    if (isActuallyAdmin) {
+    if (isModeratorRole) {
       unsubOrders = onSnapshot(query(collection(db, "orders"), orderBy("createdAt", "desc")), (snap) => {
         setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       }, (error) => handleFirestoreError(error, OperationType.LIST, "orders"));
@@ -802,30 +922,41 @@ export default function AdminDashboard() {
         setWithdrawals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       }, (error) => handleFirestoreError(error, OperationType.LIST, "withdrawals"));
 
-      if (isAdminRole) {
-        unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
-          setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        }, (error) => handleFirestoreError(error, OperationType.LIST, "users"));
-      }
+      unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
+        setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }, (error) => handleFirestoreError(error, OperationType.LIST, "users"));
 
-      if (isSuperAdmin) {
-        unsubLogs = onSnapshot(query(collection(db, "admin_logs"), orderBy("createdAt", "desc"), limit(50)), (snap) => {
-          setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        }, (error) => handleFirestoreError(error, OperationType.LIST, "admin_logs"));
-      }
+      unsubLogs = onSnapshot(query(collection(db, "admin_logs"), orderBy("createdAt", "desc"), limit(50)), (snap) => {
+        setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }, (error) => handleFirestoreError(error, OperationType.LIST, "admin_logs"));
     }
+
+    // Add site settings snapshot for real-time RBAC updates
+    const unsubSettings = onSnapshot(doc(db, "settings", "site"), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setSiteSettings(prev => ({ 
+          ...prev, 
+          ...data,
+          tabPermissions: data.tabPermissions || {} 
+        }));
+      }
+    }, (error) => handleFirestoreError(error, OperationType.GET, "settings/site"));
 
     return () => {
       unsubProducts();
       unsubCoupons();
       unsubSessions();
+      unsubCategories();
+      unsubPages();
+      unsubSettings();
       unsubOrders?.();
       unsubTickets?.();
       unsubWithdrawals?.();
       unsubUsers?.();
       unsubLogs?.();
     };
-  }, [isActuallyAdmin, isSuperAdmin]);
+  }, [isModeratorRole]);
 
   const fetchUsers = async () => {
     if (!isAdminRole) return;
@@ -863,6 +994,45 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleUpdateUserBalance = async (userId: string, amount: string) => {
+    if (!isAdminRole) return;
+    const num = parseFloat(amount);
+    if (isNaN(num)) return;
+
+    try {
+      await updateDoc(doc(db, "users", userId), {
+        bonusBalance: num,
+        updatedAt: serverTimestamp()
+      });
+      await logAdminAction('update_user_balance', { userId, newBalance: num });
+      alert("User balance updated successfully!");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to update user balance.");
+    }
+  };
+
+  const handleToggleUserStatus = async (userId: string, currentBanned: boolean) => {
+    if (!isAdminRole) return;
+    try {
+      const targetUser = users.find(u => u.id === userId);
+      if (targetUser?.role === 'super_admin' && !isSuperAdmin) {
+        alert("Only Super Admins can manage Super Admin accounts.");
+        return;
+      }
+
+      await updateDoc(doc(db, "users", userId), {
+        isBanned: !currentBanned,
+        updatedAt: serverTimestamp()
+      });
+      await logAdminAction(currentBanned ? 'unban_user' : 'ban_user', { userId });
+      alert(currentBanned ? "User unbanned successfully!" : "User banned successfully!");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to update user status.");
+    }
+  };
+
   const fetchWithdrawals = async () => {
     try {
       const snap = await getDocs(collection(db, "withdrawals"));
@@ -884,9 +1054,19 @@ export default function AdminDashboard() {
   const handleAddCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const normalizedCode = newCoupon.code.toUpperCase().trim();
+      
+      // Duplicate Check
+      const checkQ = query(collection(db, "coupons"), where("code", "==", normalizedCode));
+      const checkSnap = await getDocs(checkQ);
+      if (!checkSnap.empty) {
+        alert("A coupon with this code already exists. Please use a unique code.");
+        return;
+      }
+
       const couponData: any = {
         ...newCoupon,
-        code: newCoupon.code.toUpperCase().trim(),
+        code: normalizedCode,
         value: Number(newCoupon.value),
         bonusPercentage: Number(newCoupon.bonusPercentage),
         usageLimit: Number(newCoupon.usageLimit),
@@ -1043,19 +1223,23 @@ export default function AdminDashboard() {
   };
 
   const handleFullReset = async () => {
-    if (!isActuallyAdmin) return;
-    if (!window.confirm("CRITICAL ACTION: This will delete ALL products, orders, tickets, and pages. The site will be factory reset. Continue?")) return;
+    if (!isSuperAdmin) {
+      alert("Unauthorized: Only Super Admins can perform a full marketplace reset.");
+      return;
+    }
+    if (!window.confirm("CRITICAL ACTION: This will delete ALL products, orders, tickets, coupons and pages. The site will be factory reset. Continue?")) return;
 
     try {
       setLoading(true);
-      const collections = ["products", "orders", "support_tickets", "pages"];
+      const collections = ["products", "orders", "support_tickets", "pages", "coupons", "withdrawals"];
       for (const col of collections) {
         const snap = await getDocs(collection(db, col));
         const deletes = snap.docs.map(d => deleteDoc(doc(db, col, d.id)));
         await Promise.all(deletes);
       }
       
-      // Reset settings to default
+      // Reset settings to default but keep existing role based access or reset it too? 
+      // Resetting to empty record for tabPermissions to use system defaults
       await setDoc(doc(db, "settings", "site"), {
         siteName: "Digital Marketplace",
         heroTitle: "Premium Digital Assets",
@@ -1081,7 +1265,8 @@ export default function AdminDashboard() {
         bkashNumber: "",
         nagadNumber: "",
         rocketNumber: "",
-        heroBannerUrl: ""
+        heroBannerUrl: "",
+        tabPermissions: {} // Reset RBAC to defaults
       });
 
       alert("Website reset successfully! Everything has been cleared.");
@@ -1111,14 +1296,19 @@ export default function AdminDashboard() {
         updates.credentials = editingCredentials;
       }
 
-      // Handle bonus for coupon assignee
+      // Handle bonus for coupon assignee and track usage
       const order = orders.find(o => o.id === id);
-      if (order && order.couponCode) {
+      if (order && order.couponCode && !order.bonusProcessed) {
         const q = query(collection(db, "coupons"), where("code", "==", order.couponCode));
         const couponSnap = await getDocs(q);
         if (!couponSnap.empty) {
           const couponDoc = couponSnap.docs[0];
           const couponData = couponDoc.data();
+          
+          // Increment usage count on approval - AS REQUESTED
+          await updateDoc(doc(db, "coupons", couponDoc.id), {
+            usageCount: increment(1)
+          });
           
           if (couponData.assignedEmail && (couponData.bonusPercentage > 0 || couponData.bonusAmount > 0)) {
             // Calculate bonus based on net sale
@@ -1157,8 +1347,17 @@ export default function AdminDashboard() {
                 updates.bonusAmountGiven = bonusAmount;
                 updates.bonusAssigneeEmail = couponData.assignedEmail;
               }
+            } else {
+              // Mark as processed even if bonus is 0 to avoid re-checking
+              updates.bonusProcessed = true;
             }
+          } else {
+            // Mark as processed if no bonus defined
+            updates.bonusProcessed = true;
           }
+        } else {
+          // If coupon code exists but doc not found (deleted?), still mark as processed
+          updates.bonusProcessed = true;
         }
       }
 
@@ -1166,7 +1365,7 @@ export default function AdminDashboard() {
       await logAdminAction('confirm_order', { orderId: id });
       await fetchOrders();
       alert("Order confirmed! Product is now available to the user.");
-      setSelectedOrder(null);
+      setSelectedOrderId(null);
       setEditingCredentials({});
       setEditingNote("");
     } catch (error: any) {
@@ -1175,9 +1374,9 @@ export default function AdminDashboard() {
   };
 
   const handleUpdateOrderCredentials = async () => {
-    if (!selectedOrder || !isActuallyAdmin) return;
+    if (!selectedOrderId || !isActuallyAdmin) return;
     try {
-      await updateDoc(doc(db, "orders", selectedOrder.id), {
+      await updateDoc(doc(db, "orders", selectedOrderId), {
         credentials: editingCredentials,
         adminNote: editingNote,
         updatedAt: serverTimestamp()
@@ -1339,7 +1538,18 @@ export default function AdminDashboard() {
     try {
       const snap = await getDoc(doc(db, "settings", "site"));
       if (snap.exists()) {
-        setSiteSettings(snap.data() as any);
+        const data = snap.data();
+        setSiteSettings(prev => ({
+          ...prev,
+          ...data,
+          socialLinks: data.socialLinks || [],
+          tabPermissions: data.tabPermissions || {},
+          faviconUrl: data.faviconUrl || "",
+          invoiceTitle: data.invoiceTitle || "Official Invoice",
+          invoiceSubtitle: data.invoiceSubtitle || "Digital Asset Purchase",
+          invoiceFooter: data.invoiceFooter || "Thank you for choosing our platform for your digital assets.",
+          invoiceNote: data.invoiceNote || "This is a computer generated invoice and does not require a physical signature.",
+        }));
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.GET, "settings/site");
@@ -1463,9 +1673,9 @@ export default function AdminDashboard() {
           <p className="text-xs sm:text-sm text-gray-500">Manage your product catalog and view marketplace performance.</p>
         </div>
         <div className="flex flex-wrap gap-2 sm:gap-4 items-center w-full sm:w-auto">
-          {!isAdminChecking && !isActuallyAdmin && auth.currentUser && (
+          {!isAdminChecking && !isModeratorRole && auth.currentUser && (
             <div className="bg-amber-50 text-amber-700 px-4 py-2 rounded-xl text-xs font-bold border border-amber-200 flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4" /> NOT AN ADMIN - View Only Mode
+              <ShieldCheck className="w-4 h-4" /> VIEW ONLY MODE
             </div>
           )}
           {activeTab === "products" && selectedProductIds.length > 0 && (
@@ -1496,15 +1706,15 @@ export default function AdminDashboard() {
           )}
           <button 
             onClick={() => {
-              if (!isAdmin) {
-                alert("Action Denied: You do not have administrator permissions.");
+              if (!isModeratorRole) {
+                alert("Action Denied: You do not have permissions.");
                 return;
               }
               setIsAdding(true);
             }}
             className={cn(
               "px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-2 hover:-translate-y-0.5 active:scale-95 flex-1 sm:flex-none",
-              isAdmin 
+              isModeratorRole 
                 ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200" 
                 : "bg-gray-100 text-gray-400 shadow-none cursor-not-allowed"
             )}
@@ -1726,120 +1936,21 @@ export default function AdminDashboard() {
 
       <div className="space-y-8">
         <div className="flex gap-1 p-1 bg-gray-100/50 rounded-2xl w-full overflow-x-auto no-scrollbar scroll-smooth whitespace-nowrap sticky top-16 z-20 backdrop-blur-sm">
-          <button 
-            onClick={() => setActiveTab("products")}
-            className={cn(
-              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
-              activeTab === "products" 
-                ? "bg-white text-indigo-600 shadow-sm" 
-                : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-            )}
-          >
-            Inventory
-          </button>
-          <button 
-            onClick={() => setActiveTab("orders")}
-            className={cn(
-              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
-              activeTab === "orders" 
-                ? "bg-white text-indigo-600 shadow-sm" 
-                : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-            )}
-          >
-            Sales
-          </button>
-          <button 
-            onClick={() => setActiveTab("withdrawals")}
-            className={cn(
-              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
-              activeTab === "withdrawals" 
-                ? "bg-white text-indigo-600 shadow-sm" 
-                : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-            )}
-          >
-            Withdrawals
-          </button>
-          <button 
-            onClick={() => setActiveTab("categories")}
-            className={cn(
-              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
-              activeTab === "categories" 
-                ? "bg-white text-indigo-600 shadow-sm" 
-                : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-            )}
-          >
-            Categories
-          </button>
-          <button 
-            onClick={() => setActiveTab("coupons")}
-            className={cn(
-              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
-              activeTab === "coupons" 
-                ? "bg-white text-indigo-600 shadow-sm" 
-                : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-            )}
-          >
-            Coupons
-          </button>
-          <button 
-            onClick={() => setActiveTab("analytics")}
-            className={cn(
-              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
-              activeTab === "analytics" 
-                ? "bg-white text-indigo-600 shadow-sm" 
-                : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-            )}
-          >
-            Analytics
-          </button>
-          <button 
-            onClick={() => setActiveTab("pages")}
-            className={cn(
-              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
-              activeTab === "pages" 
-                ? "bg-white text-indigo-600 shadow-sm" 
-                : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-            )}
-          >
-            Pages
-          </button>
-          <button 
-            onClick={() => setActiveTab("tickets")}
-            className={cn(
-              "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
-              activeTab === "tickets" 
-                ? "bg-white text-indigo-600 shadow-sm" 
-                : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-            )}
-          >
-            Tickets
-          </button>
-          {isSuperAdmin && (
+          {allowedTabs.map((tab) => (
             <button 
-              onClick={() => setActiveTab("users")}
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
               className={cn(
-                "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
-                activeTab === "users" 
+                "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0 flex items-center gap-2",
+                activeTab === tab.id 
                   ? "bg-white text-indigo-600 shadow-sm" 
                   : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
               )}
             >
-              Users
+              <tab.icon className="w-3 h-3" />
+              {tab.label}
             </button>
-          )}
-          {isAdmin && (
-            <button 
-              onClick={() => setActiveTab("settings")}
-              className={cn(
-                "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0",
-                activeTab === "settings" 
-                  ? "bg-white text-indigo-600 shadow-sm" 
-                  : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-              )}
-            >
-              Site Logic
-            </button>
-          )}
+          ))}
         </div>
 
         {activeTab === "analytics" ? (
@@ -1903,6 +2014,33 @@ export default function AdminDashboard() {
                    Export Report
                  </button>
                </div>
+            </div>
+
+            {/* Quick Summary Row (Fixed Periods) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+               {[
+                 { label: "Today", value: quickStats.today, icon: Clock, color: "text-blue-600", bg: "bg-blue-50" },
+                 { label: "This Week", value: quickStats.week, icon: Calendar, color: "text-indigo-600", bg: "bg-indigo-50" },
+                 { label: "This Month", value: quickStats.month, icon: ShoppingBag, color: "text-emerald-600", bg: "bg-emerald-50" },
+               ].map((stat, i) => (
+                 <motion.div
+                   key={i}
+                   initial={{ opacity: 0, y: 20 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   transition={{ delay: i * 0.1 }}
+                   className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm flex items-center gap-6 group hover:shadow-lg transition-all"
+                 >
+                   <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center p-3 transition-transform group-hover:scale-110 group-hover:rotate-6", stat.bg, stat.color)}>
+                     <stat.icon className="w-full h-full" />
+                   </div>
+                   <div>
+                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.label}</p>
+                     <h4 className="text-2xl font-black text-gray-900 tracking-tighter">
+                       ৳{stat.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                     </h4>
+                   </div>
+                 </motion.div>
+               ))}
             </div>
 
             {/* Detailed Filters Expandable */}
@@ -1976,47 +2114,104 @@ export default function AdminDashboard() {
                </div>
             </div>
 
-            {/* Core Revenue Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 sm:gap-6">
-              {[
-                { label: "Total Gross Sales", value: revenueStatsSummary.gross, icon: TrendingUp, color: "text-indigo-600", bg: "bg-indigo-50", desc: "Total before discounts", live: true },
-                { label: "Total Net Revenue", value: revenueStatsSummary.net, icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-50", desc: "Revenue after discounts", live: true },
-                { label: "Total Profit", value: revenueStatsSummary.profit, icon: ShieldCheck, color: "text-blue-600", bg: "bg-blue-50", desc: "Net minus commissions", live: true },
-                { label: "Total Orders", value: revenueStatsSummary.orders, icon: ShoppingBag, color: "text-purple-600", bg: "bg-purple-50", desc: "Successful conversions", isCount: true, live: true },
-                { label: "Total Affiliate/Referral Commission", value: revenueStatsSummary.commission, icon: Users, color: "text-amber-600", bg: "bg-amber-50", desc: "Affiliate payouts" },
-                { label: "Total Coupon Discounts", value: revenueStatsSummary.discount, icon: Ticket, color: "text-rose-600", bg: "bg-rose-50", desc: "Total value of coupons" },
-              ].map((s, i) => (
-                <motion.div 
-                  key={i}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: i * 0.05 }}
-                  className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm relative overflow-hidden group hover:shadow-xl hover:shadow-indigo-500/5 transition-all"
-                >
-                  {s.live && (
-                    <div className="absolute top-4 right-4 flex items-center gap-1">
-                      <div className="w-1 h-1 rounded-full bg-emerald-500 animate-ping" />
-                      <span className="text-[6px] font-black text-emerald-500 uppercase tracking-tighter">Live</span>
+            {/* Live Activity Feed & Global Stats */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+              <div className="lg:col-span-3 space-y-8">
+                {/* Core Revenue Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[
+                    { label: "Gross Sales", value: revenueStatsSummary.gross, icon: TrendingUp, color: "text-white", bg: "bg-indigo-600", desc: "Total before discounts", live: true },
+                    { label: "Net Revenue", value: revenueStatsSummary.net, icon: DollarSign, color: "text-white", bg: "bg-emerald-600", desc: "Revenue after discounts", live: true },
+                    { label: "Net Profit", value: revenueStatsSummary.profit, icon: ShieldCheck, color: "text-white", bg: "bg-blue-600", desc: "Net minus commissions", live: true },
+                    { label: "Total Orders", value: revenueStatsSummary.orders, icon: ShoppingBag, color: "text-indigo-600", bg: "bg-indigo-50", desc: "Successful conversions", isCount: true, live: true },
+                    { label: "Total Units", value: revenueStatsSummary.units, icon: Package, color: "text-emerald-600", bg: "bg-emerald-50", desc: "Items sold", isCount: true },
+                    { label: "Discounts", value: revenueStatsSummary.discount, icon: Ticket, color: "text-rose-600", bg: "bg-rose-50", desc: "Coupon value" },
+                  ].map((s, i) => (
+                    <motion.div 
+                      key={i}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.05 }}
+                      className={cn(
+                        "p-8 rounded-[40px] border shadow-sm relative overflow-hidden group hover:shadow-xl transition-all",
+                        s.bg.includes('600') ? `${s.bg} border-transparent` : "bg-white border-gray-100"
+                      )}
+                    >
+                      {s.live && (
+                        <div className="absolute top-6 right-6 flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-2 py-0.5 rounded-full">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          <span className="text-[7px] font-black text-white/90 uppercase tracking-tighter">Live</span>
+                        </div>
+                      )}
+                      <div className={cn("inline-flex p-3 rounded-2xl mb-6 group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-sm", 
+                        s.bg.includes('600') ? "bg-white/20 text-white" : s.bg + " " + s.color
+                      )}>
+                        <s.icon className="w-5 h-5" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className={cn("text-[10px] font-black uppercase tracking-widest", 
+                          s.bg.includes('600') ? "text-white/60" : "text-gray-400"
+                        )}>{s.label}</div>
+                        <div className={cn("text-2xl sm:text-3xl font-black tracking-tighter",
+                          s.bg.includes('600') ? "text-white" : "text-gray-900"
+                        )}>
+                          {s.isCount ? "" : "৳"}{s.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </div>
+                        <p className={cn("text-[9px] font-bold uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity",
+                          s.bg.includes('600') ? "text-white/40" : "text-gray-300"
+                        )}>{s.desc}</p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="lg:col-span-1">
+                <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm h-full flex flex-col">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h4 className="text-sm font-black text-gray-900 uppercase tracking-tighter">Live Sales Feed</h4>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Real-time transactions</p>
                     </div>
-                  )}
-                  <div className={cn("inline-flex p-3 rounded-2xl mb-4 group-hover:scale-110 group-hover:rotate-6 transition-all duration-300", s.bg, s.color)}>
-                    <s.icon className="w-5 h-5" />
+                    <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 rounded-full">
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                      <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Active</span>
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{s.label}</div>
-                    <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tighter">
-                      {s.isCount ? "" : "৳"}{s.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                    </div>
-                    {s.label === "Total Orders" && (
-                      <div className="text-[10px] font-black text-purple-400 uppercase tracking-tighter mt-1 flex items-center gap-1">
-                        <Package className="w-3 h-3" />
-                        {revenueStatsSummary.units.toLocaleString()} Units Sold
+                  <div className="flex-1 space-y-4 overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
+                    {orders.slice(0, 10).map((order, idx) => (
+                      <motion.div 
+                        initial={{ x: 20, opacity: 0 }}
+                        animate={{ x: 0, opacity: 1 }}
+                        key={order.id} 
+                        className="flex items-center gap-4 p-4 rounded-2xl bg-gray-50 border border-gray-100 group hover:border-indigo-200 hover:bg-indigo-50/30 transition-all"
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm flex-shrink-0 group-hover:scale-110 transition-transform">
+                          {order.status === 'completed' ? <CheckCircle className="w-5 h-5 text-emerald-500" /> : <Clock className="w-5 h-5 text-amber-500" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[10px] font-black text-gray-900 uppercase truncate mb-0.5">{order.productName}</div>
+                          <div className="flex items-center gap-2">
+                             <span className="text-[10px] font-black text-indigo-600">৳{(order.netAmount || order.amount).toLocaleString()}</span>
+                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">
+                               {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
+                             </span>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                    {orders.length === 0 && (
+                      <div className="text-center py-12">
+                        <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                          <ShoppingBag className="w-6 h-6 text-gray-300" />
+                        </div>
+                        <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">No recent sales</p>
                       </div>
                     )}
-                    <p className="text-[8px] font-bold text-gray-300 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">{s.desc}</p>
                   </div>
-                </motion.div>
-              ))}
+                </div>
+              </div>
+            </div>
 
               {/* Real-time Active Pulse */}
               <motion.div 
@@ -2074,7 +2269,6 @@ export default function AdminDashboard() {
                   </div>
                 </div>
               </motion.div>
-            </div>
 
             {/* Real-time Order Stream & Product Performance */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -2147,27 +2341,36 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
                {/* Left: Line Charts */}
                <div className="xl:col-span-8 space-y-8">
-                  <div className="bg-white p-8 sm:p-10 rounded-[45px] border border-gray-100 shadow-sm space-y-8">
-                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                           <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center">
-                              <TrendingUp className="w-6 h-6 text-indigo-600" />
+                  <div className="bg-white p-10 rounded-[45px] border border-gray-100 shadow-sm space-y-10 relative overflow-hidden group">
+                     <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-50/30 rounded-full blur-[100px] -mr-48 -mt-48 pointer-events-none" />
+                     <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                        <div className="flex items-center gap-5">
+                           <div className="w-16 h-16 bg-indigo-600 rounded-[35px] flex items-center justify-center shadow-2xl shadow-indigo-200">
+                              <TrendingUp className="w-8 h-8 text-white" />
                            </div>
                            <div>
-                              <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">Earnings Performance</h3>
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tighter italic">Earnings Velocity</h3>
+                                <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 rounded-full border border-emerald-100">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest leading-none">Live Sync</span>
+                                </div>
+                              </div>
                               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
-                                {revenueTimeframe === "daily" ? "Daily" : revenueTimeframe === "weekly" ? "Weekly" : "Monthly"} revenue & profit tracking
+                                Real-time {revenueTimeframe} financial momentum tracking
                               </p>
                            </div>
                         </div>
-                        <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-2xl border border-gray-100 self-start">
+                        <div className="flex items-center gap-2 bg-gray-50/80 backdrop-blur-md p-2 rounded-2xl border border-gray-100 self-start">
                           {(["daily", "weekly", "monthly"] as const).map((t) => (
                             <button
                               key={t}
                               onClick={() => setRevenueTimeframe(t)}
                               className={cn(
-                                "px-4 py-2 text-[8px] font-black uppercase tracking-widest rounded-xl transition-all",
-                                revenueTimeframe === t ? "bg-white text-indigo-600 shadow-sm" : "text-gray-400 hover:text-gray-600"
+                                "px-6 py-3 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all",
+                                revenueTimeframe === t 
+                                  ? "bg-white text-indigo-600 shadow-md shadow-indigo-500/5 ring-1 ring-black/5" 
+                                  : "text-gray-400 hover:text-gray-600 hover:bg-white/50"
                               )}
                             >
                               {t}
@@ -2176,66 +2379,96 @@ export default function AdminDashboard() {
                         </div>
                      </div>
 
-                     <div className="flex items-center gap-4 flex-wrap">
+                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 p-8 bg-gray-50/80 rounded-[2.5rem] border border-gray-100 shadow-inner">
+                        <div className="space-y-1">
+                           <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Avg Order Value</span>
+                           <div className="text-2xl font-black text-gray-900 tracking-tighter">৳{revenueStatsSummary.orders ? Math.round(revenueStatsSummary.net / revenueStatsSummary.orders).toLocaleString() : '0'}</div>
+                        </div>
+                        <div className="space-y-1">
+                           <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Conv. Rate</span>
+                           <div className="text-2xl font-black text-emerald-600 tracking-tighter">{activeSessions.length ? ((revenueStatsSummary.orders / (activeSessions.length * 10)) * 100).toFixed(1) : '1.2'}%</div>
+                        </div>
+                        <div className="space-y-1">
+                           <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Marketing Spend</span>
+                           <div className="text-2xl font-black text-rose-500 tracking-tighter">৳{revenueStatsSummary.discount.toLocaleString()}</div>
+                        </div>
+                        <div className="space-y-1">
+                           <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Net Multiplier</span>
+                           <div className="text-2xl font-black text-indigo-600 tracking-tighter">{(revenueStatsSummary.net / (revenueStatsSummary.gross || 1)).toFixed(2)}x</div>
+                        </div>
+                     </div>
+
+                     <div className="h-[450px] w-full relative">
+                        <div className="absolute top-0 right-0 p-4 z-10 flex flex-wrap items-center justify-end gap-6">
                            <div className="flex items-center gap-2">
-                              <div className="w-2 h-2 rounded-full bg-indigo-600" />
-                              <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Gross</span>
+                              <div className="w-3 h-3 rounded-full bg-indigo-600 shadow-sm" />
+                              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Gross Sales</span>
                            </div>
                            <div className="flex items-center gap-2">
-                              <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                              <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Net Revenue</span>
+                              <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm" />
+                              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Net Revenue</span>
                            </div>
                            <div className="flex items-center gap-2">
-                              <div className="w-2 h-2 rounded-full bg-blue-500" />
-                              <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Net Profit</span>
+                              <div className="w-3 h-3 rounded-full bg-blue-500 shadow-sm" />
+                              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Net Profit</span>
                            </div>
                         </div>
-                      <div className="h-[350px]">
                         <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={chartData}>
+                          <AreaChart data={chartData} margin={{ top: 80, right: 10, left: 0, bottom: 0 }}>
                             <defs>
                               <linearGradient id="colorGross" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1}/>
+                                <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.2}/>
                                 <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
                               </linearGradient>
                               <linearGradient id="colorNet" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
+                                <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
                                 <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                               </linearGradient>
                               <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
                                 <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                               </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                            <CartesianGrid strokeDasharray="6 6" vertical={false} stroke="#e5e7eb" opacity={0.5} />
                             <XAxis 
                               dataKey="date" 
                               axisLine={false} 
                               tickLine={false} 
-                              tick={{ fontSize: 9, fontWeight: 800, fill: '#9ca3af' }}
+                              minTickGap={30}
+                              tick={{ fontSize: 10, fontWeight: 900, fill: '#6b7280' }}
                               tickFormatter={(val) => {
                                 const d = new Date(val);
                                 if (revenueTimeframe === "daily") return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-                                if (revenueTimeframe === "weekly") return `Week ${Math.ceil(d.getDate() / 7)} ${d.toLocaleDateString('en-GB', { month: 'short' })}`;
+                                if (revenueTimeframe === "weekly") return `Wk ${d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`;
                                 return d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' });
                               }}
                             />
                             <YAxis 
                               axisLine={false} 
                               tickLine={false} 
-                              tick={{ fontSize: 9, fontWeight: 800, fill: '#9ca3af' }}
-                              tickFormatter={(val) => `৳${val >= 1000 ? (val/1000).toFixed(val % 1000 === 0 ? 0 : 1) + 'k' : val}`}
+                              tick={{ fontSize: 10, fontWeight: 900, fill: '#6b7280' }}
+                              tickFormatter={(val) => `৳${val >= 1000 ? (val/1000).toFixed(0) + 'k' : val}`}
                             />
                             <Tooltip 
-                              contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', padding: '16px' }}
-                              labelStyle={{ fontWeight: 900, marginBottom: '8px', color: '#111827', fontSize: '12px' }}
-                              itemStyle={{ fontSize: '11px', fontWeight: 800 }}
+                              cursor={{ stroke: '#4f46e5', strokeWidth: 2, strokeDasharray: '5 5' }}
+                              contentStyle={{ borderRadius: '32px', border: 'none', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.2)', padding: '24px', backgroundColor: '#ffffff', outline: 'none' }}
+                              labelStyle={{ fontWeight: 900, marginBottom: '16px', color: '#111827', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.1em' }}
+                              itemStyle={{ fontSize: '12px', fontWeight: 900, padding: '4px 0' }}
                               formatter={(value: any) => [`৳${Number(value).toLocaleString()}`, '']}
-                              labelFormatter={(label) => new Date(label).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                              labelFormatter={(label) => {
+                                const d = new Date(label);
+                                if (revenueTimeframe === "monthly") return d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+                                if (revenueTimeframe === "weekly") {
+                                  const end = new Date(d);
+                                  end.setDate(end.getDate() + 6);
+                                  return `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} - ${end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
+                                }
+                                return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+                              }}
                             />
-                            <Area type="monotone" dataKey="gross" name="Gross Sales" stroke="#4f46e5" strokeWidth={4} fillOpacity={1} fill="url(#colorGross)" />
-                            <Area type="monotone" dataKey="net" name="Net Revenue" stroke="#10b981" strokeWidth={4} fillOpacity={1} fill="url(#colorNet)" />
-                            <Area type="monotone" dataKey="profit" name="Net Profit" stroke="#3b82f6" strokeWidth={4} fillOpacity={1} fill="url(#colorProfit)" />
+                            <Area type="monotone" dataKey="gross" name="Gross" stroke="#4f46e5" strokeWidth={6} fillOpacity={1} fill="url(#colorGross)" />
+                            <Area type="monotone" dataKey="net" name="Net" stroke="#10b981" strokeWidth={6} fillOpacity={1} fill="url(#colorNet)" />
+                            <Area type="monotone" dataKey="profit" name="Profit" stroke="#3b82f6" strokeWidth={6} fillOpacity={1} fill="url(#colorProfit)" />
                           </AreaChart>
                         </ResponsiveContainer>
                      </div>
@@ -2670,8 +2903,8 @@ export default function AdminDashboard() {
                       key={catName}
                       type="button"
                       onClick={() => {
-                        if (!isAdmin) {
-                          alert("Action Denied: Admin permissions required.");
+                        if (!isModeratorRole) {
+                          alert("Action Denied: Management permissions required.");
                           return;
                         }
                         const currentHidden = siteSettings.hiddenCategories || [];
@@ -2742,30 +2975,30 @@ export default function AdminDashboard() {
                       <div className="flex gap-2">
                         <button 
                           onClick={() => {
-                            if (!isAdmin) {
-                              alert("Action Denied: Admin permissions required.");
+                            if (!isModeratorRole) {
+                              alert("Action Denied: Management permissions required.");
                               return;
                             }
                             setEditingCategory(category);
                           }}
                           className={cn(
                             "p-2 rounded-xl transition-colors",
-                            isAdmin ? "text-indigo-600 bg-indigo-50 hover:bg-indigo-100" : "text-gray-200 bg-gray-50/50 cursor-not-allowed"
+                            isModeratorRole ? "text-indigo-600 bg-indigo-50 hover:bg-indigo-100" : "text-gray-200 bg-gray-50/50 cursor-not-allowed"
                           )}
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button 
                           onClick={() => {
-                            if (!isAdmin) {
-                              alert("Action Denied: Admin permissions required.");
+                            if (!isModeratorRole) {
+                              alert("Action Denied: Management permissions required.");
                               return;
                             }
                             handleDeleteCategory(category.id);
                           }}
                           className={cn(
                             "p-2 rounded-xl transition-colors",
-                            isAdmin ? "text-red-600 bg-red-50 hover:bg-red-100" : "text-gray-200 bg-gray-50/50 cursor-not-allowed"
+                            isModeratorRole ? "text-red-600 bg-red-50 hover:bg-red-100" : "text-gray-200 bg-gray-50/50 cursor-not-allowed"
                           )}
                         >
                           <Trash2 className="w-4 h-4" />
@@ -2891,8 +3124,8 @@ export default function AdminDashboard() {
                 <div className="flex justify-end gap-1">
                   <button 
                     onClick={() => {
-                      if (!isAdmin) {
-                        alert("Action Denied: You do not have administrator permissions.");
+                      if (!isModeratorRole) {
+                        alert("Action Denied: You do not have permissions.");
                         return;
                       }
                       handleEditProduct(p);
@@ -2904,8 +3137,8 @@ export default function AdminDashboard() {
                   </button>
                   <button 
                     onClick={async () => {
-                      if (!isAdmin) {
-                        alert("Administrator access required for this action.");
+                      if (!isModeratorRole) {
+                        alert("Management access required for this action.");
                         return;
                       }
                       if(window.confirm(`Permanently delete "${p.name}"? This cannot be undone.`)) {
@@ -2924,7 +3157,7 @@ export default function AdminDashboard() {
                     title="Delete Product"
                     className={cn(
                       "p-2 sm:p-3 transition-all rounded-xl sm:rounded-2xl border border-transparent active:scale-90",
-                      isAdmin ? "text-gray-400 hover:text-red-600 hover:bg-red-50 hover:border-red-100 shadow-sm hover:shadow-red-50" : "text-gray-200 bg-gray-50/50 cursor-not-allowed"
+                      isModeratorRole ? "text-gray-400 hover:text-red-600 hover:bg-red-50 hover:border-red-100 shadow-sm hover:shadow-red-50" : "text-gray-200 bg-gray-50/50 cursor-not-allowed"
                     )}
                   >
                     <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -3160,7 +3393,7 @@ export default function AdminDashboard() {
                               </button>
                               <button 
                                 onClick={() => {
-                                  setSelectedOrder(o);
+                                  setSelectedOrderId(o.id);
                                   setEditingCredentials(o.credentials || {});
                                   setEditingNote(o.adminNote || "");
                                 }}
@@ -3168,7 +3401,7 @@ export default function AdminDashboard() {
                               >
                                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                               </button>
-                              {o.status === "pending" && isActuallyAdmin && (
+                              {o.status === "pending" && isModeratorRole && (
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); handleConfirmOrder(o.id); }}
                                   className="bg-indigo-600 text-white px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
@@ -3335,6 +3568,9 @@ export default function AdminDashboard() {
                        {!coupon.isActive && (
                          <span className="text-[8px] font-black bg-red-50 text-red-600 px-2 py-0.5 rounded-full uppercase tracking-widest">Inactive</span>
                        )}
+                       {coupon.expiryDate && new Date(coupon.expiryDate) < new Date() && (
+                         <span className="text-[8px] font-black bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full uppercase tracking-widest">Expired</span>
+                       )}
                      </div>
 
                      {coupon.assignedEmail && (
@@ -3373,12 +3609,19 @@ export default function AdminDashboard() {
                            <Clock className="w-3 h-3 text-gray-400" />
                            <span className="text-[10px] font-bold text-gray-500">Expires: {new Date(coupon.expiryDate).toLocaleDateString()}</span>
                         </div>
-                        <span className={cn(
-                          "px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest",
-                          new Date(coupon.expiryDate) < new Date() ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"
-                        )}>
-                          {new Date(coupon.expiryDate) < new Date() ? "Expired" : "Active"}
-                        </span>
+                        {(() => {
+                           const expiryDate = new Date(coupon.expiryDate);
+                           const endOfExpiryDay = new Date(expiryDate.getFullYear(), expiryDate.getMonth(), expiryDate.getDate(), 23, 59, 59, 999);
+                           const isExpired = endOfExpiryDay < new Date();
+                           return (
+                             <span className={cn(
+                               "px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest",
+                               isExpired ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"
+                             )}>
+                               {isExpired ? "Expired" : "Active"}
+                             </span>
+                           );
+                        })()}
                      </div>
                    </div>
                 </div>
@@ -3632,13 +3875,23 @@ export default function AdminDashboard() {
           </section>
         ) : activeTab === "users" ? (
           <section className="space-y-6">
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex justify-between items-center bg-gray-50/50">
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/50">
                 <div>
                   <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">User Management</h3>
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Manage user roles and permissions</p>
                 </div>
-                <div className="text-right">
-                  <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full uppercase tracking-widest">
+                <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                  <div className="relative w-full sm:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input 
+                      type="text" 
+                      placeholder="Search email or name..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold text-gray-900"
+                    />
+                  </div>
+                  <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full uppercase tracking-widest whitespace-nowrap">
                     {users.length} Total Users
                   </span>
                 </div>
@@ -3652,21 +3905,33 @@ export default function AdminDashboard() {
                       <th className="px-6 py-5">User</th>
                       <th className="px-6 py-5">Balance</th>
                       <th className="px-6 py-5">Role</th>
+                      <th className="px-6 py-5">Status</th>
                       <th className="px-6 py-5 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {users
+                      .filter(u => {
+                        const term = searchTerm.toLowerCase();
+                        return (
+                          u.email?.toLowerCase().includes(term) ||
+                          u.displayName?.toLowerCase().includes(term) ||
+                          u.id.toLowerCase().includes(term)
+                        );
+                      })
                       .sort((a, b) => (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0))
                       .map(u => (
-                      <tr key={u.id} className="hover:bg-gray-50/50 transition-colors">
+                      <tr key={u.id} className={cn("hover:bg-gray-50/50 transition-colors", u.isBanned && "opacity-60 grayscale-[0.5]")}>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-xs">
                               {u.displayName?.charAt(0).toUpperCase() || u.email?.charAt(0).toUpperCase() || "?"}
                             </div>
                             <div>
-                              <div className="font-black text-gray-900 text-sm">{u.displayName || "Anonymous User"}</div>
+                              <div className="font-black text-gray-900 text-sm flex items-center gap-2">
+                                {u.displayName || "Anonymous User"}
+                                {u.isBanned && <Ban className="w-3 h-3 text-red-500" />}
+                              </div>
                               <div className="text-[10px] font-bold text-gray-400 lowercase tracking-tight">
                                 {u.email}
                               </div>
@@ -3674,37 +3939,69 @@ export default function AdminDashboard() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="text-indigo-600 font-black text-sm">৳{(u.bonusBalance || 0).toLocaleString()}</div>
-                          <div className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Bonus</div>
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="number" 
+                              defaultValue={u.bonusBalance || 0}
+                              onBlur={(e) => {
+                                if (parseFloat(e.target.value) !== (u.bonusBalance || 0)) {
+                                  handleUpdateUserBalance(u.id, e.target.value);
+                                }
+                              }}
+                              className="w-20 bg-gray-50 border-none rounded-lg px-2 py-1 text-xs font-black text-indigo-600 focus:ring-1 focus:ring-indigo-500 outline-none"
+                            />
+                            <div className="text-[8px] font-bold text-gray-400 hidden sm:block uppercase tracking-widest">Bonus</div>
+                          </div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className={cn(
-                            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest",
-                            u.role === 'super_admin' ? "bg-purple-100 text-purple-600" :
-                            u.role === 'admin' ? "bg-indigo-100 text-indigo-600" :
-                            u.role === 'moderator' ? "bg-emerald-100 text-emerald-600" : "bg-gray-100 text-gray-500"
-                          )}>
-                             <ShieldCheck className="w-3 h-3" />
-                             {u.role || 'user'}
-                          </div>
+                          <select 
+                             value={u.role || 'user'} 
+                             onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
+                             disabled={u.email === currentUserEmail || (!isSuperAdmin && u.role === 'super_admin')}
+                             className="bg-gray-50 border-none rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
+                           >
+                             <option value="user">User</option>
+                             <option value="moderator">Moderator</option>
+                             <option value="admin">Admin</option>
+                             {isSuperAdmin && <option value="super_admin">Super Admin</option>}
+                           </select>
+                        </td>
+                        <td className="px-6 py-4">
+                           <div className={cn(
+                             "inline-flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest",
+                             u.isBanned ? "bg-red-100 text-red-600" : "bg-emerald-100 text-emerald-600"
+                           )}>
+                             {u.isBanned ? <UserX className="w-2.5 h-2.5" /> : <ShieldCheck className="w-2.5 h-2.5" />}
+                             {u.isBanned ? "Banned" : "Active"}
+                           </div>
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex justify-end gap-2">
-                             <select 
-                               value={u.role || 'user'} 
-                               onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
-                               disabled={u.email === currentUserEmail || (!isSuperAdmin && u.role === 'super_admin')}
-                               className="bg-gray-50 border-none rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
-                             >
-                               <option value="user">User</option>
-                               <option value="moderator">Moderator</option>
-                               <option value="admin">Admin</option>
-                               {isSuperAdmin && <option value="super_admin">Super Admin</option>}
-                             </select>
+                              <button 
+                                onClick={() => handleToggleUserStatus(u.id, u.isBanned || false)}
+                                title={u.isBanned ? "Unban User" : "Ban User"}
+                                disabled={u.email === currentUserEmail || (!isSuperAdmin && u.role === 'super_admin')}
+                                className={cn(
+                                  "p-2 rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-50",
+                                  u.isBanned ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100" : "bg-red-50 text-red-600 hover:bg-red-100"
+                                )}
+                              >
+                                {u.isBanned ? <CheckCircle className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
+                              </button>
                           </div>
                         </td>
                       </tr>
                     ))}
+                    {users.filter(u => {
+                      const term = searchTerm.toLowerCase();
+                      return u.email?.toLowerCase().includes(term) || u.displayName?.toLowerCase().includes(term);
+                    }).length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-20 text-center text-gray-400 italic">
+                          No users matching your search.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -3721,6 +4018,152 @@ export default function AdminDashboard() {
                 <p className="text-sm text-gray-500">Customize the site appearance and hero content.</p>
               </div>
             </div>
+
+            {isSuperAdmin && (
+              <div className="mb-8 space-y-6">
+                <div className="flex items-center gap-4 bg-purple-50 border border-purple-100 p-6 rounded-[2rem]">
+                  <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-purple-600">
+                    <ShieldCheck className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-purple-900 uppercase tracking-tighter">Role-Based Access Control</h4>
+                    <p className="text-[10px] font-bold text-purple-600 uppercase tracking-widest mt-0.5">Manage page visibility for Admin & Moderator roles</p>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-gray-100 rounded-[2.5rem] overflow-hidden shadow-sm">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-gray-50/50 border-b border-gray-100">
+                        <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Page / Tab</th>
+                        <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Admin Access</th>
+                        <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Moderator Access</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {tabs.map(tab => {
+                        const currentRoles = getTabRoles(tab.id);
+                        const toggleRole = async (role: string) => {
+                          const updated = currentRoles.includes(role) 
+                            ? currentRoles.filter(r => r !== role)
+                            : [...currentRoles, role];
+                          
+                          const newPermissions = {
+                            ...(siteSettings.tabPermissions || {}),
+                            [tab.id]: updated
+                          };
+
+                          try {
+                            setSiteSettings(prev => ({ ...prev, tabPermissions: newPermissions }));
+                            await updateDoc(doc(db, "settings", "site"), {
+                              tabPermissions: newPermissions
+                            });
+                          } catch (err) {
+                            console.error("Failed to update permissions:", err);
+                          }
+                        };
+
+                        return (
+                          <tr key={tab.id} className="hover:bg-gray-50/30 transition-colors group">
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 bg-gray-50 rounded-lg group-hover:bg-purple-50 transition-colors">
+                                  <tab.icon className="w-4 h-4 text-gray-400 group-hover:text-purple-600" />
+                                </div>
+                                <span className="text-sm font-black text-gray-700">{tab.label}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                  type="checkbox" 
+                                  className="sr-only peer"
+                                  checked={currentRoles.includes('admin')}
+                                  onChange={() => toggleRole('admin')}
+                                />
+                                <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                              </label>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                  type="checkbox" 
+                                  className="sr-only peer"
+                                  checked={currentRoles.includes('moderator')}
+                                  onChange={() => toggleRole('moderator')}
+                                />
+                                <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                              </label>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {isSuperAdmin && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-4 bg-indigo-50 border border-indigo-100 p-6 rounded-[2rem]">
+                  <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-indigo-600">
+                    <FileText className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-indigo-900 uppercase tracking-tighter">Invoice Customization</h4>
+                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mt-0.5">Control the text displayed on user invoices</p>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-gray-100 rounded-[2.5rem] p-8 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Invoice Header Title</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.invoiceTitle}
+                        onChange={e => setSiteSettings({...siteSettings, invoiceTitle: e.target.value})}
+                        placeholder="Official Invoice"
+                        className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Item Subtitle (Description)</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.invoiceSubtitle}
+                        onChange={e => setSiteSettings({...siteSettings, invoiceSubtitle: e.target.value})}
+                        placeholder="Digital Asset Purchase"
+                        className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Footer Message</label>
+                      <textarea 
+                        rows={2}
+                        value={siteSettings.invoiceFooter}
+                        onChange={e => setSiteSettings({...siteSettings, invoiceFooter: e.target.value})}
+                        placeholder="Thank you for choosing our platform..."
+                        className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Bottom Disclaimer/Note</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.invoiceNote}
+                        onChange={e => setSiteSettings({...siteSettings, invoiceNote: e.target.value})}
+                        placeholder="This is a computer generated invoice..."
+                        className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {isSuperAdmin && (
               <div className="flex justify-between items-center bg-red-50 border border-red-100 p-6 rounded-2xl">
@@ -3750,6 +4193,16 @@ export default function AdminDashboard() {
                       value={siteSettings.siteName}
                       onChange={e => setSiteSettings({...siteSettings, siteName: e.target.value})}
                       className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Favicon URL</label>
+                    <input 
+                      type="text" 
+                      value={siteSettings.faviconUrl || ""}
+                      onChange={e => setSiteSettings({...siteSettings, faviconUrl: e.target.value})}
+                      className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="https://example.com/favicon.ico"
                     />
                   </div>
                   <div>
@@ -3800,15 +4253,6 @@ export default function AdminDashboard() {
                     type="text" 
                     value={siteSettings.logoUrl}
                     onChange={e => setSiteSettings({...siteSettings, logoUrl: e.target.value})}
-                    className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Favicon URL</label>
-                  <input 
-                    type="text" 
-                    value={siteSettings.faviconUrl}
-                    onChange={e => setSiteSettings({...siteSettings, faviconUrl: e.target.value})}
                     className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
@@ -4666,7 +5110,7 @@ export default function AdminDashboard() {
                 <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-widest">Order ID: #{selectedOrder.id.slice(-8).toUpperCase()}</p>
                 <p className="text-[9px] font-medium text-gray-300 mt-0.5">FULL ID: {selectedOrder.id}</p>
               </div>
-              <button onClick={() => setSelectedOrder(null)} className="text-gray-400 hover:text-gray-600 bg-gray-50 p-2 rounded-xl transition-all">
+              <button onClick={() => setSelectedOrderId(null)} className="text-gray-400 hover:text-gray-600 bg-gray-50 p-2 rounded-xl transition-all">
                 <Trash2 className="w-5 h-5 sm:w-6 sm:h-6 transform rotate-45" />
               </button>
             </div>
@@ -4697,14 +5141,19 @@ export default function AdminDashboard() {
                 <div className="space-y-2 mt-2">
                   <div className="flex justify-between items-baseline">
                     <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Order Subtotal</span>
-                    <span className="font-mono font-bold text-gray-600 text-xs">৳{(selectedOrder.amount + (selectedOrder.discountAmount || 0)).toLocaleString()}</span>
+                    <span className="font-mono font-bold text-gray-600 text-xs">
+                      ৳{(selectedOrder.grossAmount || selectedOrder.amount + (selectedOrder.discountAmount || 0)).toLocaleString()}
+                    </span>
                   </div>
                   
                   {selectedOrder.couponCode && (
                     <div className="flex justify-between items-baseline text-emerald-600">
                       <div className="flex flex-col items-start">
                         <span className="text-[9px] font-black uppercase tracking-widest">Coupon Discount</span>
-                        <span className="text-[8px] font-medium bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">CODE: {selectedOrder.couponCode}</span>
+                        <div className="flex items-center gap-1">
+                          <Ticket className="w-2 h-2" />
+                          <span className="text-[8px] font-medium bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 uppercase">CODE: {selectedOrder.couponCode}</span>
+                        </div>
                       </div>
                       <span className="font-mono font-black text-xs">-৳{(selectedOrder.discountAmount || 0).toLocaleString()}</span>
                     </div>
@@ -4713,29 +5162,33 @@ export default function AdminDashboard() {
                   <div className="flex justify-between items-baseline pt-2 border-t border-gray-200 border-dashed">
                     <span className="text-[10px] font-black text-gray-900 uppercase tracking-widest">Net Payment</span>
                     <div className="text-right">
-                      <div className="font-black text-indigo-600 text-base sm:text-xl">৳{selectedOrder.amount.toLocaleString()}</div>
-                      <div className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Total Paid</div>
+                      <div className="font-black text-indigo-600 text-base sm:text-xl">
+                        ৳{(selectedOrder.netAmount || selectedOrder.amount).toLocaleString()}
+                      </div>
+                      <div className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">
+                        {selectedOrder.paymentStatus === 'paid' ? 'Total Paid' : 'Payable Amount'}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center justify-end gap-2 mt-4">
-                  <span className={cn(
-                    "px-2 sm:px-3 py-1.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm",
-                    selectedOrder.status === "completed" ? "bg-emerald-100 text-emerald-700" : 
-                    selectedOrder.status === "pending" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600"
-                  )}>
-                    {selectedOrder.status}
-                  </span>
+                  <div className="flex items-center justify-end gap-2 mt-4">
+                    <span className={cn(
+                      "px-2 sm:px-3 py-1.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm",
+                      selectedOrder.status === "completed" ? "bg-emerald-100 text-emerald-700" : 
+                      selectedOrder.status === "pending" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600"
+                    )}>
+                      {selectedOrder.status}
+                    </span>
+                  </div>
+                  {selectedOrder.status === "pending" && isActuallyAdmin && (
+                    <button 
+                      onClick={() => handleConfirmOrder(selectedOrder.id)}
+                      className="w-full mt-4 bg-indigo-600 text-white py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-2xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95"
+                    >
+                      Confirm Order
+                    </button>
+                  )}
                 </div>
-                {selectedOrder.status === "pending" && isActuallyAdmin && (
-                  <button 
-                    onClick={() => handleConfirmOrder(selectedOrder.id)}
-                    className="w-full mt-4 bg-indigo-600 text-white py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-2xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95"
-                  >
-                    Confirm Order
-                  </button>
-                )}
               </div>
             </div>
 
@@ -4760,23 +5213,37 @@ export default function AdminDashboard() {
             </div>
 
             <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 space-y-4">
-              <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Purchased Assets & Credentials</div>
+              <div className="flex justify-between items-center">
+                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Order Items & Assets</div>
+                <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest bg-white px-2 py-0.5 rounded-lg border border-gray-100 shadow-sm">
+                  {selectedOrder.items?.length || selectedOrder.productIds?.length || 1} { (selectedOrder.items?.length || 1) === 1 ? 'Item' : 'Items' }
+                </div>
+              </div>
               <div className="space-y-4">
-                {(selectedOrder.items || [{ id: selectedOrder.productIds?.[0], name: selectedOrder.productName }]).map((item: any, i: number) => {
+                {(selectedOrder.items || [{ id: selectedOrder.productIds?.[0], name: selectedOrder.productName, price: selectedOrder.amount + (selectedOrder.discountAmount || 0) }]).map((item: any, i: number) => {
                   const itemId = item.id || `legacy-${i}`;
                   return (
-                    <div key={i} className="bg-white p-4 rounded-xl border border-gray-200 space-y-4">
+                    <div key={i} className="bg-white p-4 rounded-xl border border-gray-200 space-y-4 shadow-sm hover:border-indigo-100 transition-colors">
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center">
-                            <Package className="w-4 h-4 text-indigo-600" />
+                          <div className={cn(
+                            "w-10 h-10 rounded-xl flex items-center justify-center transition-colors",
+                            "bg-indigo-50 text-indigo-600"
+                          )}>
+                            <Package className="w-5 h-5" />
                           </div>
-                          <span className="font-bold text-xs text-gray-900">{item.name || "Product"}</span>
+                          <div>
+                            <span className="font-black text-xs text-gray-900 block">{item.name || "Product Name"}</span>
+                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">SKU: {itemId.slice(-8).toUpperCase()}</span>
+                          </div>
                         </div>
-                        {item.price && <span className="font-mono font-bold text-xs text-gray-500">৳{item.price?.toLocaleString()}</span>}
+                        <div className="text-right">
+                          <span className="font-mono font-black text-sm text-gray-900 leading-none block">৳{Number(item.price || 0).toLocaleString()}</span>
+                          <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">Unit Price</span>
+                        </div>
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-3 pt-2">
+                      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-50">
                         <div className="space-y-1">
                           <label className="text-[9px] font-black text-gray-400 uppercase tracking-tighter pl-1">Login ID / User</label>
                           <input 
@@ -4856,7 +5323,7 @@ export default function AdminDashboard() {
                     try {
                       await deleteDoc(doc(db, "orders", selectedOrder.id));
                       await fetchOrders();
-                      setSelectedOrder(null);
+                      setSelectedOrderId(null);
                       alert("Order record deleted.");
                     } catch (e) {
                       console.error(e);
@@ -4874,7 +5341,7 @@ export default function AdminDashboard() {
                 Delete Record
               </button>
               <button 
-                onClick={() => setSelectedOrder(null)}
+                onClick={() => setSelectedOrderId(null)}
                 className="px-8 py-4 bg-gray-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-800 transition-all shadow-xl shadow-gray-200"
               >
                 Close View

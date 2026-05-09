@@ -38,9 +38,9 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
-    // Admin Logs (Super Admin Only)
+    // Admin Logs
     match /admin_logs/{logId} {
-      allow read: if isSuperAdmin();
+      allow read: if isModerator();
       allow create: if isModerator(); // Admins/Moderators can log their own actions
       allow update, delete: if false;
     }
@@ -50,10 +50,10 @@ service cloud.firestore {
       allow read: if true;
     }
 
-    // Pages (Super Admin Only)
+    // Pages
     match /pages/{pageId} {
       allow read: if true;
-      allow write: if isSuperAdmin();
+      allow write: if isAdmin();
     }
 
     // Users
@@ -75,7 +75,10 @@ service cloud.firestore {
     match /products/{productId} {
       allow read: if true;
       allow delete: if isAdmin();
-      allow update: if isAdmin() || (isModerator() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt', 'views']));
+      allow update: if isAdmin() || (isModerator() && (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt', 'views']) ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+      ));
       allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'reviewCount', 'updatedAt', 'views']);
       allow create: if isAdmin();
 
@@ -89,16 +92,16 @@ service cloud.firestore {
 
     // Coupons
     match /coupons/{couponId} {
-      allow list: if isModerator() || (isSignedIn() && resource.data.get('assignedEmail', '') == request.auth.token.email);
-      allow get: if isSignedIn();
-      allow write: if isAdmin();
+      allow list: if true;
+      allow get: if true;
+      allow write: if isModerator();
     }
 
     // Withdrawals
     match /withdrawals/{withdrawalId} {
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow read: if isModerator() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow update: if isAdmin();
+      allow update: if isModerator();
       allow delete: if isSuperAdmin();
     }
 
@@ -113,12 +116,13 @@ service cloud.firestore {
     // Affiliate Commissions
     match /commissions/{commissionId} {
       allow read: if isModerator() || (isSignedIn() && resource.data.affiliateId == request.auth.uid);
-      allow write: if isAdmin();
+      allow write: if isModerator();
     }
 
     // Revenue Statistics
     match /stats/{statId} {
-      allow read, write: if isAdmin();
+      allow read: if isModerator();
+      allow write: if isAdmin();
     }
 
     // Support Tickets
@@ -130,13 +134,13 @@ service cloud.firestore {
     // Categories
     match /categories/{categoryId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isModerator();
     }
 
     // Active Sessions
     match /active_sessions/{sessionId} {
-      allow list: if isAdmin();
-      allow get: if isAdmin();
+      allow list: if isModerator();
+      allow get: if isModerator();
       allow create, update: if true; // Allow guests and users to track presence
       allow delete: if true; // Sessions are short-lived
     }
