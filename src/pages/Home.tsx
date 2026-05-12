@@ -29,6 +29,8 @@ interface Product {
   id: string;
   name: string;
   price: number;
+  discountPrice?: number;
+  discountEnabled?: boolean;
   category: string;
   imageUrl?: string;
   description?: string;
@@ -144,7 +146,7 @@ export default function Home() {
                     {p.name}
                   </span>
                   <span className="text-xs sm:text-sm font-medium opacity-70">
-                    ৳{p.price.toLocaleString()}
+                    ৳{(p.discountEnabled && p.discountPrice && p.discountPrice < p.price ? p.discountPrice : p.price).toLocaleString()}
                   </span>
                   <div className="flex items-center gap-1 text-amber-300">
                     <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-current" />
@@ -437,6 +439,8 @@ function ProductCard({ product }: any) {
   const { settings } = useSettings();
   const { addToCart, items } = useCart();
   const isInCart = items.some(item => item.id === product.id);
+  const hasDiscount = product.discountEnabled && product.discountPrice && product.discountPrice < product.price;
+  const discountPercentage = hasDiscount ? Math.round(((product.price - product.discountPrice) / product.price) * 100) : 0;
 
   const getCategoryColor = (cat: string) => {
     switch (cat?.toLowerCase()) {
@@ -463,13 +467,22 @@ function ProductCard({ product }: any) {
             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
           />
         </Link>
-        <div className="absolute top-2 sm:top-4 left-2 sm:left-4">
+        <div className="absolute top-2 sm:top-4 left-2 sm:left-4 flex flex-col gap-2">
           <span className={cn(
             "px-2 sm:px-3 py-1 rounded-md sm:rounded-xl text-[7px] sm:text-[9px] font-black uppercase tracking-widest border shadow-sm backdrop-blur-md",
             getCategoryColor(product.category)
           )}>
             {product.category}
           </span>
+          {hasDiscount && (
+            <motion.span 
+              initial={{ x: -20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              className="bg-red-500 text-white px-2 sm:px-3 py-1 rounded-md sm:rounded-xl text-[7px] sm:text-[9px] font-black uppercase tracking-widest shadow-lg shadow-red-200"
+            >
+              {discountPercentage}% OFF
+            </motion.span>
+          )}
         </div>
       </div>
       
@@ -491,9 +504,16 @@ function ProductCard({ product }: any) {
         
         <div className="space-y-2 sm:space-y-4 pt-3 sm:pt-5 border-t border-gray-50">
           <div className="flex items-center justify-between">
-            <div className="text-sm sm:text-xl font-black text-gray-900 flex items-baseline gap-0.5 tracking-tighter">
-              <span className="text-[9px] sm:text-xs font-medium text-gray-400">৳</span>
-              {product.price.toLocaleString()}
+            <div className="flex flex-col">
+              {hasDiscount && (
+                <span className="text-[9px] sm:text-xs text-red-500 font-bold line-through opacity-70">
+                  ৳{product.price.toLocaleString()}
+                </span>
+              )}
+              <div className="text-sm sm:text-xl font-black text-gray-900 flex items-baseline gap-0.5 tracking-tighter">
+                <span className="text-[9px] sm:text-xs font-medium text-gray-400">৳</span>
+                {(hasDiscount ? product.discountPrice : product.price).toLocaleString()}
+              </div>
             </div>
             <div className="bg-emerald-50 px-1.5 py-0.5 rounded-md flex items-center gap-1">
                <ShieldCheck className="w-2.5 h-2.5 text-emerald-500" />

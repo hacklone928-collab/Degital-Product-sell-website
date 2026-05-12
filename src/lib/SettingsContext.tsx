@@ -5,6 +5,7 @@ import { handleFirestoreError, OperationType } from "./firestoreUtils";
 
 interface SiteSettings {
   siteName: string;
+  tabTitle?: string;
   heroTitle: string;
   heroSubtitle: string;
   footerText: string;
@@ -45,6 +46,11 @@ interface SiteSettings {
   enableStripe?: boolean;
   enableLocal?: boolean;
   enableCOD?: boolean;
+  enableBinancePay?: boolean;
+  binanceId?: string;
+  binanceQR?: string;
+  enablePayoneer?: boolean;
+  payoneerEmail?: string;
   heroBanners?: { id: string, imageUrl: string, title?: string, subtitle?: string, link?: string, buttonText?: string }[];
   hiddenCategories?: string[];
   cartText?: string;
@@ -65,10 +71,13 @@ interface SiteSettings {
   invoiceFooter?: string;
   invoiceNote?: string;
   tabPermissions?: Record<string, string[]>;
+  requireReviewApproval?: boolean;
+  showReviews?: boolean;
 }
 
 const defaultSettings: SiteSettings = {
   siteName: "DigiVault",
+  tabTitle: "DigiVault",
   heroTitle: "Premium Digital Assets for Makers",
   heroSubtitle: "Unlock your project's potential with high-quality software, plugins, and scripts.",
   footerText: "© 2026 DigiVault. All rights reserved.",
@@ -107,6 +116,11 @@ const defaultSettings: SiteSettings = {
   enableStripe: true,
   enableLocal: true,
   enableCOD: true,
+  enableBinancePay: false,
+  binanceId: "",
+  binanceQR: "",
+  enablePayoneer: false,
+  payoneerEmail: "",
   heroBanners: [],
   hiddenCategories: [],
   cartText: "Cart",
@@ -127,6 +141,8 @@ const defaultSettings: SiteSettings = {
   invoiceFooter: "Thank you for choosing our platform for your digital assets.",
   invoiceNote: "This is a computer generated invoice and does not require a physical signature.",
   tabPermissions: {},
+  requireReviewApproval: false,
+  showReviews: true,
 };
 
 const SettingsContext = createContext<{ settings: SiteSettings; loading: boolean }>({
@@ -146,8 +162,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         setSettings(mergedSettings);
         
         // Dynamic Title and Favicon
-        if (mergedSettings.siteName) {
-          document.title = mergedSettings.siteName;
+        if (mergedSettings.tabTitle || mergedSettings.siteName) {
+          document.title = mergedSettings.tabTitle || mergedSettings.siteName;
         }
         if (mergedSettings.faviconUrl) {
           let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");

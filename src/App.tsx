@@ -23,6 +23,7 @@ import MyProducts from "./pages/MyProducts";
 import Invoice from "./pages/Invoice";
 import Profile from "./pages/Profile";
 import Navbar from "./components/Navbar";
+import ScrollToTop from "./components/ScrollToTop";
 
 import { SettingsProvider, useSettings } from "./lib/SettingsContext";
 import { CartProvider } from "./lib/CartContext";
@@ -37,7 +38,7 @@ function AppContent() {
 
   useEffect(() => {
     if (settings) {
-      document.title = settings.siteName || "Digital Marketplace";
+      document.title = settings.tabTitle || settings.siteName || "Digital Marketplace";
       
       let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
       if (!link) {
@@ -114,6 +115,7 @@ function AppContent() {
 
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <AnimatePresence mode="wait">
         <motion.div 
           key="app-content"

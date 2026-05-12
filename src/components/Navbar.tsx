@@ -2,7 +2,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useState } from "react";
 import { auth } from "../lib/firebase";
 import { signOut, User } from "firebase/auth";
-import { ShoppingCart, User as UserIcon, LogOut, LayoutDashboard, Search, Trash2, ShoppingBag, X, ArrowRight, Grid } from "lucide-react";
+import { ShoppingCart, User as UserIcon, LogOut, LayoutDashboard, Search, Trash2, ShoppingBag, X, ArrowRight, Grid, Plus, Minus } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useSettings } from "../lib/SettingsContext";
 import { useCart } from "../lib/CartContext";
@@ -18,7 +18,7 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { settings } = useSettings();
-  const { totalItems, items, removeFromCart, totalPrice } = useCart();
+  const { totalItems, items, removeFromCart, updateQuantity, totalPrice } = useCart();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [navSearch, setNavSearch] = useState("");
@@ -246,7 +246,25 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
                             {item.planName}
                           </span>
                         )}
-                        <div className="pt-1 text-indigo-600 font-black text-xs sm:text-sm">৳{item.price.toLocaleString()}</div>
+                        <div className="flex items-center justify-between pt-2">
+                          <div className="text-indigo-600 font-black text-xs sm:text-sm">৳{item.price.toLocaleString()}</div>
+                          
+                          <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-0.5 border border-gray-100">
+                            <button 
+                              onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                              className="p-1 hover:bg-white hover:shadow-sm rounded-md text-gray-400 hover:text-indigo-600 transition-all"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="text-[10px] font-black text-gray-900 min-w-[14px] text-center">{item.quantity}</span>
+                            <button 
+                              onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                              className="p-1 hover:bg-white hover:shadow-sm rounded-md text-gray-400 hover:text-indigo-600 transition-all"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))

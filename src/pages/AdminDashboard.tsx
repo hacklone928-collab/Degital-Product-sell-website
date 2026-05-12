@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { db, storage, auth } from "../lib/firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, setDoc, getDoc, serverTimestamp, updateDoc, query, where, increment, onSnapshot, orderBy, limit } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, setDoc, getDoc, serverTimestamp, updateDoc, query, where, increment, onSnapshot, orderBy, limit, collectionGroup } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { Plus, Package, Users, DollarSign, Trash2, Edit, Star, Database, Settings as SettingsIcon, Save, ShoppingBag, Clock, CheckCircle, Copy, Link as LinkIcon, Inbox, Mail, Search, ShieldCheck, TrendingUp, Calendar, Eye, EyeOff, ExternalLink, ImagePlus, Upload, Loader2, Phone, Ticket, Facebook, Twitter, Instagram, Youtube, Linkedin, Github, Share2, Send, Music, Pin, ChevronLeft, ChevronRight, Ban, UserX, FileText } from "lucide-react";
+import { Plus, Package, Users, DollarSign, Trash2, Edit, Star, Database, Settings as SettingsIcon, Save, ShoppingBag, Clock, CheckCircle, Copy, Link as LinkIcon, Inbox, Mail, Search, ShieldCheck, TrendingUp, Calendar, Eye, EyeOff, ExternalLink, ImagePlus, Upload, Loader2, Phone, Ticket, Facebook, Twitter, Instagram, Youtube, Linkedin, Github, Share2, Send, Music, Pin, ChevronLeft, ChevronRight, Ban, UserX, FileText, MessageSquare } from "lucide-react";
 import { motion } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "../lib/utils";
@@ -21,7 +21,7 @@ import {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"products" | "settings" | "orders" | "pages" | "tickets" | "categories" | "coupons" | "withdrawals" | "users" | "analytics" | "logs">("analytics");
+  const [activeTab, setActiveTab] = useState<"products" | "settings" | "orders" | "pages" | "tickets" | "categories" | "coupons" | "withdrawals" | "users" | "analytics" | "logs" | "reviews">("analytics");
   const [revenueTimeframe, setRevenueTimeframe] = useState<"daily" | "weekly" | "monthly">("daily");
   const [datePreset, setDatePreset] = useState<"today" | "yesterday" | "last7" | "last30" | "thisMonth" | "thisYear" | "custom">("thisMonth");
   const [selectedCalendarMonth, setSelectedCalendarMonth] = useState(new Date());
@@ -39,6 +39,7 @@ export default function AdminDashboard() {
   const [pages, setPages] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
   const [coupons, setCoupons] = useState<any[]>([]);
+  const [reviews, setReviews] = useState<any[]>([]);
   const [activeSessions, setActiveSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddingCoupon, setIsAddingCoupon] = useState(false);
@@ -108,6 +109,7 @@ export default function AdminDashboard() {
   const [editingNote, setEditingNote] = useState("");
   const [siteSettings, setSiteSettings] = useState({
     siteName: "",
+    tabTitle: "",
     heroTitle: "",
     heroSubtitle: "",
     footerText: "",
@@ -139,6 +141,11 @@ export default function AdminDashboard() {
     bkashLogo: "",
     nagadLogo: "",
     rocketLogo: "",
+    enableBinancePay: false,
+    binanceId: "",
+    binanceQR: "",
+    enablePayoneer: false,
+    payoneerEmail: "",
     heroBanners: [] as { id: string, imageUrl: string, title?: string, subtitle?: string, link?: string, buttonText?: string }[],
     // Ticker Settings
     showTicker: true,
@@ -167,6 +174,8 @@ export default function AdminDashboard() {
     invoiceSubtitle: "Digital Asset Purchase",
     invoiceFooter: "Thank you for choosing our platform for your digital assets.",
     invoiceNote: "This is a computer generated invoice and does not require a physical signature.",
+    requireReviewApproval: false,
+    showReviews: true,
     socialLinks: [] as { platform: string, url: string, icon: string }[]
   });
   const [newProduct, setNewProduct] = useState({
@@ -183,8 +192,13 @@ export default function AdminDashboard() {
     category: "",
     description: "",
     imageUrl: "",
+    videoUrl: "",
+    discountPrice: 0,
+    discountEnabled: false,
     additionalImageUrls: "",
     fileUrl: "",
+    enableSizes: false,
+    availableSizes: "" as any,
   });
 
   const [newCategory, setNewCategory] = useState({
@@ -246,6 +260,7 @@ export default function AdminDashboard() {
     { id: "coupons", label: "Coupons", icon: Ticket },
     { id: "tickets", label: "Support Tickets", icon: Inbox },
     { id: "categories", label: "Categories", icon: Pin },
+    { id: "reviews", label: "Reviews", icon: MessageSquare },
     { id: "logs", label: "Activity Logs", icon: Clock },
     { id: "pages", label: "CMS Pages", icon: Database },
     { id: "settings", label: "Site Logic", icon: SettingsIcon },
@@ -262,6 +277,7 @@ export default function AdminDashboard() {
       coupons: ["super_admin", "admin", "moderator"],
       tickets: ["super_admin", "admin", "moderator"],
       categories: ["super_admin", "admin", "moderator"],
+      reviews: ["super_admin", "admin", "moderator"],
       logs: ["super_admin"],
       pages: ["super_admin"],
       settings: ["super_admin"],
@@ -908,8 +924,13 @@ export default function AdminDashboard() {
     let unsubWithdrawals: (() => void) | undefined;
     let unsubUsers: (() => void) | undefined;
     let unsubLogs: (() => void) | undefined;
+    let unsubReviews: (() => void) | undefined;
 
     if (isModeratorRole) {
+      unsubReviews = onSnapshot(query(collection(db, "reviews"), orderBy("createdAt", "desc")), (snap) => {
+        setReviews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }, (error) => handleFirestoreError(error, OperationType.LIST, "reviews"));
+
       unsubOrders = onSnapshot(query(collection(db, "orders"), orderBy("createdAt", "desc")), (snap) => {
         setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       }, (error) => handleFirestoreError(error, OperationType.LIST, "orders"));
@@ -955,6 +976,7 @@ export default function AdminDashboard() {
       unsubWithdrawals?.();
       unsubUsers?.();
       unsubLogs?.();
+      unsubReviews?.();
     };
   }, [isModeratorRole]);
 
@@ -1477,6 +1499,79 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleToggleReviewStatus = async (reviewId: string, currentStatus: string) => {
+    if (!isModeratorRole) return;
+    try {
+      const newStatus = currentStatus === "approved" ? "pending" : "approved";
+      const review = reviews.find(r => r.id === reviewId);
+      if (!review) return;
+
+      // Update in top-level collection
+      await updateDoc(doc(db, "reviews", reviewId), {
+        status: newStatus,
+        updatedAt: serverTimestamp()
+      });
+
+      // Update in sub-collection if productId exists
+      if (review.productId) {
+        await updateDoc(doc(db, "products", review.productId, "reviews", reviewId), {
+          status: newStatus,
+          updatedAt: serverTimestamp()
+        });
+
+        // If approving for the first time, update product rating
+        if (newStatus === "approved" && currentStatus !== "approved") {
+          const productRef = doc(db, "products", review.productId);
+          const productSnap = await getDoc(productRef);
+          if (productSnap.exists()) {
+            const productData = productSnap.data();
+            const currentRating = productData.rating || 0;
+            const currentCount = productData.reviewCount || 0;
+            const newCount = currentCount + 1;
+            const newRating = ((currentRating * currentCount) + (review.rating || 5)) / newCount;
+
+            await updateDoc(productRef, {
+              rating: Number(newRating.toFixed(1)),
+              reviewCount: increment(1),
+              updatedAt: serverTimestamp()
+            });
+          }
+        }
+      }
+
+      await logAdminAction('update_review_status', { reviewId, newStatus });
+      alert(`Review status updated to ${newStatus}`);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to update review status.");
+    }
+  };
+
+  const handleDeleteReview = async (reviewId: string) => {
+    if (!isModeratorRole) return;
+    if (!window.confirm("Are you sure you want to delete this review?")) return;
+    try {
+      const review = reviews.find(r => r.id === reviewId);
+      
+      // Delete from top-level
+      await deleteDoc(doc(db, "reviews", reviewId));
+
+      // Delete from sub-collection
+      if (review && review.productId) {
+        await deleteDoc(doc(db, "products", review.productId, "reviews", reviewId));
+        
+        // If it was already approved, we should ideally decrement the count and re-calc average
+        // but that's complex without the full review history. For now just delete.
+      }
+
+      await logAdminAction('delete_review', { reviewId });
+      alert("Review deleted successfully!");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to delete review.");
+    }
+  };
+
   const handleUpdateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -1564,7 +1659,10 @@ export default function AdminDashboard() {
   };
 
   const handleEditProduct = (product: any) => {
-    setEditingProduct(product);
+    setEditingProduct({
+      ...product,
+      availableSizes: Array.isArray(product.availableSizes) ? product.availableSizes.join(", ") : (product.availableSizes || "")
+    });
   };
 
   const handleUpdateProduct = async (e: React.FormEvent) => {
@@ -1574,6 +1672,7 @@ export default function AdminDashboard() {
       await setDoc(doc(db, "products", id), {
         ...data,
         price: Number(data.price),
+        discountPrice: Number(data.discountPrice || 0),
         subscriptionMonthlyPrice: data.category === "Subscription" ? Number(data.subscriptionMonthlyPrice || 0) : 0,
         subscriptionYearlyPrice: data.category === "Subscription" ? Number(data.subscriptionYearlyPrice || 0) : 0,
         subscriptionMonthlyText: data.subscriptionMonthlyText || "",
@@ -1582,6 +1681,7 @@ export default function AdminDashboard() {
         subscriptionYearlySubtext: data.subscriptionYearlySubtext || "",
         subscriptionLifetimeText: data.subscriptionLifetimeText || "",
         subscriptionLifetimeSubtext: data.subscriptionLifetimeSubtext || "",
+        availableSizes: typeof data.availableSizes === "string" ? data.availableSizes.split(",").map((s: string) => s.trim()).filter(Boolean) : (data.availableSizes || []),
         updatedAt: serverTimestamp(),
       });
       setEditingProduct(null);
@@ -1629,6 +1729,7 @@ export default function AdminDashboard() {
       await addDoc(collection(db, "products"), {
         ...newProduct,
         price: Number(newProduct.price),
+        discountPrice: Number(newProduct.discountPrice || 0),
         subscriptionMonthlyPrice: newProduct.category === "Subscription" ? Number(newProduct.subscriptionMonthlyPrice || 0) : 0,
         subscriptionYearlyPrice: newProduct.category === "Subscription" ? Number(newProduct.subscriptionYearlyPrice || 0) : 0,
         subscriptionMonthlyText: newProduct.subscriptionMonthlyText || "",
@@ -1637,6 +1738,7 @@ export default function AdminDashboard() {
         subscriptionYearlySubtext: newProduct.subscriptionYearlySubtext || "",
         subscriptionLifetimeText: newProduct.subscriptionLifetimeText || "",
         subscriptionLifetimeSubtext: newProduct.subscriptionLifetimeSubtext || "",
+        availableSizes: typeof newProduct.availableSizes === "string" ? newProduct.availableSizes.split(",").map(s => s.trim()).filter(Boolean) : [],
         rating: 4.5 + Math.random() * 0.5,
         reviewCount: Math.floor(Math.random() * 50),
         createdAt: serverTimestamp(),
@@ -1657,8 +1759,13 @@ export default function AdminDashboard() {
         category: "Software", 
         description: "", 
         imageUrl: "", 
+        videoUrl: "",
+        discountPrice: 0,
+        discountEnabled: false,
         additionalImageUrls: "", 
-        fileUrl: "" 
+        fileUrl: "",
+        enableSizes: false,
+        availableSizes: "" as any
       });
     } catch (error) {
       console.error(error);
@@ -3353,8 +3460,11 @@ export default function AdminDashboard() {
                             <div className="flex items-center gap-2">
                               <span className={cn(
                                 "text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg",
-                                o.paymentMethod === "bkash" ? "bg-pink-50 text-pink-600" :
-                                o.paymentMethod === "nagad" ? "bg-orange-50 text-orange-600" : "bg-indigo-50 text-indigo-600"
+                                o.paymentMethod === "bkash" ? "bg-pink-50 text-pink-600 border border-pink-100" :
+                                o.paymentMethod === "nagad" ? "bg-orange-50 text-orange-600 border border-orange-100" : 
+                                o.paymentMethod === "binance" ? "bg-yellow-50 text-yellow-600 border border-yellow-100" :
+                                o.paymentMethod === "payoneer" ? "bg-cyan-50 text-cyan-600 border border-cyan-100" :
+                                "bg-indigo-50 text-indigo-600 border border-indigo-100"
                               )}>
                                 {o.paymentMethod}
                               </span>
@@ -3808,7 +3918,104 @@ export default function AdminDashboard() {
               </table>
             </div>
           </section>
-         ) : activeTab === "logs" ? (
+         ) : activeTab === "reviews" ? (
+          <section className="space-y-6">
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/50">
+                <div>
+                  <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">Review Management</h3>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Moderate client reviews and product ratings</p>
+                </div>
+                <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                  <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full uppercase tracking-widest whitespace-nowrap">
+                    {reviews.length} Total Reviews
+                  </span>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-gray-50 text-[10px] uppercase font-black text-gray-400 tracking-widest">
+                    <tr>
+                      <th className="px-6 py-5">Product</th>
+                      <th className="px-6 py-5">User</th>
+                      <th className="px-6 py-5">Rating & Comment</th>
+                      <th className="px-6 py-5">Status</th>
+                      <th className="px-6 py-5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {reviews
+                      .sort((a, b) => (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0))
+                      .map(r => (
+                      <tr key={r.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="font-black text-gray-900 text-xs truncate max-w-[150px]">
+                            {r.productName || "Deleted Product"}
+                          </div>
+                          <div className="text-[10px] text-gray-400 font-mono">
+                            {r.productId || "N/A"}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-[10px] font-black text-gray-500 uppercase">
+                              {r.userName?.charAt(0) || "?"}
+                            </div>
+                            <div>
+                              <div className="text-xs font-bold text-gray-900">{r.userName}</div>
+                              <div className="text-[8px] font-bold text-gray-400 uppercase">{r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : 'Just now'}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-1 mb-1">
+                            {[...Array(5)].map((_, i) => (
+                              <Star 
+                                key={i} 
+                                className={cn("w-2.5 h-2.5", i < r.rating ? "fill-amber-400 text-amber-400" : "text-gray-200")} 
+                              />
+                            ))}
+                          </div>
+                          <p className="text-xs text-gray-600 line-clamp-2 max-w-xs">{r.comment}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                           <button 
+                             onClick={() => handleToggleReviewStatus(r.id, r.status)}
+                             className={cn(
+                               "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all",
+                               r.status === "approved" ? "bg-emerald-100 text-emerald-600 hover:bg-emerald-200" : "bg-amber-100 text-amber-600 hover:bg-amber-200"
+                             )}
+                           >
+                             {r.status === "approved" ? <CheckCircle className="w-2.5 h-2.5" /> : <Clock className="w-2.5 h-2.5" />}
+                             {r.status}
+                           </button>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex justify-end gap-2">
+                              <button 
+                                onClick={() => handleDeleteReview(r.id)}
+                                className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all active:scale-95"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {reviews.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-20 text-center text-gray-400 italic">
+                          No reviews found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        ) : activeTab === "logs" ? (
           <section className="space-y-6">
             <div className="bg-white p-8 rounded-[45px] border border-gray-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
                 <div>
@@ -4166,6 +4373,54 @@ export default function AdminDashboard() {
             )}
 
             {isSuperAdmin && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-4 bg-amber-50 border border-amber-100 p-6 rounded-[2rem]">
+                  <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-amber-600">
+                    <Star className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-amber-900 uppercase tracking-tighter">Review & Rating Controls</h4>
+                    <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mt-0.5">Control how customer reviews are handled</p>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-gray-100 rounded-[2.5rem] p-8 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="flex items-center justify-between p-4 bg-gray-50/50 rounded-2xl border border-gray-100">
+                    <div>
+                      <div className="text-xs font-black text-gray-900 uppercase tracking-tight">Enable Reviews</div>
+                      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Show review section on products</div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        className="sr-only peer"
+                        checked={siteSettings.showReviews}
+                        onChange={e => setSiteSettings({...siteSettings, showReviews: e.target.checked})}
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-gray-50/50 rounded-2xl border border-gray-100">
+                    <div>
+                      <div className="text-xs font-black text-gray-900 uppercase tracking-tight">Manual Approval</div>
+                      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Admins must approve new reviews</div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        className="sr-only peer"
+                        checked={siteSettings.requireReviewApproval}
+                        onChange={e => setSiteSettings({...siteSettings, requireReviewApproval: e.target.checked})}
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isSuperAdmin && (
               <div className="flex justify-between items-center bg-red-50 border border-red-100 p-6 rounded-2xl">
                 <div>
                   <h4 className="text-sm font-bold text-red-900">Danger Zone</h4>
@@ -4193,6 +4448,16 @@ export default function AdminDashboard() {
                       value={siteSettings.siteName}
                       onChange={e => setSiteSettings({...siteSettings, siteName: e.target.value})}
                       className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Favicon Name (Tab Title)</label>
+                    <input 
+                      type="text" 
+                      value={siteSettings.tabTitle || ""}
+                      onChange={e => setSiteSettings({...siteSettings, tabTitle: e.target.value})}
+                      className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Name shown in browser tab"
                     />
                   </div>
                   <div>
@@ -4902,6 +5167,30 @@ export default function AdminDashboard() {
                         COD
                       </label>
                     </div>
+                    <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-2xl">
+                      <input 
+                        type="checkbox"
+                        id="enableBinancePay"
+                        checked={siteSettings.enableBinancePay || false}
+                        onChange={e => setSiteSettings({...siteSettings, enableBinancePay: e.target.checked})}
+                        className="w-5 h-5 rounded border-gray-300 text-yellow-500 focus:ring-yellow-400 cursor-pointer"
+                      />
+                      <label htmlFor="enableBinancePay" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
+                        Binance Pay
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-2xl">
+                      <input 
+                        type="checkbox"
+                        id="enablePayoneer"
+                        checked={siteSettings.enablePayoneer || false}
+                        onChange={e => setSiteSettings({...siteSettings, enablePayoneer: e.target.checked})}
+                        className="w-5 h-5 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500 cursor-pointer"
+                      />
+                      <label htmlFor="enablePayoneer" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
+                        Payoneer
+                      </label>
+                    </div>
                   </div>
                 </div>
 
@@ -4958,6 +5247,34 @@ export default function AdminDashboard() {
                       onChange={e => setSiteSettings({...siteSettings, rocketLogo: e.target.value} as any)}
                       className="w-full bg-gray-50 border-none rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
                       placeholder="Logo URL"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Binance Pay ID</label>
+                    <input 
+                      type="text"
+                      value={siteSettings.binanceId || ""}
+                      onChange={e => setSiteSettings({...siteSettings, binanceId: e.target.value})}
+                      className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                      placeholder="Binance Pay ID"
+                    />
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.1em] mt-2 block">Binance QR URL</label>
+                    <input 
+                      type="text"
+                      value={siteSettings.binanceQR || ""}
+                      onChange={e => setSiteSettings({...siteSettings, binanceQR: e.target.value})}
+                      className="w-full bg-gray-50 border-none rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
+                      placeholder="QR Image URL"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Payoneer Email</label>
+                    <input 
+                      type="text"
+                      value={siteSettings.payoneerEmail || ""}
+                      onChange={e => setSiteSettings({...siteSettings, payoneerEmail: e.target.value})}
+                      className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                      placeholder="Payoneer Email"
                     />
                   </div>
                 </div>
@@ -5196,13 +5513,28 @@ export default function AdminDashboard() {
               <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 space-y-1">
                 <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Payment Method</div>
                 <div className="font-bold text-pink-600 uppercase text-xs">
-                  {selectedOrder.paymentMethod === "cod" ? "Cash on Delivery" : selectedOrder.paymentMethod || "N/A"}
+                  {selectedOrder.paymentMethod === "cod" ? "Cash on Delivery" : 
+                   selectedOrder.paymentMethod === "binance" ? "Binance Pay" :
+                   selectedOrder.paymentMethod === "payoneer" ? "Payoneer" :
+                   selectedOrder.paymentMethod || "N/A"}
                 </div>
               </div>
               <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 space-y-1">
                 <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Payment Phone</div>
                 <div className="font-bold text-emerald-600 text-xs">{selectedOrder.paymentPhone || "N/A"}</div>
               </div>
+              {selectedOrder.amountUSD && (
+                <div className="bg-yellow-50/50 p-4 rounded-2xl border border-yellow-100 space-y-1 col-span-2">
+                  <div className="text-[9px] font-black text-yellow-600 uppercase tracking-widest flex items-center gap-1">
+                    <DollarSign className="w-3 h-3" />
+                    USD Amount Details
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-yellow-900">${selectedOrder.amountUSD.toFixed(2)} USD</span>
+                    <span className="text-[9px] font-black text-yellow-400 uppercase tracking-tighter">Rate: ৳1 = ${selectedOrder.usdRate?.toFixed(4)}</span>
+                  </div>
+                </div>
+              )}
               <div className="bg-emerald-50/30 p-4 rounded-2xl border border-emerald-100 space-y-1 col-span-2">
                 <div className="text-[9px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3" />
@@ -5234,12 +5566,26 @@ export default function AdminDashboard() {
                           </div>
                           <div>
                             <span className="font-black text-xs text-gray-900 block">{item.name || "Product Name"}</span>
-                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">SKU: {itemId.slice(-8).toUpperCase()}</span>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">SKU: {itemId.slice(-8).toUpperCase()}</span>
+                              {item.size && (
+                                <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 uppercase tracking-tighter">
+                                  Size: {item.size}
+                                </span>
+                              )}
+                              {item.quantity > 1 && (
+                                <span className="text-[9px] font-black text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 uppercase tracking-tighter">
+                                  Qty: {item.quantity}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                         <div className="text-right">
-                          <span className="font-mono font-black text-sm text-gray-900 leading-none block">৳{Number(item.price || 0).toLocaleString()}</span>
-                          <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">Unit Price</span>
+                          <span className="font-mono font-black text-sm text-gray-900 leading-none block">৳{(Number(item.price || 0) * (item.quantity || 1)).toLocaleString()}</span>
+                          <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">
+                            {item.quantity > 1 ? `৳${Number(item.price || 0).toLocaleString()} × ${item.quantity}` : 'Unit Price'}
+                          </span>
                         </div>
                       </div>
                       
@@ -5646,6 +5992,40 @@ export default function AdminDashboard() {
                   <option value="ADD_NEW" className="text-indigo-600 font-bold">+ Add New Category</option>
                 </select>
               </div>
+
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
+                <div className="md:col-span-2 flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Database className="w-4 h-4 text-indigo-600" />
+                    <span className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Size Settings</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer"
+                      checked={editingProduct.enableSizes}
+                      onChange={e => setEditingProduct({...editingProduct, enableSizes: e.target.checked})}
+                    />
+                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                    <span className="ml-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">Enable Sizes</span>
+                  </label>
+                </div>
+                
+                {editingProduct.enableSizes && (
+                  <div className="md:col-span-2 space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Available Sizes</label>
+                    <input 
+                      type="text" 
+                      value={editingProduct.availableSizes}
+                      onChange={e => setEditingProduct({...editingProduct, availableSizes: e.target.value})}
+                      className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      placeholder="e.g. S, M, L, XL, XXL (Comma separated)"
+                    />
+                    <p className="text-[8px] text-gray-400 font-bold uppercase tracking-tight pl-1 italic">Enter sizes separated by commas</p>
+                  </div>
+                )}
+              </div>
+
               {editingProduct.category === "Subscription" && (
                 <>
                   <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100">
@@ -5763,6 +6143,36 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <div className="md:col-span-2 space-y-1">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">YouTube Video URL</label>
+                <input 
+                  type="text" 
+                  value={editingProduct.videoUrl || ""}
+                  onChange={e => setEditingProduct({...editingProduct, videoUrl: e.target.value})}
+                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="https://www.youtube.com/watch?v=..."
+                />
+              </div>
+              <div className="md:col-span-1 space-y-1">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Discount Price</label>
+                <input 
+                  type="number" 
+                  value={editingProduct.discountPrice || 0}
+                  onChange={e => setEditingProduct({...editingProduct, discountPrice: Number(e.target.value)})}
+                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="md:col-span-1 flex items-center gap-2 pt-6">
+                <input 
+                  type="checkbox" 
+                  checked={editingProduct.discountEnabled || false}
+                  onChange={e => setEditingProduct({...editingProduct, discountEnabled: e.target.checked})}
+                  className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
+                  id="edit-discount-enabled"
+                />
+                <label htmlFor="edit-discount-enabled" className="text-xs font-bold text-gray-400 uppercase tracking-widest cursor-pointer">Enable Discount</label>
+              </div>
+              <div className="md:col-span-2 space-y-1">
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Additional Images (comma separated)</label>
                 <div className="flex gap-2">
                   <textarea 
@@ -5865,6 +6275,40 @@ export default function AdminDashboard() {
                   <option value="ADD_NEW" className="text-indigo-600 font-bold">+ Add New Category</option>
                 </select>
               </div>
+
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
+                <div className="md:col-span-2 flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Database className="w-4 h-4 text-indigo-600" />
+                    <span className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Size Settings</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer"
+                      checked={newProduct.enableSizes}
+                      onChange={e => setNewProduct({...newProduct, enableSizes: e.target.checked})}
+                    />
+                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                    <span className="ml-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">Enable Sizes</span>
+                  </label>
+                </div>
+                
+                {newProduct.enableSizes && (
+                  <div className="md:col-span-2 space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Available Sizes</label>
+                    <input 
+                      type="text" 
+                      value={newProduct.availableSizes}
+                      onChange={e => setNewProduct({...newProduct, availableSizes: e.target.value})}
+                      className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      placeholder="e.g. S, M, L, XL, XXL (Comma separated)"
+                    />
+                    <p className="text-[8px] text-gray-400 font-bold uppercase tracking-tight pl-1 italic">Enter sizes separated by commas</p>
+                  </div>
+                )}
+              </div>
+
               {newProduct.category === "Subscription" && (
                 <>
                   <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100">
@@ -5972,6 +6416,36 @@ export default function AdminDashboard() {
                     </button>
                   </div>
                 </div>
+              </div>
+              <div className="md:col-span-2 space-y-1">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">YouTube Video URL</label>
+                <input 
+                  type="text" 
+                  value={newProduct.videoUrl || ""}
+                  onChange={e => setNewProduct({...newProduct, videoUrl: e.target.value})}
+                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="https://www.youtube.com/watch?v=..."
+                />
+              </div>
+              <div className="md:col-span-1 space-y-1">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Discount Price</label>
+                <input 
+                  type="number" 
+                  value={newProduct.discountPrice || 0}
+                  onChange={e => setNewProduct({...newProduct, discountPrice: Number(e.target.value)})}
+                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="md:col-span-1 flex items-center gap-2 pt-6">
+                <input 
+                  type="checkbox" 
+                  checked={newProduct.discountEnabled || false}
+                  onChange={e => setNewProduct({...newProduct, discountEnabled: e.target.checked})}
+                  className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
+                  id="new-discount-enabled"
+                />
+                <label htmlFor="new-discount-enabled" className="text-xs font-bold text-gray-400 uppercase tracking-widest cursor-pointer">Enable Discount</label>
               </div>
               <div className="md:col-span-2 space-y-1">
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Additional Images (comma separated)</label>

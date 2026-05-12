@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { doc, getDoc, updateDoc, increment, serverTimestamp, collection, addDoc, onSnapshot, query, orderBy, limit } from "firebase/firestore";
+import { doc, getDoc, updateDoc, increment, serverTimestamp, collection, addDoc, onSnapshot, query, orderBy, limit, where, setDoc } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
 import { handleFirestoreError, OperationType } from "../lib/firestoreUtils";
-import { Star, ShieldCheck, Download, Zap, Share2, Heart, ArrowLeft, CheckCircle2, ShoppingCart, CheckCircle, MessageSquare, Info, Settings, Users, StarHalf, Maximize2, Minimize2, RotateCcw, Box, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Star, ShieldCheck, Download, Zap, Share2, Heart, ArrowLeft, CheckCircle2, ShoppingCart, CheckCircle, MessageSquare, Info, Settings, Users, StarHalf, Maximize2, Minimize2, RotateCcw, Box, ChevronLeft, ChevronRight, X, Youtube } from "lucide-react";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "motion/react";
 import { cn } from "../lib/utils";
 import { useCart } from "../lib/CartContext";
@@ -23,11 +23,13 @@ interface Product {
   id: string;
   name: string;
   price: number;
-  // ... other fields
+  discountPrice?: number;
+  discountEnabled?: boolean;
   description: string;
   category: string;
   tags?: string[];
   imageUrl?: string;
+  videoUrl?: string;
   additionalImageUrls?: string;
   rating?: number;
   reviewCount?: number;
@@ -48,38 +50,53 @@ export default function ProductDetail() {
   const [hoverRating, setHoverRating] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { addToCart, items } = useCart();
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [quantity, setQuantity] = useState(1);
+  const [sizeError, setSizeError] = useState(false);
 
   const [selectedPlan, setSelectedPlan] = useState<"lifetime" | "monthly" | "yearly">("lifetime");
 
   const activeCartId = product 
     ? (product.category === "Subscription" && selectedPlan !== "lifetime" 
       ? `${product.id}_${selectedPlan}` 
-      : product.id)
+      : (selectedSize ? `${product.id}_${selectedSize.toLowerCase()}` : product.id))
     : "";
 
   const isInCart = items.some(item => item.id === activeCartId);
 
   const getActivePrice = () => {
     if (!product) return 0;
-    if (product.category !== "Subscription") return product.price;
+    
+    // Check for discount first (for non-subscription or lifetime)
+    const basePrice = (product.discountEnabled && product.discountPrice && product.discountPrice < product.price) 
+      ? product.discountPrice 
+      : product.price;
+
+    if (product.category !== "Subscription") return basePrice;
     if (selectedPlan === "monthly") return product.subscriptionMonthlyPrice || 0;
     if (selectedPlan === "yearly") return product.subscriptionYearlyPrice || 0;
-    return product.price;
+    return basePrice;
   };
 
   const handleAddToCart = () => {
     if (!product) return;
-    if (product.category === "Subscription" && selectedPlan !== "lifetime") {
-      const price = getActivePrice();
-      const planName = selectedPlan === "monthly" ? "Monthly" : "Yearly";
-      addToCart(product, price, planName);
-    } else {
-      addToCart(product);
+    if (product.enableSizes && !selectedSize) {
+      setSizeError(true);
+      return;
     }
+    
+    const price = getActivePrice();
+    const planName = product.category === "Subscription" ? (selectedPlan === "monthly" ? "Monthly" : selectedPlan === "yearly" ? "Yearly" : "Lifetime") : undefined;
+    
+    addToCart(product, price, planName, selectedSize || undefined, quantity);
   };
 
   const handleBuyNow = () => {
     if (!product) return;
+    if (product.enableSizes && !selectedSize) {
+      setSizeError(true);
+      return;
+    }
     handleAddToCart();
     navigate("/cart-checkout");
   };
@@ -140,6 +157,7 @@ export default function ProductDetail() {
     // Real-time reviews
     const reviewsQuery = query(
       collection(db, "products", id, "reviews"),
+      where("status", "==", "approved"),
       orderBy("createdAt", "desc"),
       limit(50)
     );
@@ -181,30 +199,40 @@ export default function ProductDetail() {
         userId: auth.currentUser.uid,
         userName: auth.currentUser.displayName || auth.currentUser.email?.split('@')[0] || "Anonymous",
         userAvatar: auth.currentUser.photoURL || "",
+        productId: product.id,
+        productName: product.name,
         rating: userRating,
         comment: newReviewComment.trim(),
+        status: settings.requireReviewApproval ? "pending" : "approved",
         createdAt: serverTimestamp()
       };
 
-      // Add review
-      await addDoc(collection(db, "products", product.id, "reviews"), reviewData);
+      // Add review to subcollection
+      const reviewRef = await addDoc(collection(db, "products", product.id, "reviews"), reviewData);
+      
+      // Also sync to top-level reviews collection for easier admin management
+      await setDoc(doc(db, "reviews", reviewRef.id), reviewData);
 
-      // Update product rating average
-      const productRef = doc(db, "products", product.id);
-      const currentRating = product.rating || 0;
-      const currentCount = product.reviewCount || 0;
-      const newCount = currentCount + 1;
-      const newRating = ((currentRating * currentCount) + userRating) / newCount;
+      if (!settings.requireReviewApproval) {
+        // Update product rating average (only if auto-approved)
+        const productRef = doc(db, "products", product.id);
+        const currentRating = product.rating || 0;
+        const currentCount = product.reviewCount || 0;
+        const newCount = currentCount + 1;
+        const newRating = ((currentRating * currentCount) + userRating) / newCount;
 
-      await updateDoc(productRef, {
-        rating: Number(newRating.toFixed(1)),
-        reviewCount: increment(1),
-        updatedAt: serverTimestamp()
-      });
+        await updateDoc(productRef, {
+          rating: Number(newRating.toFixed(1)),
+          reviewCount: increment(1),
+          updatedAt: serverTimestamp()
+        });
+        alert("Review submitted successfully!");
+      } else {
+        alert("Review submitted and is awaiting approval.");
+      }
 
       setNewReviewComment("");
       setUserRating(5);
-      alert("Review submitted successfully!");
     } catch (error) {
       console.error("Error submitting review:", error);
       alert("Failed to submit review.");
@@ -348,8 +376,8 @@ export default function ProductDetail() {
           </div>
 
           {/* Thumbnails */}
-          {!is360Mode && allImages.length > 1 && (
-            <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar items-center justify-center">
+          {!is360Mode && (allImages.length > 1 || product.videoUrl) && (
+            <div className="flex flex-wrap gap-4 items-center justify-center pt-2">
               {allImages.map((img, i) => (
                 <button 
                   key={i} 
@@ -362,6 +390,29 @@ export default function ProductDetail() {
                   <img src={img} className="w-full h-full object-contain rounded-xl sm:rounded-[1rem]" />
                 </button>
               ))}
+
+              {product.videoUrl && (
+                <div className="w-full mt-4 max-w-sm mx-auto">
+                  <div className="flex items-center gap-2 mb-3 pl-1">
+                    <Youtube className="w-4 h-4 text-red-600" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Watch Product Video</span>
+                  </div>
+                  <div className="aspect-video w-full rounded-2xl sm:rounded-3xl overflow-hidden bg-black border-4 border-white shadow-xl shadow-indigo-100/30">
+                    <iframe 
+                      className="w-full h-full"
+                      src={`https://www.youtube.com/embed/${(() => {
+                        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+                        const match = product.videoUrl.match(regExp);
+                        return (match && match[2].length === 11) ? match[2] : product.videoUrl;
+                      })()}`}
+                      title="Product Video"
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    ></iframe>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </motion.div>
@@ -377,6 +428,11 @@ export default function ProductDetail() {
               <span className="bg-indigo-50 text-indigo-600 text-[9px] sm:text-[10px] font-black px-3 py-1 rounded-lg uppercase tracking-widest border border-indigo-100">
                 {product.category}
               </span>
+              {product.discountEnabled && product.discountPrice && product.discountPrice < product.price && (
+                <span className="bg-red-500 text-white text-[9px] sm:text-[10px] font-black px-3 py-1 rounded-lg uppercase tracking-widest shadow-lg shadow-red-200">
+                  {Math.round(((product.price - product.discountPrice) / product.price) * 100)}% OFF
+                </span>
+              )}
               <div className="flex items-center gap-1.5 text-amber-400">
                 <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current" />
                 <span className="text-xs sm:text-sm font-black text-gray-900">{product.rating || 0}</span>
@@ -475,14 +531,83 @@ export default function ProductDetail() {
                 <span className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">
                   Total Investment
                 </span>
-                <div className="text-2xl sm:text-5xl font-black text-gray-900 flex items-baseline gap-1 tracking-tighter">
-                  <span className="text-xs sm:text-xl font-medium text-gray-400">৳</span>
-                  {getActivePrice().toLocaleString()}
+                <div className="flex flex-col">
+                  {product.discountEnabled && product.discountPrice && product.discountPrice < product.price && (selectedPlan === "lifetime" || product.category !== "Subscription") && (
+                    <span className="text-xs sm:text-base text-red-500 font-bold line-through opacity-70">
+                      ৳{product.price.toLocaleString()}
+                    </span>
+                  )}
+                  <div className="text-2xl sm:text-5xl font-black text-gray-900 flex items-baseline gap-1 tracking-tighter">
+                    <span className="text-xs sm:text-xl font-medium text-gray-400">৳</span>
+                    {getActivePrice().toLocaleString()}
+                  </div>
                 </div>
               </div>
               <div className="bg-amber-50 px-3 py-2 sm:px-5 sm:py-3 rounded-xl border border-amber-100 flex flex-col items-center">
                 <Zap className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-amber-500 fill-current mb-0.5" />
                 <span className="text-[7px] sm:text-[9px] font-black uppercase tracking-widest text-amber-700">Instant</span>
+              </div>
+            </div>
+
+            {/* Size and Quantity Selection */}
+            <div className="space-y-6 pt-4 sm:pt-6 border-t border-gray-50">
+              {/* Size Selector */}
+              {product.enableSizes && product.availableSizes && product.availableSizes.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center px-1">
+                    <label className={cn(
+                      "text-[9px] font-black uppercase tracking-widest transition-colors",
+                      sizeError ? "text-red-500" : "text-gray-400"
+                    )}>
+                      Select Size {sizeError && "(Required)"}
+                    </label>
+                    <button className="text-[9px] font-black text-indigo-600 uppercase tracking-widest hover:underline">Size Guide</button>
+                  </div>
+                  <div className="flex flex-wrap gap-2.5">
+                    {product.availableSizes.map((size: string) => (
+                      <button
+                        key={size}
+                        onClick={() => {
+                          setSelectedSize(size);
+                          setSizeError(false);
+                        }}
+                        className={cn(
+                          "w-12 h-12 rounded-xl border-2 font-black transition-all active:scale-95 flex items-center justify-center text-sm",
+                          selectedSize === size 
+                            ? "border-indigo-600 bg-indigo-50 text-indigo-600 shadow-md shadow-indigo-100" 
+                            : "border-gray-50 bg-gray-50/50 text-gray-400 hover:border-gray-100"
+                        )}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quantity Selector */}
+              <div className="space-y-3">
+                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Quantity</label>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center bg-gray-50 rounded-2xl p-1 border border-gray-100">
+                    <button 
+                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                      className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white hover:shadow-sm transition-all text-gray-400 font-black text-lg"
+                    >
+                      -
+                    </button>
+                    <span className="w-12 text-center font-black text-gray-900 text-sm">
+                      {quantity}
+                    </span>
+                    <button 
+                      onClick={() => setQuantity(quantity + 1)}
+                      className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white hover:shadow-sm transition-all text-gray-400 font-black text-lg"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">Minimum weight available</span>
+                </div>
               </div>
             </div>
 

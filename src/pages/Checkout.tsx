@@ -5,7 +5,7 @@ import { doc, getDoc, collection, addDoc, serverTimestamp, query, where, getDocs
 import { auth, db } from "../lib/firebase";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
-import { ShieldCheck, Lock, CreditCard, ArrowLeft, Loader2, PackageCheck, Wallet, ShoppingBag, Check, Copy, CheckCircle } from "lucide-react";
+import { ShieldCheck, Lock, CreditCard, ArrowLeft, Loader2, PackageCheck, Wallet, ShoppingBag, Check, Copy, CheckCircle, DollarSign, Inbox, Plus, Minus, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../lib/utils";
 import { useCart } from "../lib/CartContext";
@@ -57,15 +57,18 @@ interface Product {
   id: string;
   name: string;
   price: number;
+  originalPrice?: number;
   imageUrl?: string;
+  quantity: number;
+  size?: string;
 }
 
-type PaymentGateway = "stripe" | "local";
+type PaymentGateway = "stripe" | "local" | "binance" | "payoneer";
 
 export default function Checkout({ user, isCartCheckout }: { user: User | null, isCartCheckout?: boolean }) {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { items: cartItems, totalPrice: cartTotal, clearCart } = useCart();
+  const { items: cartItems, totalPrice: cartTotal, clearCart, updateQuantity, removeFromCart } = useCart();
   const { settings } = useSettings();
   const [products, setProducts] = useState<Product[]>([]);
   const [clientSecret, setClientSecret] = useState("");
@@ -79,6 +82,29 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
   const [appliedCoupon, setAppliedCoupon] = useState<any | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
+  const [usdRate, setUsdRate] = useState<number>(0.0091); // Default fallback
+
+  useEffect(() => {
+    if (isCartCheckout && !loading && cartItems.length === 0 && !isSuccess) {
+      navigate("/");
+    }
+  }, [cartItems.length, isCartCheckout, loading, isSuccess, navigate]);
+
+  useEffect(() => {
+    const fetchUsdRate = async () => {
+      try {
+        const res = await fetch("https://api.exchangerate-api.com/v4/latest/BDT");
+        const data = await res.json();
+        if (data && data.rates && data.rates.USD) {
+          setUsdRate(data.rates.USD);
+          console.log("Live BDT to USD Rate:", data.rates.USD);
+        }
+      } catch (error) {
+        console.error("Error fetching USD rate:", error);
+      }
+    };
+    fetchUsdRate();
+  }, []);
 
   // Set default payment method based on settings
   useEffect(() => {
@@ -154,7 +180,7 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
             return;
           }
           checkoutProducts = validCartItems;
-          totalAmount = validCartItems.reduce((sum, item) => sum + item.price, 0);
+          totalAmount = validCartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
         } else {
           const prodDoc = await getDoc(doc(db, "products", id!));
           if (prodDoc.exists()) {
@@ -316,14 +342,20 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Order Summary</div>
                <div className="space-y-4">
                  {products.map(p => (
-                   <div key={p.id} className="flex justify-between items-center">
+                   <div key={`${p.id}-${p.size}`} className="flex justify-between items-center">
                      <div className="flex items-center gap-3">
-                       <div className="w-10 h-10 rounded-lg bg-white border border-gray-100 flex items-center justify-center p-1">
+                       <div className="w-10 h-10 rounded-lg bg-white border border-gray-100 flex items-center justify-center p-1 relative">
                          <img src={p.imageUrl || "/placeholder.jpg"} className="w-full h-full object-cover rounded-md" />
+                         <span className="absolute -top-1.5 -right-1.5 bg-indigo-600 text-white text-[7px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center shadow-sm">
+                           {p.quantity}
+                         </span>
                        </div>
-                       <span className="text-sm font-bold text-gray-800">{p.name}</span>
+                       <div className="flex flex-col">
+                         <span className="text-xs font-bold text-gray-800">{p.name}</span>
+                         {p.size && <span className="text-[8px] font-black text-indigo-500 uppercase tracking-tighter">Size: {p.size}</span>}
+                       </div>
                      </div>
-                     <span className="text-sm font-mono font-bold text-gray-500">৳{p.price.toLocaleString()}</span>
+                     <span className="text-xs font-mono font-bold text-gray-500">৳{(p.price * p.quantity).toLocaleString()}</span>
                    </div>
                  ))}
                  <div className="pt-4 border-t border-gray-100 border-dashed flex justify-between items-center">
@@ -416,7 +448,7 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
       </div>
 
       {/* Order Summary */}
-      <div className="lg:col-span-5 space-y-8 order-2 lg:order-1">
+      <div className="lg:col-span-5 space-y-8 order-1 lg:order-1">
         <section className="bg-gray-50 rounded-3xl p-8 border border-gray-100 space-y-6">
           <h2 className="text-xl font-bold text-gray-900 border-b border-gray-200 pb-4 flex items-center gap-2">
             <PackageCheck className="w-5 h-5 text-indigo-600" /> Order Summary
@@ -424,13 +456,62 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
           
           <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
             {products.map(product => (
-              <div key={product.id} className="flex gap-4 group">
-                <div className="w-16 h-16 rounded-xl bg-white overflow-hidden border border-gray-100 shrink-0 shadow-sm transition-transform group-hover:scale-105">
+              <div key={`${product.id}-${product.size}`} className="flex gap-4 group">
+                <div className="w-16 h-16 rounded-xl bg-white overflow-hidden border border-gray-100 shrink-0 shadow-sm transition-transform group-hover:scale-105 relative">
                   <img src={product.imageUrl || "/placeholder.jpg"} className="w-full h-full object-cover" />
+                  <span className="absolute -top-2 -right-2 bg-indigo-600 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
+                    {product.quantity}
+                  </span>
                 </div>
-                <div className="space-y-1 py-1">
-                  <h3 className="font-bold text-gray-900 text-sm">{product.name}</h3>
-                  <p className="text-[10px] text-gray-400 font-bold font-mono tracking-wider">৳{product.price.toLocaleString()}</p>
+                <div className="space-y-1 py-1 flex-grow">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-grow">
+                      <h3 className="font-bold text-gray-900 text-sm">{product.name}</h3>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        {product.size && (
+                          <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest border border-indigo-100">
+                            Size: {product.size}
+                          </span>
+                        )}
+                        <p className="text-[9px] text-gray-400 font-medium">৳{product.price.toLocaleString()} each</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-gray-900 font-bold font-mono">৳{(product.price * product.quantity).toLocaleString()}</p>
+                      {product.originalPrice && product.originalPrice > product.price && (
+                        <p className="text-[9px] text-red-500 font-bold line-through opacity-60">৳{product.originalPrice.toLocaleString()}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {isCartCheckout && (
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex items-center gap-1.5 bg-white border border-gray-100 rounded-lg p-0.5 shadow-sm">
+                        <button 
+                          onClick={() => updateQuantity(product.id, product.quantity - 1)}
+                          className="p-1 hover:bg-gray-50 rounded text-gray-400 hover:text-indigo-600 transition-colors"
+                          title="Decrease Quantity"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="text-[10px] font-bold text-gray-900 min-w-[16px] text-center">{product.quantity}</span>
+                        <button 
+                          onClick={() => updateQuantity(product.id, product.quantity + 1)}
+                          className="p-1 hover:bg-gray-50 rounded text-gray-400 hover:text-indigo-600 transition-colors"
+                          title="Increase Quantity"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <button 
+                        onClick={() => removeFromCart(product.id)}
+                        className="p-1.5 text-gray-300 hover:text-red-500 transition-all hover:scale-110 active:scale-95"
+                        title="Remove Item"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -514,7 +595,7 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
       </div>
 
       {/* Payment Form */}
-      <div className="lg:col-span-7 space-y-6 order-1 lg:order-2">
+      <div className="lg:col-span-7 space-y-6 order-2 lg:order-2">
         <section className="bg-white rounded-3xl p-5 sm:p-10 border-2 border-indigo-100 shadow-2xl shadow-indigo-100/50 space-y-5 sm:space-y-8">
           <div className="space-y-1">
             <h2 className="text-lg sm:text-2xl font-bold text-gray-900 tracking-tight">Checkout Details</h2>
@@ -595,6 +676,30 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
                   <div className="text-[9px] sm:text-xs font-bold">Local</div>
                 </button>
               )}
+              {settings.enableBinancePay && (
+                <button 
+                  onClick={() => { setGateway("binance"); setIsCOD(false); }}
+                  className={cn(
+                    "p-3 rounded-xl border-2 flex flex-col items-center gap-2 transition-all",
+                    gateway === "binance" && !isCOD ? "border-yellow-500 bg-yellow-50/50" : "border-gray-50 hover:border-gray-100"
+                  )}
+                >
+                  <DollarSign className={cn("w-4 h-4 sm:w-5 sm:h-5", gateway === "binance" && !isCOD ? "text-yellow-600" : "text-gray-400")} />
+                  <div className="text-[9px] sm:text-xs font-bold">Binance</div>
+                </button>
+              )}
+              {settings.enablePayoneer && (
+                <button 
+                  onClick={() => { setGateway("payoneer"); setIsCOD(false); }}
+                  className={cn(
+                    "p-3 rounded-xl border-2 flex flex-col items-center gap-2 transition-all",
+                    gateway === "payoneer" && !isCOD ? "border-cyan-600 bg-cyan-50/50" : "border-gray-50 hover:border-gray-100"
+                  )}
+                >
+                  <Inbox className={cn("w-4 h-4 sm:w-5 sm:h-5", gateway === "payoneer" && !isCOD ? "text-cyan-600" : "text-gray-400")} />
+                  <div className="text-[9px] sm:text-xs font-bold">Payoneer</div>
+                </button>
+              )}
               {settings.enableCOD !== false && (
                 <button 
                   onClick={() => setIsCOD(true)}
@@ -653,6 +758,46 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
                   <div className="p-8 text-center text-gray-400 italic text-sm">Initializing Stripe...</div>
                 )}
               </motion.div>
+            ) : gateway === "binance" ? (
+              <motion.div
+                key="binance"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+              >
+                <BinanceForm 
+                  products={products}
+                  userId={user?.uid!} 
+                  customerInfo={customerInfo}
+                  subtotal={subtotal}
+                  amount={totalAmount}
+                  amountUSD={Number((totalAmount * usdRate).toFixed(2))}
+                  usdRate={usdRate}
+                  appliedCoupon={appliedCoupon}
+                  discountAmount={discountAmount}
+                  onSuccess={handleOrderSuccess}
+                />
+              </motion.div>
+            ) : gateway === "payoneer" ? (
+              <motion.div
+                key="payoneer"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+              >
+                <PayoneerForm 
+                  products={products}
+                  userId={user?.uid!} 
+                  customerInfo={customerInfo}
+                  subtotal={subtotal}
+                  amount={totalAmount}
+                  amountUSD={Number((totalAmount * usdRate).toFixed(2))}
+                  usdRate={usdRate}
+                  appliedCoupon={appliedCoupon}
+                  discountAmount={discountAmount}
+                  onSuccess={handleOrderSuccess}
+                />
+              </motion.div>
             ) : (
               <motion.div
                 key="local"
@@ -695,14 +840,16 @@ function CODForm({ products, userId, customerInfo, subtotal, amount, appliedCoup
       const orderItems = products.map(p => ({
         id: p.id,
         name: p.name,
-        price: p.price
+        price: p.price,
+        size: p.size || null,
+        quantity: p.quantity
       }));
 
       const orderRef = await addDoc(collection(db, "orders"), {
         userId,
         productIds: products.map(p => p.id),
         items: orderItems,
-        productName: orderItems.length === 1 ? orderItems[0].name : `${orderItems.length} Products`,
+        productName: orderItems.length === 1 ? (orderItems[0].size ? `${orderItems[0].name} (${orderItems[0].size})` : orderItems[0].name) : `${orderItems.length} Products`,
         customerEmail: customerInfo.email,
         customerName: customerInfo.name,
         customerPhone: customerInfo.phone,
@@ -787,14 +934,16 @@ function StripeForm({ products, userId, customerInfo, subtotal, amount, appliedC
         const orderItems = products.map(p => ({
           id: p.id,
           name: p.name,
-          price: p.price
+          price: p.price,
+          size: p.size || null,
+          quantity: p.quantity
         }));
 
         const orderRef = await addDoc(collection(db, "orders"), {
           userId,
           productIds,
           items: orderItems,
-          productName: orderItems.length === 1 ? orderItems[0].name : `${orderItems.length} Products`,
+          productName: orderItems.length === 1 ? (orderItems[0].size ? `${orderItems[0].name} (${orderItems[0].size})` : orderItems[0].name) : `${orderItems.length} Products`,
           customerEmail: customerInfo.email,
           customerName: customerInfo.name,
           customerPhone: customerInfo.phone,
@@ -839,6 +988,311 @@ function StripeForm({ products, userId, customerInfo, subtotal, amount, appliedC
   );
 }
 
+function BinanceForm({ products, userId, customerInfo, subtotal, amount, amountUSD, usdRate, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, subtotal: number, amount: number, amountUSD: number, usdRate: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
+  const { settings } = useSettings();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [transactionId, setTransactionId] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(settings.binanceId || "");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customerInfo.name || !customerInfo.address || !customerInfo.phone) {
+      setError("Please fill your Full Name, Phone Number, and Address in the section above first.");
+      return;
+    }
+    if (!transactionId) {
+      setError("Please provide the Transaction ID / Proof.");
+      return;
+    }
+    setIsLoading(true);
+
+    try {
+      const orderItems = products.map(p => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        size: p.size || null,
+        quantity: p.quantity
+      }));
+
+      const orderRef = await addDoc(collection(db, "orders"), {
+        userId,
+        productIds: products.map(p => p.id),
+        items: orderItems,
+        productName: orderItems.length === 1 ? (orderItems[0].size ? `${orderItems[0].name} (${orderItems[0].size})` : orderItems[0].name) : `${orderItems.length} Products`,
+        customerEmail: customerInfo.email,
+        customerName: customerInfo.name,
+        customerPhone: customerInfo.phone,
+        deliveryAddress: customerInfo.address,
+        transactionId: transactionId,
+        paymentMethod: "binance",
+        status: "pending",
+        amount: subtotal,
+        grossAmount: subtotal,
+        discountAmount: discountAmount || 0,
+        netAmount: amount,
+        amountUSD: amountUSD,
+        usdRate: usdRate,
+        couponCode: appliedCoupon?.code || null,
+        bonusAssigneeEmail: appliedCoupon?.assignedEmail || null,
+        bonusAmountGiven: appliedCoupon?.assignedEmail ? (appliedCoupon.bonusPercentage > 0 ? (amount * appliedCoupon.bonusPercentage / 100) : (appliedCoupon.bonusAmount || 0)) : 0,
+        createdAt: serverTimestamp(),
+      });
+
+      onSuccess?.(orderRef.id);
+    } catch (error: any) {
+      console.error("Binance order error:", error);
+      setError("Failed to place order.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-yellow-50/50 p-6 rounded-3xl border border-yellow-100 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center p-2 shadow-sm border border-yellow-50">
+              <DollarSign className="w-6 h-6 text-yellow-600" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="text-[10px] font-black text-yellow-600 uppercase tracking-widest">Binance Pay ID</div>
+              <div className="text-xl font-mono font-black text-yellow-900 tracking-wider text-wrap break-all">
+                {settings.binanceId || "Not Set"}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="p-3 bg-white text-yellow-600 rounded-2xl shadow-sm hover:shadow-md transition-all active:scale-95 border border-yellow-50"
+          >
+            {copied ? <Check className="w-5 h-5 text-emerald-500" /> : <Copy className="w-5 h-5" />}
+          </button>
+        </div>
+        
+        {settings.binanceQR && (
+          <div className="flex flex-col items-center gap-3 pt-2">
+            <div className="w-40 h-40 bg-white p-2 rounded-2xl border-2 border-yellow-100 shadow-inner">
+              <img src={settings.binanceQR} alt="Binance QR" className="w-full h-full object-contain" />
+            </div>
+            <span className="text-[9px] font-black text-yellow-600 uppercase tracking-widest">Scan to Pay</span>
+          </div>
+        )}
+
+        <div className="space-y-2 pt-2">
+          <div className="flex justify-between items-center text-[11px] text-yellow-800 font-bold uppercase tracking-tight">
+            <span>Payable (BDT)</span>
+            <span>৳{amount.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between items-center text-[11px] text-yellow-800 font-bold uppercase tracking-tight">
+            <span>Current USD Rate</span>
+            <span>৳1 = ${usdRate.toFixed(4)}</span>
+          </div>
+          <div className="h-px bg-yellow-200 w-full opacity-50"></div>
+          <div className="flex justify-between items-center text-sm text-yellow-900 font-black uppercase tracking-tight">
+            <span>Payable (USD)</span>
+            <span className="text-lg">${amountUSD.toFixed(2)}</span>
+          </div>
+        </div>
+
+        <p className="text-[10px] text-yellow-700/60 leading-relaxed font-medium pt-2">
+          Send exactly <b>${amountUSD.toFixed(2)}</b> to the Binance Pay ID shown above or scan the QR code. Enter Transaction ID below.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100 focus-within:ring-2 focus-within:ring-yellow-500 transition-all">
+          <div className="p-3 bg-white rounded-xl shadow-sm border border-gray-50">
+            <ShoppingBag className="w-5 h-5 text-gray-600" />
+          </div>
+          <div className="flex-grow">
+            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Transaction ID</div>
+            <input 
+              type="text"
+              placeholder="Binance TXID"
+              value={transactionId}
+              onChange={(e) => setTransactionId(e.target.value)}
+              className="w-full bg-transparent border-none p-0 text-sm focus:ring-0 outline-none placeholder:text-gray-300 font-mono font-bold uppercase"
+            />
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-xs font-bold border border-red-100">
+          {error}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={handleSubmit}
+        disabled={isLoading}
+        className="w-full bg-yellow-500 text-white py-5 rounded-3xl font-black text-sm uppercase tracking-widest shadow-xl shadow-yellow-100 hover:bg-yellow-600 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
+      >
+        {isLoading ? "Submitting..." : `Confirm Binance Payment - ৳${amount.toLocaleString()}`}
+      </button>
+    </div>
+  );
+}
+
+function PayoneerForm({ products, userId, customerInfo, subtotal, amount, amountUSD, usdRate, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, subtotal: number, amount: number, amountUSD: number, usdRate: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
+  const { settings } = useSettings();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [transactionId, setTransactionId] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(settings.payoneerEmail || "");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customerInfo.name || !customerInfo.address || !customerInfo.phone) {
+      setError("Please fill your Full Name, Phone Number, and Address in the section above first.");
+      return;
+    }
+    if (!transactionId) {
+      setError("Please provide the Transaction ID / Email used.");
+      return;
+    }
+    setIsLoading(true);
+
+    try {
+      const orderItems = products.map(p => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        size: p.size || null,
+        quantity: p.quantity
+      }));
+
+      const orderRef = await addDoc(collection(db, "orders"), {
+        userId,
+        productIds: products.map(p => p.id),
+        items: orderItems,
+        productName: orderItems.length === 1 ? (orderItems[0].size ? `${orderItems[0].name} (${orderItems[0].size})` : orderItems[0].name) : `${orderItems.length} Products`,
+        customerEmail: customerInfo.email,
+        customerName: customerInfo.name,
+        customerPhone: customerInfo.phone,
+        deliveryAddress: customerInfo.address,
+        transactionId: transactionId,
+        paymentMethod: "payoneer",
+        status: "pending",
+        amount: subtotal,
+        grossAmount: subtotal,
+        discountAmount: discountAmount || 0,
+        netAmount: amount,
+        amountUSD: amountUSD,
+        usdRate: usdRate,
+        couponCode: appliedCoupon?.code || null,
+        bonusAssigneeEmail: appliedCoupon?.assignedEmail || null,
+        bonusAmountGiven: appliedCoupon?.assignedEmail ? (appliedCoupon.bonusPercentage > 0 ? (amount * appliedCoupon.bonusPercentage / 100) : (appliedCoupon.bonusAmount || 0)) : 0,
+        createdAt: serverTimestamp(),
+      });
+
+      onSuccess?.(orderRef.id);
+    } catch (error: any) {
+      console.error("Payoneer order error:", error);
+      setError("Failed to place order.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-cyan-50/50 p-6 rounded-3xl border border-cyan-100 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center p-2 shadow-sm border border-cyan-50">
+              <Inbox className="w-6 h-6 text-cyan-600" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="text-[10px] font-black text-cyan-600 uppercase tracking-widest">Payoneer Email</div>
+              <div className="text-sm sm:text-lg font-mono font-black text-cyan-900 tracking-tight break-all">
+                {settings.payoneerEmail || "Not Set"}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="p-3 bg-white text-cyan-600 rounded-2xl shadow-sm hover:shadow-md transition-all active:scale-95 border border-cyan-50"
+          >
+            {copied ? <Check className="w-5 h-5 text-emerald-500" /> : <Copy className="w-5 h-5" />}
+          </button>
+        </div>
+
+        <div className="space-y-2 pt-2">
+          <div className="flex justify-between items-center text-[11px] text-cyan-800 font-bold uppercase tracking-tight">
+            <span>Payable (BDT)</span>
+            <span>৳{amount.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between items-center text-[11px] text-cyan-800 font-bold uppercase tracking-tight">
+            <span>Current USD Rate</span>
+            <span>৳1 = ${usdRate.toFixed(4)}</span>
+          </div>
+          <div className="h-px bg-cyan-200 w-full opacity-50"></div>
+          <div className="flex justify-between items-center text-sm text-cyan-900 font-black uppercase tracking-tight">
+            <span>Payable (USD)</span>
+            <span className="text-lg">${amountUSD.toFixed(2)}</span>
+          </div>
+        </div>
+        
+        <p className="text-[10px] text-cyan-700/60 leading-relaxed font-medium pt-2">
+          Send exactly <b>${amountUSD.toFixed(2)}</b> to the Payoneer email shown above. Enter Transaction ID or your Payoneer email below.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100 focus-within:ring-2 focus-within:ring-cyan-500 transition-all">
+          <div className="p-3 bg-white rounded-xl shadow-sm border border-gray-50">
+            <ShoppingBag className="w-5 h-5 text-gray-600" />
+          </div>
+          <div className="flex-grow">
+            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Transaction ID / Proof</div>
+            <input 
+              type="text"
+              placeholder="Ref Number or Your Email"
+              value={transactionId}
+              onChange={(e) => setTransactionId(e.target.value)}
+              className="w-full bg-transparent border-none p-0 text-sm focus:ring-0 outline-none placeholder:text-gray-300 font-mono font-bold uppercase"
+            />
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-xs font-bold border border-red-100">
+          {error}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={handleSubmit}
+        disabled={isLoading}
+        className="w-full bg-cyan-600 text-white py-5 rounded-3xl font-black text-sm uppercase tracking-widest shadow-xl shadow-cyan-100 hover:bg-cyan-700 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
+      >
+        {isLoading ? "Submitting..." : `Confirm Payoneer Payment - ৳${amount.toLocaleString()}`}
+      </button>
+    </div>
+  );
+}
+
 function LocalForm({ products, userId, customerInfo, subtotal, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, subtotal: number, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
   const { settings } = useSettings();
   const [isLoading, setIsLoading] = useState(false);
@@ -878,14 +1332,16 @@ function LocalForm({ products, userId, customerInfo, subtotal, amount, appliedCo
       const orderItems = products.map(p => ({
         id: p.id,
         name: p.name,
-        price: p.price
+        price: p.price,
+        size: p.size || null,
+        quantity: p.quantity
       }));
 
       const orderRef = await addDoc(collection(db, "orders"), {
         userId,
         productIds: products.map(p => p.id),
         items: orderItems,
-        productName: orderItems.length === 1 ? orderItems[0].name : `${orderItems.length} Products`,
+        productName: orderItems.length === 1 ? (orderItems[0].size ? `${orderItems[0].name} (${orderItems[0].size})` : orderItems[0].name) : `${orderItems.length} Products`,
         customerEmail: customerInfo.email,
         customerName: customerInfo.name,
         customerPhone: customerInfo.phone, // Phone from basic data
