@@ -33,6 +33,8 @@ export default function AdminDashboard() {
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
+  const lastOrderCountRef = React.useRef(0);
+  const [notificationSound] = useState(new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'));
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
@@ -819,7 +821,21 @@ export default function AdminDashboard() {
     return { today: todayRev, week: weekRev, month: monthRev };
   };
 
+  const getOrderCounts = () => {
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    
+    return orders.reduce((acc, order) => {
+      const orderDate = order.createdAt?.toDate ? order.createdAt.toDate().toISOString().split('T')[0] : "";
+      if (orderDate === todayStr) acc.new++;
+      if (order.status === 'pending') acc.pending++;
+      if (order.status === 'completed' || order.status === 'delivered') acc.completed++;
+      return acc;
+    }, { new: 0, pending: 0, completed: 0 });
+  };
+
   const quickStats = getQuickStats();
+  const orderCounts = getOrderCounts();
 
   const getRevenueChartData = () => {
     if (revenueTimeframe === "daily") {
@@ -932,7 +948,15 @@ export default function AdminDashboard() {
       }, (error) => handleFirestoreError(error, OperationType.LIST, "reviews"));
 
       unsubOrders = onSnapshot(query(collection(db, "orders"), orderBy("createdAt", "desc")), (snap) => {
-        setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const newOrdersList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        
+        // Play sound if new orders are added (ignoring initial load)
+        if (lastOrderCountRef.current > 0 && newOrdersList.length > lastOrderCountRef.current) {
+          notificationSound.play().catch(e => console.log("Audio play failed:", e));
+        }
+        
+        lastOrderCountRef.current = newOrdersList.length;
+        setOrders(newOrdersList);
       }, (error) => handleFirestoreError(error, OperationType.LIST, "orders"));
 
       unsubTickets = onSnapshot(collection(db, "support_tickets"), (snap) => {
@@ -2124,11 +2148,14 @@ export default function AdminDashboard() {
             </div>
 
             {/* Quick Summary Row (Fixed Periods) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
                {[
-                 { label: "Today", value: quickStats.today, icon: Clock, color: "text-blue-600", bg: "bg-blue-50" },
-                 { label: "This Week", value: quickStats.week, icon: Calendar, color: "text-indigo-600", bg: "bg-indigo-50" },
-                 { label: "This Month", value: quickStats.month, icon: ShoppingBag, color: "text-emerald-600", bg: "bg-emerald-50" },
+                 { label: "Today Revenue", value: `৳${quickStats.today.toLocaleString()}`, icon: Clock, color: "text-blue-600", bg: "bg-blue-50" },
+                 { label: "This Week", value: `৳${quickStats.week.toLocaleString()}`, icon: Calendar, color: "text-indigo-600", bg: "bg-indigo-50" },
+                 { label: "This Month", value: `৳${quickStats.month.toLocaleString()}`, icon: ShoppingBag, color: "text-emerald-600", bg: "bg-emerald-50" },
+                 { label: "New Orders", value: orderCounts.new.toLocaleString(), icon: Plus, color: "text-purple-600", bg: "bg-purple-50" },
+                 { label: "Pending Orders", value: orderCounts.pending.toLocaleString(), icon: Clock, color: "text-rose-600", bg: "bg-rose-50", badge: true },
+                 { label: "Completed Orders", value: orderCounts.completed.toLocaleString(), icon: CheckCircle, color: "text-emerald-600", bg: "bg-emerald-50", badge: true },
                ].map((stat, i) => (
                  <motion.div
                    key={i}
@@ -2140,14 +2167,111 @@ export default function AdminDashboard() {
                    <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center p-3 transition-transform group-hover:scale-110 group-hover:rotate-6", stat.bg, stat.color)}>
                      <stat.icon className="w-full h-full" />
                    </div>
-                   <div>
+                   <div className="flex-1">
                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.label}</p>
-                     <h4 className="text-2xl font-black text-gray-900 tracking-tighter">
-                       ৳{stat.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                     </h4>
+                     <div className="flex items-center justify-between">
+                       <h4 className="text-2xl font-black text-gray-900 tracking-tighter">
+                         {stat.value}
+                       </h4>
+                       {stat.badge && (
+                         <div className={cn(
+                           "w-2 h-2 rounded-full animate-pulse",
+                           stat.label.includes("Pending") ? "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]" : "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
+                         )} />
+                       )}
+                     </div>
                    </div>
                  </motion.div>
                ))}
+            </div>
+
+            {/* Recent Orders Section */}
+            <div className="bg-white p-8 rounded-[45px] border border-gray-100 shadow-sm overflow-hidden">
+               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8">
+                  <div className="flex items-center gap-6">
+                    <div className="w-16 h-16 bg-indigo-50 rounded-[28px] flex items-center justify-center flex-shrink-0">
+                      <ShoppingBag className="w-8 h-8 text-indigo-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-black text-gray-900 tracking-tighter uppercase italic">Recent Operations</h3>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Real-time live transactional stream</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setActiveTab("orders")}
+                    className="px-6 py-3 bg-gray-50 text-gray-900 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-100 transition-all border border-gray-100"
+                  >
+                    View All Orders
+                  </button>
+               </div>
+               
+               <div className="overflow-x-auto -mx-8">
+                  <table className="w-full text-left">
+                     <thead className="bg-gray-50/50">
+                        <tr className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                           <th className="px-8 py-5">Order Details</th>
+                           <th className="px-8 py-5">Customer</th>
+                           <th className="px-8 py-5">Amount</th>
+                           <th className="px-8 py-5">Status</th>
+                           <th className="px-8 py-5 text-right">Time</th>
+                        </tr>
+                     </thead>
+                     <tbody className="divide-y divide-gray-50">
+                        {orders.slice(0, 10).map((order) => (
+                           <tr key={order.id} className="hover:bg-gray-50/30 transition-colors group">
+                              <td className="px-8 py-5">
+                                 <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-xl bg-white border border-gray-100 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                                       <Package className="w-5 h-5 text-indigo-500" />
+                                    </div>
+                                    <div className="min-w-0 max-w-[200px]">
+                                       <div className="text-[11px] font-black text-gray-900 uppercase truncate">{order.productName}</div>
+                                       <div className="text-[9px] font-mono text-gray-400">#{order.id.slice(-8).toUpperCase()}</div>
+                                    </div>
+                                 </div>
+                              </td>
+                              <td className="px-8 py-5">
+                                 <div className="text-[11px] font-bold text-gray-900">{order.userName || 'Guest'}</div>
+                                 <div className="text-[9px] text-gray-400 truncate max-w-[150px]">{order.userEmail}</div>
+                              </td>
+                              <td className="px-8 py-5">
+                                 <div className="text-xs font-black text-gray-900">৳{(order.netAmount || order.amount).toLocaleString()}</div>
+                              </td>
+                              <td className="px-8 py-5">
+                                 <span className={cn(
+                                    "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border",
+                                    order.status === 'completed' || order.status === 'delivered'
+                                       ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                                       : order.status === 'pending'
+                                          ? "bg-rose-50 text-rose-600 border-rose-100"
+                                          : "bg-amber-50 text-amber-600 border-amber-100"
+                                 )}>
+                                    {order.status}
+                                 </span>
+                              </td>
+                              <td className="px-8 py-5 text-right">
+                                 <div className="text-[10px] font-bold text-gray-400 flex items-center justify-end gap-1.5">
+                                    <Clock className="w-3 h-3" />
+                                    {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
+                                 </div>
+                              </td>
+                           </tr>
+                        ))}
+                        {orders.length === 0 && (
+                           <tr>
+                              <td colSpan={5} className="py-20 text-center">
+                                 <div className="inline-flex flex-col items-center gap-3">
+                                    <div className="w-16 h-16 bg-gray-50 rounded-3xl flex items-center justify-center">
+                                       <ShoppingBag className="w-8 h-8 text-gray-200" />
+                                    </div>
+                                    <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">No transaction records found</p>
+                                 </div>
+                              </td>
+                           </tr>
+                        )}
+                     </tbody>
+                  </table>
+               </div>
             </div>
 
             {/* Detailed Filters Expandable */}
