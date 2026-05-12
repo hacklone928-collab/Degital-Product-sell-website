@@ -102,14 +102,91 @@ function AppContent() {
   }, []);
 
   if (authLoading || settingsLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 flex-col gap-4">
-      <div className="relative">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-600"></div>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="h-8 w-8 bg-indigo-100 rounded-full animate-pulse"></div>
+    <div className="min-h-screen flex items-center justify-center bg-white relative overflow-hidden">
+      {/* Background purely aesthetic elements */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-50 rounded-full blur-[120px] opacity-50" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-50 rounded-full blur-[120px] opacity-50" />
+      
+      <div className="relative flex flex-col items-center">
+        <motion.div 
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="relative mb-8"
+        >
+          {/* Main loader circle */}
+          <div className="relative w-24 h-24">
+            <svg className="w-full h-full rotate-[-90deg]">
+              <circle
+                cx="48"
+                cy="48"
+                r="45"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="text-gray-100"
+              />
+              <motion.circle
+                cx="48"
+                cy="48"
+                r="45"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+                className="text-indigo-600"
+                initial={{ strokeDasharray: "0 283" }}
+                animate={{ strokeDasharray: "200 283" }}
+                transition={{ 
+                  duration: 1.5, 
+                  repeat: Infinity, 
+                  ease: "easeInOut",
+                  repeatType: "reverse"
+                }}
+              />
+            </svg>
+            
+            {/* Center pulsing point */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <motion.div 
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="w-10 h-10 bg-indigo-600/10 rounded-2xl flex items-center justify-center p-2.5"
+              >
+                <div className="w-full h-full bg-indigo-600 rounded-lg" />
+              </motion.div>
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="text-center"
+        >
+          <h2 className="text-sm font-black uppercase tracking-[0.3em] text-gray-900 mb-2 italic">
+            {settings?.siteName || "Marketplace"}
+          </h2>
+          <div className="flex items-center gap-2 justify-center">
+             <div className="h-[1px] w-4 bg-gray-200" />
+             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">
+               Syncing Workspace
+             </p>
+             <div className="h-[1px] w-4 bg-gray-200" />
+          </div>
+        </motion.div>
+
+        {/* Ambient progress indicator */}
+        <div className="absolute bottom-[-60px] w-48 h-1 bg-gray-50 rounded-full overflow-hidden">
+          <motion.div 
+            initial={{ x: "-100%" }}
+            animate={{ x: "100%" }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+            className="w-full h-full bg-gradient-to-r from-transparent via-indigo-500 to-transparent"
+          />
         </div>
       </div>
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 animate-pulse">Loading Infrastructure</p>
     </div>
   );
 

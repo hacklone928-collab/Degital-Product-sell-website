@@ -446,11 +446,11 @@ export default function AdminDashboard() {
     let end = "";
 
     switch (datePreset) {
-      case "today":
-        start = toLocalDateStr(today);
-        end = toLocalDateStr(now);
+      case "today": // 24h - Rolling last 24 hours
+        start = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+        end = now.toISOString();
         break;
-      case "yesterday":
+      case "yesterday": // Fixed - Previous full calendar day
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
         start = toLocalDateStr(yesterday);
@@ -458,23 +458,23 @@ export default function AdminDashboard() {
         break;
       case "last7":
         const l7 = new Date(today);
-        l7.setDate(l7.getDate() - 7);
+        l7.setDate(l7.getDate() - 6);
         start = toLocalDateStr(l7);
-        end = toLocalDateStr(now);
+        end = toLocalDateStr(today);
         break;
       case "last30":
         const l30 = new Date(today);
-        l30.setDate(l30.getDate() - 30);
+        l30.setDate(l30.getDate() - 29);
         start = toLocalDateStr(l30);
-        end = toLocalDateStr(now);
+        end = toLocalDateStr(today);
         break;
       case "thisMonth":
         start = toLocalDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
-        end = toLocalDateStr(now);
+        end = toLocalDateStr(today);
         break;
       case "thisYear":
         start = toLocalDateStr(new Date(now.getFullYear(), 0, 1));
-        end = toLocalDateStr(now);
+        end = toLocalDateStr(today);
         break;
       case "custom":
         return;
@@ -513,12 +513,16 @@ export default function AdminDashboard() {
       });
     });
 
+    const startOfTime = analyticsFilters.startDate ? new Date(analyticsFilters.startDate.includes('T') ? analyticsFilters.startDate : analyticsFilters.startDate + 'T00:00:00') : null;
+    const endOfTime = analyticsFilters.endDate ? new Date(analyticsFilters.endDate.includes('T') ? analyticsFilters.endDate : analyticsFilters.endDate + 'T23:59:59') : null;
+
     orders.forEach(order => {
       if (order.status !== 'completed' && order.status !== 'delivered') return;
       
       const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : (order.createdAt instanceof Date ? order.createdAt : new Date());
-      if (analyticsFilters.startDate && orderDate < new Date(analyticsFilters.startDate)) return;
-      if (analyticsFilters.endDate && orderDate > new Date(analyticsFilters.endDate)) return;
+      
+      if (startOfTime && orderDate < startOfTime) return;
+      if (endOfTime && orderDate > endOfTime) return;
       if (analyticsFilters.product && order.productId !== analyticsFilters.product) return;
       if (analyticsFilters.email && order.bonusAssigneeEmail?.toLowerCase() !== analyticsFilters.email.toLowerCase()) return;
 
@@ -567,10 +571,8 @@ export default function AdminDashboard() {
 
   const getProductEarningStats = () => {
     const productMap = new Map();
-    const startOfTime = analyticsFilters.startDate ? new Date(analyticsFilters.startDate) : null;
-    if (startOfTime) startOfTime.setHours(0, 0, 0, 0);
-    const endOfTime = analyticsFilters.endDate ? new Date(analyticsFilters.endDate) : null;
-    if (endOfTime) endOfTime.setHours(23, 59, 59, 999);
+    const startOfTime = analyticsFilters.startDate ? new Date(analyticsFilters.startDate.includes('T') ? analyticsFilters.startDate : analyticsFilters.startDate + 'T00:00:00') : null;
+    const endOfTime = analyticsFilters.endDate ? new Date(analyticsFilters.endDate.includes('T') ? analyticsFilters.endDate : analyticsFilters.endDate + 'T23:59:59') : null;
 
     orders.forEach(order => {
       const isPaid = order.status === 'completed' || order.status === 'delivered' || order.paymentStatus === 'paid';
@@ -691,11 +693,8 @@ export default function AdminDashboard() {
 
   const getDetailedRevenueAnalytics = () => {
     const dailyMap = new Map();
-    const startOfTime = analyticsFilters.startDate ? new Date(analyticsFilters.startDate) : null;
-    if (startOfTime) startOfTime.setHours(0, 0, 0, 0);
-    
-    const endOfTime = analyticsFilters.endDate ? new Date(analyticsFilters.endDate) : null;
-    if (endOfTime) endOfTime.setHours(23, 59, 59, 999);
+    const startOfTime = analyticsFilters.startDate ? new Date(analyticsFilters.startDate.includes('T') ? analyticsFilters.startDate : analyticsFilters.startDate + 'T00:00:00') : null;
+    const endOfTime = analyticsFilters.endDate ? new Date(analyticsFilters.endDate.includes('T') ? analyticsFilters.endDate : analyticsFilters.endDate + 'T23:59:59') : null;
 
     orders.forEach(order => {
       // Precise status check for revenue
@@ -1912,18 +1911,36 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 pb-4">
-          <div className="bg-indigo-50/30 p-3 sm:p-4 rounded-2xl border border-indigo-50">
-            <div className="text-[9px] sm:text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Today</div>
-            <div className="text-lg sm:text-xl font-black text-indigo-600">৳{detailedStats.daily.toLocaleString()}</div>
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 pb-4">
+          <div className="bg-indigo-50/30 p-3 rounded-2xl border border-indigo-50">
+            <div className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-1">Today</div>
+            <div className="text-lg font-black text-indigo-600">৳{detailedStats.daily.toLocaleString()}</div>
           </div>
-          <div className="bg-emerald-50/30 p-3 sm:p-4 rounded-2xl border border-emerald-50">
-            <div className="text-[9px] sm:text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">This Week</div>
-            <div className="text-lg sm:text-xl font-black text-emerald-600">৳{detailedStats.weekly.toLocaleString()}</div>
+          <div className="bg-emerald-50/30 p-3 rounded-2xl border border-emerald-50">
+            <div className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-1">Weekly</div>
+            <div className="text-lg font-black text-emerald-600">৳{detailedStats.weekly.toLocaleString()}</div>
           </div>
-          <div className="bg-amber-50/30 p-3 sm:p-4 rounded-2xl border border-amber-50">
-            <div className="text-[9px] sm:text-[10px] font-black text-amber-400 uppercase tracking-widest mb-1">This Month</div>
-            <div className="text-lg sm:text-xl font-black text-amber-600">৳{detailedStats.monthly.toLocaleString()}</div>
+          <div className="bg-amber-50/30 p-3 rounded-2xl border border-amber-50">
+            <div className="text-[9px] font-black text-amber-400 uppercase tracking-widest mb-1">Monthly</div>
+            <div className="text-lg font-black text-amber-600">৳{detailedStats.monthly.toLocaleString()}</div>
+          </div>
+          <div className="bg-purple-50/30 p-3 rounded-2xl border border-purple-50">
+            <div className="text-[9px] font-black text-purple-400 uppercase tracking-widest mb-1">New Orders</div>
+            <div className="text-lg font-black text-purple-600">{orderCounts.new}</div>
+          </div>
+          <div className="bg-rose-50/30 p-3 rounded-2xl border border-rose-100 flex justify-between items-end">
+            <div>
+              <div className="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-1">Pending</div>
+              <div className="text-lg font-black text-rose-600">{orderCounts.pending}</div>
+            </div>
+            <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.6)] mb-1" />
+          </div>
+          <div className="bg-emerald-50/30 p-3 rounded-2xl border border-emerald-100 flex justify-between items-end">
+            <div>
+              <div className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-1">Done</div>
+              <div className="text-lg font-black text-emerald-600">{orderCounts.completed}</div>
+            </div>
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)] mb-1" />
           </div>
         </div>
 
@@ -2147,16 +2164,16 @@ export default function AdminDashboard() {
                </div>
             </div>
 
-            {/* Quick Summary Row (Fixed Periods) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+            {/* Filtered Summary Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-6">
                {[
-                 { label: "Today Revenue", value: `৳${quickStats.today.toLocaleString()}`, icon: Clock, color: "text-blue-600", bg: "bg-blue-50" },
-                 { label: "This Week", value: `৳${quickStats.week.toLocaleString()}`, icon: Calendar, color: "text-indigo-600", bg: "bg-indigo-50" },
-                 { label: "This Month", value: `৳${quickStats.month.toLocaleString()}`, icon: ShoppingBag, color: "text-emerald-600", bg: "bg-emerald-50" },
-                 { label: "New Orders", value: orderCounts.new.toLocaleString(), icon: Plus, color: "text-purple-600", bg: "bg-purple-50" },
-                 { label: "Pending Orders", value: orderCounts.pending.toLocaleString(), icon: Clock, color: "text-rose-600", bg: "bg-rose-50", badge: true },
-                 { label: "Completed Orders", value: orderCounts.completed.toLocaleString(), icon: CheckCircle, color: "text-emerald-600", bg: "bg-emerald-50", badge: true },
-               ].map((stat, i) => (
+                 { label: "Filtered Gross", value: `৳${revenueStatsSummary.gross.toLocaleString()}`, icon: TrendingUp, color: "text-indigo-600", bg: "bg-indigo-50" },
+                 { label: "Filtered Net", value: `৳${revenueStatsSummary.net.toLocaleString()}`, icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-50" },
+                 { label: "Filtered Profit", value: `৳${revenueStatsSummary.profit.toLocaleString()}`, icon: CheckCircle, color: "text-blue-600", bg: "bg-blue-50" },
+                 { label: "Filtered Orders", value: revenueStatsSummary.orders.toLocaleString(), icon: ShoppingBag, color: "text-purple-600", bg: "bg-purple-50" },
+                 { label: "Bonus Attribution", value: `৳${revenueStatsSummary.commission.toLocaleString()}`, icon: Users, color: "text-amber-600", bg: "bg-amber-50" },
+                 { label: "Units Sold", value: revenueStatsSummary.units.toLocaleString(), icon: Package, color: "text-rose-600", bg: "bg-rose-50" },
+               ].map((stat: any, i) => (
                  <motion.div
                    key={i}
                    initial={{ opacity: 0, y: 20 }}

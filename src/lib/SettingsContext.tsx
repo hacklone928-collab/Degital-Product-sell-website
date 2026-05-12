@@ -76,12 +76,12 @@ interface SiteSettings {
 }
 
 const defaultSettings: SiteSettings = {
-  siteName: "DigiVault",
-  tabTitle: "DigiVault",
+  siteName: "Digital Marketplace",
+  tabTitle: "Digital Marketplace",
   heroTitle: "Premium Digital Assets for Makers",
   heroSubtitle: "Unlock your project's potential with high-quality software, plugins, and scripts.",
-  footerText: "© 2026 DigiVault. All rights reserved.",
-  footerCopyright: "© 2026 DigiVault. All rights reserved.",
+  footerText: "© 2026. All rights reserved.",
+  footerCopyright: "© 2026. All rights reserved.",
   footerDescription: "Quality digital assets for developers, designers, and creators worldwide.",
   privacyUrl: "/p/privacy-policy",
   termsUrl: "/p/terms-of-service",
