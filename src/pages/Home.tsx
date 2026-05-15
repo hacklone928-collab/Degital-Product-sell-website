@@ -21,6 +21,7 @@ import {
 import { cn } from "../lib/utils";
 import { useSettings } from "../lib/SettingsContext";
 import { useCart } from "../lib/CartContext";
+import { useTheme } from "../lib/ThemeContext";
 import { db } from "../lib/firebase";
 import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "../lib/firestoreUtils";
@@ -43,6 +44,7 @@ export default function Home() {
   const navigate = useNavigate();
   const location = useLocation();
   const productsRef = useRef<HTMLElement>(null);
+  const { theme } = useTheme();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -170,19 +172,19 @@ export default function Home() {
       )}
 
       {/* Featured Statistics */}
-      <section className="grid grid-cols-3 gap-1 sm:gap-8 py-10 sm:py-20 border-y border-gray-100 w-full overflow-hidden">
+      <section className="grid grid-cols-3 gap-1 sm:gap-8 py-10 sm:py-20 border-y border-gray-100 dark:border-gray-800 w-full overflow-hidden">
         {[
-          { label: settings.stat1Label || "TOTAL USERS", value: settings.stat1Value || "50k+", icon: Layout, color: "text-indigo-500", bg: "bg-indigo-50" },
-          { label: settings.stat2Label || "DIGITAL ASSETS", value: settings.stat2Value || "1,200+", icon: Code, color: "text-purple-500", bg: "bg-purple-50" },
-          { label: settings.stat3Label || "SUCCESS RATE", value: settings.stat3Value || "99.9%", icon: FileText, color: "text-pink-500", bg: "bg-pink-50" },
+          { label: settings.stat1Label || "TOTAL USERS", value: settings.stat1Value || "50k+", icon: Layout, color: "text-indigo-500", bg: "bg-indigo-50 dark:bg-indigo-900/20" },
+          { label: settings.stat2Label || "DIGITAL ASSETS", value: settings.stat2Value || "1,200+", icon: Code, color: "text-purple-500", bg: "bg-purple-50 dark:bg-purple-900/20" },
+          { label: settings.stat3Label || "SUCCESS RATE", value: settings.stat3Value || "99.9%", icon: FileText, color: "text-pink-500", bg: "bg-pink-50 dark:bg-pink-900/20" },
         ].map((stat, i) => (
           <div key={i} className="text-center space-y-2 sm:space-y-4 px-1">
             <div className={cn("mx-auto flex items-center justify-center w-10 h-10 sm:w-16 sm:h-16 rounded-2xl shrink-0 transition-transform hover:scale-110", stat.bg)}>
               <stat.icon className={cn("w-5 h-5 sm:w-8 sm:h-8", stat.color)} />
             </div>
             <div className="space-y-1 sm:space-y-1.5">
-              <div className="text-[15px] sm:text-3xl font-black text-gray-900 leading-tight whitespace-nowrap overflow-hidden tracking-tighter">{stat.value}</div>
-              <div className="text-[8px] sm:text-[11px] text-gray-400 font-bold uppercase tracking-widest leading-none whitespace-nowrap overflow-hidden opacity-80">
+              <div className="text-[15px] sm:text-3xl font-black text-gray-900 dark:text-gray-100 leading-tight whitespace-nowrap overflow-hidden tracking-tighter">{stat.value}</div>
+              <div className="text-[8px] sm:text-[11px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest leading-none whitespace-nowrap overflow-hidden opacity-80">
                 {stat.label}
               </div>
             </div>
@@ -193,17 +195,17 @@ export default function Home() {
       {/* Why Choose Us */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6">
         {[
-          { title: "Instant Delivery", desc: "Digital assets instantly.", icon: Zap, bg: "bg-indigo-50", text: "text-indigo-600" },
-          { title: "Secure Platform", desc: "Safe checkout flows.", icon: ShieldCheck, bg: "bg-emerald-50", text: "text-emerald-600" },
-          { title: "Top Quality", desc: "Curated premium assets.", icon: MessageSquare, bg: "bg-amber-50", text: "text-amber-600" },
+          { title: "Instant Delivery", desc: "Digital assets instantly.", icon: Zap, bg: "bg-indigo-50 dark:bg-indigo-900/10", text: "text-indigo-600 dark:text-indigo-400" },
+          { title: "Secure Platform", desc: "Safe checkout flows.", icon: ShieldCheck, bg: "bg-emerald-50 dark:bg-emerald-900/10", text: "text-emerald-600 dark:text-emerald-400" },
+          { title: "Top Quality", desc: "Curated premium assets.", icon: MessageSquare, bg: "bg-amber-50 dark:bg-amber-900/10", text: "text-amber-600 dark:text-amber-400" },
         ].map((item, i) => (
-          <div key={i} className="flex items-center gap-3.5 sm:gap-5 p-4 sm:p-6 rounded-xl sm:rounded-[24px] bg-white border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group">
+          <div key={i} className="flex items-center gap-3.5 sm:gap-5 p-4 sm:p-6 rounded-xl sm:rounded-[24px] bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-xl dark:hover:shadow-black/20 hover:-translate-y-1 transition-all duration-300 group">
             <div className={cn("p-3 sm:p-4 rounded-xl shrink-0 group-hover:scale-110 transition-transform shadow-sm", item.bg, item.text)}>
               <item.icon className="w-5 h-5 sm:w-8 sm:h-8" />
             </div>
             <div className="space-y-1 flex-grow">
-              <h4 className="font-black text-gray-900 text-sm sm:text-xl leading-tight">{item.title}</h4>
-              <p className="text-[10px] sm:text-sm text-gray-500 font-medium leading-tight">{item.desc}</p>
+              <h4 className="font-black text-gray-900 dark:text-gray-100 text-sm sm:text-xl leading-tight">{item.title}</h4>
+              <p className="text-[10px] sm:text-sm text-gray-500 dark:text-gray-400 font-medium leading-tight">{item.desc}</p>
             </div>
           </div>
         ))}
@@ -214,7 +216,7 @@ export default function Home() {
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 sm:gap-10">
           <div className="space-y-2 sm:space-y-3 w-full">
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <h2 className="text-2xl sm:text-4xl font-black text-gray-900 uppercase tracking-tighter leading-tight">
+              <h2 className="text-2xl sm:text-4xl font-black text-gray-900 dark:text-gray-100 uppercase tracking-tighter leading-tight">
                 {searchTerm ? `Search: ${searchTerm}` : "Premium Catalog"}
               </h2>
               {searchTerm && (
@@ -229,11 +231,11 @@ export default function Home() {
                 </button>
               )}
             </div>
-            <p className="text-xs sm:text-xl text-gray-500 font-medium">Hand-picked premium assets for your ideas.</p>
+            <p className="text-xs sm:text-xl text-gray-500 dark:text-gray-400 font-medium">Hand-picked premium assets for your ideas.</p>
           </div>
           
           <div className="w-full lg:w-auto flex flex-wrap gap-3 overflow-x-auto pb-2 no-scrollbar">
-            <div className="flex bg-gray-100/30 p-2 rounded-3xl border border-gray-100 overflow-x-auto no-scrollbar w-full sm:w-auto">
+            <div className="flex bg-gray-100/30 dark:bg-gray-800/30 p-2 rounded-3xl border border-gray-100 dark:border-gray-800 overflow-x-auto no-scrollbar w-full sm:w-auto">
               {categoryOptions.map(cat => (
                 <button
                   key={cat}
@@ -242,7 +244,7 @@ export default function Home() {
                     "px-5 py-3 sm:px-8 sm:py-3.5 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all duration-300 whitespace-nowrap",
                     filter === cat 
                       ? "bg-indigo-600 text-white shadow-2xl shadow-indigo-200 ring-4 ring-indigo-500/10 scale-105 z-10" 
-                      : "text-gray-400 hover:text-gray-900 hover:bg-white"
+                      : "text-gray-400 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-white dark:hover:bg-gray-800"
                   )}
                 >
                   {cat}
@@ -284,6 +286,11 @@ function HeroSlider({ banners, defaultTitle, defaultSubtitle, productsRef }: { b
   const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
   const navigate = useNavigate();
   const { settings } = useSettings();
+  const { theme } = useTheme();
+
+  const isDark = theme === 'dark';
+  const defaultTitleColor = isDark ? "#ffffff" : "#111827";
+  const defaultSubtitleColor = isDark ? "#ffffffcc" : "#4b5563";
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 640);
@@ -301,15 +308,15 @@ function HeroSlider({ banners, defaultTitle, defaultSubtitle, productsRef }: { b
 
   if (banners.length === 0) {
     return (
-      <section className="relative overflow-hidden rounded-xl sm:rounded-[32px] bg-indigo-950 text-white min-h-[140px] sm:min-h-[400px] flex items-center shadow-2xl shadow-indigo-100/50 mx-auto w-full">
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/50 to-purple-900/50" />
+      <section className="relative overflow-hidden rounded-xl sm:rounded-[32px] bg-white dark:bg-indigo-950 text-gray-900 dark:text-white min-h-[140px] sm:min-h-[400px] flex items-center shadow-2xl shadow-indigo-100/30 dark:shadow-none mx-auto w-full border border-gray-100 dark:border-none">
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-indigo-900/50 dark:to-purple-900/50" />
         <div className="absolute top-0 right-0 w-64 sm:w-96 h-64 sm:h-96 bg-indigo-500/20 rounded-full blur-3xl -mr-16 sm:-mr-48 -mt-32 sm:-mt-48 pointer-events-none" />
         <div className="relative w-full max-w-4xl mx-auto text-center px-6 py-4 sm:py-20 space-y-2.5 sm:space-y-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             <h1 
               style={{ 
                 fontSize: isMobile ? (settings.heroTitleSizeMobile || "18px") : (settings.heroTitleSizeDesktop || "48px"),
-                color: settings.heroTitleColor || "#ffffff"
+                color: settings.heroTitleColor || defaultTitleColor
               }}
               className="font-black tracking-tighter leading-tight uppercase underline decoration-indigo-500/30 decoration-2 underline-offset-2 sm:underline-offset-8 px-2"
             >
@@ -318,15 +325,18 @@ function HeroSlider({ banners, defaultTitle, defaultSubtitle, productsRef }: { b
             <p 
               style={{ 
                 fontSize: isMobile ? (settings.heroSubtitleSizeMobile || "10px") : (settings.heroSubtitleSizeDesktop || "16px"),
-                color: settings.heroSubtitleColor || "#ffffffcc"
+                color: settings.heroSubtitleColor || defaultSubtitleColor
               }}
-              className="text-indigo-100/80 mt-1 sm:mt-4 font-medium px-4 line-clamp-2 sm:line-clamp-none max-w-2xl mx-auto"
+              className="mt-1 sm:mt-4 font-medium px-4 line-clamp-2 sm:line-clamp-none max-w-2xl mx-auto opacity-80"
             >
               {defaultSubtitle}
             </p>
           </motion.div>
-          <button onClick={() => productsRef.current?.scrollIntoView({ behavior: 'smooth' })} className="bg-white text-indigo-950 px-5 py-2.5 sm:px-8 sm:py-4 rounded-lg sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all flex items-center gap-1.5 sm:gap-2 mx-auto shadow-xl active:scale-95">
-            <Package className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-indigo-600" /> Explore
+          <button 
+            onClick={() => productsRef.current?.scrollIntoView({ behavior: 'smooth' })} 
+            className="bg-indigo-600 dark:bg-white text-white dark:text-indigo-950 px-5 py-2.5 sm:px-8 sm:py-4 rounded-lg sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-indigo-700 dark:hover:bg-indigo-50 transition-all flex items-center gap-1.5 sm:gap-2 mx-auto shadow-xl active:scale-95"
+          >
+            <Package className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-white dark:text-indigo-600" /> Explore
           </button>
         </div>
       </section>
@@ -336,7 +346,7 @@ function HeroSlider({ banners, defaultTitle, defaultSubtitle, productsRef }: { b
   const slide = banners[current];
 
   return (
-  <section className="relative overflow-hidden rounded-xl sm:rounded-[40px] bg-indigo-950 text-white min-h-[160px] sm:min-h-[450px] shadow-2xl shadow-indigo-100/50 group/slider mx-auto w-full">
+  <section className="relative overflow-hidden rounded-xl sm:rounded-[40px] bg-white dark:bg-indigo-950 text-gray-900 dark:text-white min-h-[160px] sm:min-h-[450px] shadow-2xl shadow-indigo-100/30 dark:shadow-none group/slider mx-auto w-full border border-gray-100 dark:border-none">
     <AnimatePresence mode="wait">
       <motion.div
         key={current}
@@ -346,13 +356,13 @@ function HeroSlider({ banners, defaultTitle, defaultSubtitle, productsRef }: { b
         transition={{ duration: 0.6, ease: "easeOut" }}
         className="absolute inset-0"
       >
-        <div className="absolute inset-0 w-full h-full">
+        <div className="absolute inset-0 h-full w-full">
           <img 
             src={slide.imageUrl} 
             alt={slide.title || "Banner"} 
-            className="w-full h-full object-cover opacity-50" 
+            className="w-full h-full object-cover opacity-100 dark:opacity-50 transition-opacity duration-300" 
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-indigo-950/90 via-indigo-950/40 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-white/80 via-white/20 to-transparent dark:from-indigo-950/95 dark:via-indigo-950/40 dark:to-transparent" />
         </div>
 
         <div className="relative h-full w-full max-w-5xl mx-auto flex flex-col justify-center items-center text-center px-6 py-4 sm:py-20 space-y-3 sm:space-y-8">
@@ -365,7 +375,7 @@ function HeroSlider({ banners, defaultTitle, defaultSubtitle, productsRef }: { b
             <h1 
               style={{ 
                 fontSize: isMobile ? (settings.heroTitleSizeMobile || "18px") : (settings.heroTitleSizeDesktop || "48px"),
-                color: settings.heroTitleColor || "#ffffff"
+                color: settings.heroTitleColor || defaultTitleColor
               }}
               className="font-black tracking-tighter uppercase leading-[1.1] sm:leading-none px-4 break-words"
             >
@@ -374,9 +384,9 @@ function HeroSlider({ banners, defaultTitle, defaultSubtitle, productsRef }: { b
             <p 
               style={{ 
                 fontSize: isMobile ? (settings.heroSubtitleSizeMobile || "10px") : (settings.heroSubtitleSizeDesktop || "16px"),
-                color: settings.heroSubtitleColor || "#ffffffcc"
+                color: settings.heroSubtitleColor || defaultSubtitleColor
               }}
-              className="text-white/80 max-w-2xl mx-auto font-medium px-4 line-clamp-2 sm:line-clamp-none"
+              className="max-w-2xl mx-auto font-medium px-4 line-clamp-2 sm:line-clamp-none opacity-90"
             >
               {slide.subtitle || defaultSubtitle}
             </p>
@@ -389,9 +399,9 @@ function HeroSlider({ banners, defaultTitle, defaultSubtitle, productsRef }: { b
           >
             <button 
               onClick={() => slide.link ? (slide.link.startsWith('http') ? window.open(slide.link, '_blank') : navigate(slide.link)) : productsRef.current?.scrollIntoView({ behavior: 'smooth' })}
-              className="bg-white text-indigo-950 px-5 py-2.5 sm:px-8 sm:py-5 rounded-lg sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all flex items-center gap-1.5 sm:gap-3 shadow-xl active:scale-95"
+              className="bg-indigo-600 dark:bg-white text-white dark:text-indigo-950 px-5 py-2.5 sm:px-8 sm:py-5 rounded-lg sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-indigo-700 dark:hover:bg-indigo-50 transition-all flex items-center gap-1.5 sm:gap-3 shadow-xl active:scale-95"
             >
-              <ArrowRight className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-indigo-600" />
+              <ArrowRight className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-white dark:text-indigo-600" />
               {slide.buttonText || (slide.link ? "Open" : "Explore")}
             </button>
           </motion.div>
@@ -444,22 +454,22 @@ function ProductCard({ product }: any) {
 
   const getCategoryColor = (cat: string) => {
     switch (cat?.toLowerCase()) {
-      case 'software': return 'bg-blue-50 text-blue-600 border-blue-100';
-      case 'plugins': return 'bg-purple-50 text-purple-600 border-purple-100';
-      case 'scripts': return 'bg-amber-50 text-amber-600 border-amber-100';
-      case 'apps': return 'bg-pink-50 text-pink-600 border-pink-100';
-      case 'templates': return 'bg-emerald-50 text-emerald-600 border-emerald-100';
-      case 'subscription': return 'bg-indigo-50 text-indigo-600 border-indigo-100';
-      default: return 'bg-gray-50 text-gray-600 border-gray-100';
+      case 'software': return 'bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800';
+      case 'plugins': return 'bg-purple-50 text-purple-600 border-purple-100 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800';
+      case 'scripts': return 'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800';
+      case 'apps': return 'bg-pink-50 text-pink-600 border-pink-100 dark:bg-pink-900/20 dark:text-pink-400 dark:border-pink-800';
+      case 'templates': return 'bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800';
+      case 'subscription': return 'bg-indigo-50 text-indigo-600 border-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400 dark:border-indigo-800';
+      default: return 'bg-gray-50 text-gray-600 border-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700';
     }
   };
 
   return (
     <div 
-      className="group bg-white rounded-xl sm:rounded-[32px] border border-gray-100 overflow-hidden hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-500 flex flex-col h-full relative w-full max-w-full box-border"
+      className="group bg-white dark:bg-gray-900 rounded-xl sm:rounded-[32px] border border-gray-100 dark:border-gray-800 overflow-hidden hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-500 flex flex-col h-full relative w-full max-w-full box-border"
     >
       {/* Image Section */}
-      <div className="relative aspect-square sm:aspect-[1.5/1] overflow-hidden bg-gray-50 border-b border-gray-50/50">
+      <div className="relative aspect-square sm:aspect-[1.5/1] overflow-hidden bg-gray-50 dark:bg-gray-800/50 border-b border-gray-50/50 dark:border-gray-800/50">
         <Link to={`/product/${product.id}`} className="block w-full h-full">
           <img 
             src={product.imageUrl || `https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800&q=80`} 
@@ -489,20 +499,20 @@ function ProductCard({ product }: any) {
       <div className="p-3 sm:p-6 flex-grow flex flex-col justify-between space-y-3 sm:space-y-5">
         <div className="space-y-1 sm:space-y-1.5">
           <Link to={`/product/${product.id}`} className="block">
-            <h3 className="text-[12px] sm:text-base lg:text-lg font-black text-gray-900 leading-tight group-hover:text-indigo-600 transition-colors line-clamp-2 min-h-[2.4em] sm:min-h-0 tracking-tight uppercase">
+            <h3 className="text-[12px] sm:text-base lg:text-lg font-black text-gray-900 dark:text-white leading-tight group-hover:text-indigo-600 transition-colors line-clamp-2 min-h-[2.4em] sm:min-h-0 tracking-tight uppercase">
               {product.name}
             </h3>
           </Link>
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-0.5 text-amber-400">
               <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" />
-              <span className="text-[9px] sm:text-[10px] font-black">{product.rating || 4.8}</span>
+              <span className="text-[9px] sm:text-[10px] font-black dark:text-amber-300">{product.rating || 4.8}</span>
             </div>
-            <span className="text-[9px] sm:text-[10px] text-gray-300 font-bold uppercase tracking-widest">• {product.category}</span>
+            <span className="text-[9px] sm:text-[10px] text-gray-300 dark:text-gray-500 font-bold uppercase tracking-widest">• {product.category}</span>
           </div>
         </div>
         
-        <div className="space-y-2 sm:space-y-4 pt-3 sm:pt-5 border-t border-gray-50">
+        <div className="space-y-2 sm:space-y-4 pt-3 sm:pt-5 border-t border-gray-50 dark:border-gray-800">
           <div className="flex items-center justify-between">
             <div className="flex flex-col">
               {hasDiscount && (
@@ -510,14 +520,14 @@ function ProductCard({ product }: any) {
                   ৳{product.price.toLocaleString()}
                 </span>
               )}
-              <div className="text-sm sm:text-xl font-black text-gray-900 flex items-baseline gap-0.5 tracking-tighter">
-                <span className="text-[9px] sm:text-xs font-medium text-gray-400">৳</span>
+              <div className="text-sm sm:text-xl font-black text-gray-900 dark:text-white flex items-baseline gap-0.5 tracking-tighter">
+                <span className="text-[9px] sm:text-xs font-medium text-gray-400 dark:text-gray-500">৳</span>
                 {(hasDiscount ? product.discountPrice : product.price).toLocaleString()}
               </div>
             </div>
-            <div className="bg-emerald-50 px-1.5 py-0.5 rounded-md flex items-center gap-1">
-               <ShieldCheck className="w-2.5 h-2.5 text-emerald-500" />
-               <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Safe</span>
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+               <ShieldCheck className="w-2.5 h-2.5 text-emerald-500 dark:text-emerald-400" />
+               <span className="text-[8px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Safe</span>
             </div>
           </div>
           

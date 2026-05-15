@@ -289,11 +289,11 @@ export default function ProductDetail() {
         >
           {/* Main Stage */}
           <div className="relative group">
-            <div className="aspect-[4/3] sm:aspect-[16/10] rounded-[2rem] sm:rounded-[3rem] overflow-hidden bg-white border border-gray-100 shadow-2xl shadow-indigo-100/50 flex items-center justify-center p-4 sm:p-8 relative">
+            <div className="aspect-[4/3] sm:aspect-[16/10] rounded-[2rem] sm:rounded-[3rem] overflow-hidden bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 shadow-2xl shadow-indigo-100/50 dark:shadow-none flex items-center justify-center p-4 sm:p-8 relative">
               {/* Glassmorphism Background Decoration */}
               <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-                <div className="absolute -top-1/2 -left-1/4 w-full h-full bg-indigo-50/50 rounded-full blur-[120px]" />
-                <div className="absolute -bottom-1/2 -right-1/4 w-full h-full bg-emerald-50/50 rounded-full blur-[120px]" />
+                <div className="absolute -top-1/2 -left-1/4 w-full h-full bg-indigo-50/50 dark:bg-indigo-900/10 rounded-full blur-[120px]" />
+                <div className="absolute -bottom-1/2 -right-1/4 w-full h-full bg-emerald-50/50 dark:bg-emerald-900/10 rounded-full blur-[120px]" />
               </div>
 
               <AnimatePresence mode="wait">
@@ -435,32 +435,32 @@ export default function ProductDetail() {
               )}
               <div className="flex items-center gap-1.5 text-amber-400">
                 <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current" />
-                <span className="text-xs sm:text-sm font-black text-gray-900">{product.rating || 0}</span>
-                <span className="text-[10px] sm:text-xs text-gray-400 font-bold">({product.reviewCount || 0} Reviews)</span>
+                <span className="text-xs sm:text-sm font-black text-gray-900 dark:text-white">{product.rating || 0}</span>
+                <span className="text-[10px] sm:text-xs text-gray-400 dark:text-gray-500 font-bold">({product.reviewCount || 0} Reviews)</span>
               </div>
             </div>
             
-            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black tracking-tighter text-gray-900 leading-tight uppercase">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black tracking-tighter text-gray-900 dark:text-white leading-tight uppercase">
               {product.name}
             </h1>
             
-            <p className="text-gray-500 text-xs sm:text-base leading-relaxed font-medium line-clamp-3">
+            <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-base leading-relaxed font-medium line-clamp-3">
               {product.description}
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
             {features.map((feature, i) => (
-              <div key={i} className="flex items-center gap-2 text-[10px] sm:text-sm text-gray-600 font-bold">
-                <div className="w-4 h-4 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
-                  <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" />
+              <div key={i} className="flex items-center gap-2 text-[10px] sm:text-sm text-gray-600 dark:text-gray-400 font-bold">
+                <div className="w-4 h-4 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500 dark:text-emerald-400" />
                 </div>
                 {feature}
               </div>
             ))}
           </div>
 
-          <div className="bg-white rounded-3xl p-5 sm:p-8 border border-gray-100 space-y-5 sm:space-y-7 shadow-sm">
+          <div className="bg-white dark:bg-gray-950 rounded-3xl p-5 sm:p-8 border border-gray-100 dark:border-gray-800 space-y-5 sm:space-y-7 shadow-sm">
             {product.category === "Subscription" && (
               <div className="space-y-3 sm:space-y-4">
                 <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Select Plan</label>
@@ -469,18 +469,18 @@ export default function ProductDetail() {
                       onClick={() => setSelectedPlan("lifetime")}
                       className={cn(
                         "p-3 sm:p-4 rounded-xl border-2 text-left transition-all flex justify-between items-center group gap-3",
-                        selectedPlan === "lifetime" ? "border-indigo-600 bg-indigo-50/30" : "border-gray-50 bg-gray-50/30 hover:border-gray-100"
+                        selectedPlan === "lifetime" ? "border-indigo-600 bg-indigo-50/30 dark:bg-indigo-900/10" : "border-gray-50 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-800/20 hover:border-gray-100 dark:hover:border-gray-700"
                       )}
                     >
                       <div className="space-y-0.5">
-                        <div className="font-black text-[11px] sm:text-base text-gray-900 uppercase tracking-tight group-hover:text-indigo-600 transition-colors">
+                        <div className="font-black text-[11px] sm:text-base text-gray-900 dark:text-white uppercase tracking-tight group-hover:text-indigo-600 transition-colors">
                           {product.subscriptionLifetimeText || "Lifetime Access"}
                         </div>
-                        <div className="text-[9px] sm:text-xs text-gray-500 font-medium line-clamp-1">
+                        <div className="text-[9px] sm:text-xs text-gray-500 dark:text-gray-400 font-medium line-clamp-1">
                           Forever access, one-time payment
                         </div>
                       </div>
-                      <div className="text-sm sm:text-xl font-black text-indigo-600 tracking-tighter">৳{product.price.toLocaleString()}</div>
+                      <div className="text-sm sm:text-xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">৳{product.price.toLocaleString()}</div>
                     </button>
 
                     {product.subscriptionMonthlyPrice && (
@@ -488,18 +488,18 @@ export default function ProductDetail() {
                         onClick={() => setSelectedPlan("monthly")}
                         className={cn(
                           "p-3 sm:p-4 rounded-xl border-2 text-left transition-all flex justify-between items-center group gap-3",
-                          selectedPlan === "monthly" ? "border-indigo-600 bg-indigo-50/30" : "border-gray-50 bg-gray-50/30 hover:border-gray-100"
+                          selectedPlan === "monthly" ? "border-indigo-600 bg-indigo-50/30 dark:bg-indigo-900/10" : "border-gray-50 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-800/20 hover:border-gray-100 dark:hover:border-gray-700"
                         )}
                       >
                         <div className="space-y-0.5">
-                          <div className="font-black text-[11px] sm:text-base text-gray-900 uppercase tracking-tight group-hover:text-indigo-600 transition-colors">
+                          <div className="font-black text-[11px] sm:text-base text-gray-900 dark:text-white uppercase tracking-tight group-hover:text-indigo-600 transition-colors">
                             {product.subscriptionMonthlyText || "Monthly Subscription"}
                           </div>
-                          <div className="text-[9px] sm:text-xs text-gray-500 font-medium line-clamp-1">
+                          <div className="text-[9px] sm:text-xs text-gray-500 dark:text-gray-400 font-medium line-clamp-1">
                             Cancel anytime
                           </div>
                         </div>
-                        <div className="text-sm sm:text-xl font-black text-indigo-600 tracking-tighter">৳{product.subscriptionMonthlyPrice.toLocaleString()}<span className="text-[9px] font-medium text-gray-400">/mo</span></div>
+                        <div className="text-sm sm:text-xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">৳{product.subscriptionMonthlyPrice.toLocaleString()}<span className="text-[9px] font-medium text-gray-400 dark:text-gray-500">/mo</span></div>
                       </button>
                     )}
 
@@ -508,18 +508,18 @@ export default function ProductDetail() {
                         onClick={() => setSelectedPlan("yearly")}
                         className={cn(
                           "p-3 sm:p-4 rounded-xl border-2 text-left transition-all flex justify-between items-center group gap-3",
-                          selectedPlan === "yearly" ? "border-indigo-600 bg-indigo-50/30" : "border-gray-50 bg-gray-50/30 hover:border-gray-100"
+                          selectedPlan === "yearly" ? "border-indigo-600 bg-indigo-50/30 dark:bg-indigo-900/10" : "border-gray-50 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-800/20 hover:border-gray-100 dark:hover:border-gray-700"
                         )}
                       >
                         <div className="space-y-0.5">
-                          <div className="font-black text-[11px] sm:text-base text-gray-900 uppercase tracking-tight group-hover:text-indigo-600 transition-colors">
+                          <div className="font-black text-[11px] sm:text-base text-gray-900 dark:text-white uppercase tracking-tight group-hover:text-indigo-600 transition-colors">
                             {product.subscriptionYearlyText || "Yearly Professional"}
                           </div>
-                          <div className="text-[9px] sm:text-xs text-gray-500 font-medium line-clamp-1">
+                          <div className="text-[9px] sm:text-xs text-gray-500 dark:text-gray-400 font-medium line-clamp-1">
                             Full year access
                           </div>
                         </div>
-                        <div className="text-sm sm:text-xl font-black text-indigo-600 tracking-tighter">৳{product.subscriptionYearlyPrice.toLocaleString()}<span className="text-[9px] font-medium text-gray-400">/yr</span></div>
+                        <div className="text-sm sm:text-xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">৳{product.subscriptionYearlyPrice.toLocaleString()}<span className="text-[9px] font-medium text-gray-400 dark:text-gray-500">/yr</span></div>
                       </button>
                     )}
                 </div>
@@ -537,20 +537,20 @@ export default function ProductDetail() {
                       ৳{product.price.toLocaleString()}
                     </span>
                   )}
-                  <div className="text-2xl sm:text-5xl font-black text-gray-900 flex items-baseline gap-1 tracking-tighter">
-                    <span className="text-xs sm:text-xl font-medium text-gray-400">৳</span>
+                  <div className="text-2xl sm:text-5xl font-black text-gray-900 dark:text-white flex items-baseline gap-1 tracking-tighter">
+                    <span className="text-xs sm:text-xl font-medium text-gray-400 dark:text-gray-500">৳</span>
                     {getActivePrice().toLocaleString()}
                   </div>
                 </div>
               </div>
-              <div className="bg-amber-50 px-3 py-2 sm:px-5 sm:py-3 rounded-xl border border-amber-100 flex flex-col items-center">
+              <div className="bg-amber-50 dark:bg-amber-900/20 px-3 py-2 sm:px-5 sm:py-3 rounded-xl border border-amber-100 dark:border-amber-800 flex flex-col items-center">
                 <Zap className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-amber-500 fill-current mb-0.5" />
-                <span className="text-[7px] sm:text-[9px] font-black uppercase tracking-widest text-amber-700">Instant</span>
+                <span className="text-[7px] sm:text-[9px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400">Instant</span>
               </div>
             </div>
 
             {/* Size and Quantity Selection */}
-            <div className="space-y-6 pt-4 sm:pt-6 border-t border-gray-50">
+            <div className="space-y-6 pt-4 sm:pt-6 border-t border-gray-50 dark:border-gray-800">
               {/* Size Selector */}
               {product.enableSizes && product.availableSizes && product.availableSizes.length > 0 && (
                 <div className="space-y-3">
@@ -561,7 +561,7 @@ export default function ProductDetail() {
                     )}>
                       Select Size {sizeError && "(Required)"}
                     </label>
-                    <button className="text-[9px] font-black text-indigo-600 uppercase tracking-widest hover:underline">Size Guide</button>
+                    <button className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest hover:underline">Size Guide</button>
                   </div>
                   <div className="flex flex-wrap gap-2.5">
                     {product.availableSizes.map((size: string) => (
@@ -574,8 +574,8 @@ export default function ProductDetail() {
                         className={cn(
                           "w-12 h-12 rounded-xl border-2 font-black transition-all active:scale-95 flex items-center justify-center text-sm",
                           selectedSize === size 
-                            ? "border-indigo-600 bg-indigo-50 text-indigo-600 shadow-md shadow-indigo-100" 
-                            : "border-gray-50 bg-gray-50/50 text-gray-400 hover:border-gray-100"
+                            ? "border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 shadow-md shadow-indigo-100/50" 
+                            : "border-gray-50 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20 text-gray-400 hover:border-gray-100 dark:hover:border-gray-700"
                         )}
                       >
                         {size}
@@ -587,21 +587,21 @@ export default function ProductDetail() {
 
               {/* Quantity Selector */}
               <div className="space-y-3">
-                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Quantity</label>
+                <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Quantity</label>
                 <div className="flex items-center gap-4">
-                  <div className="flex items-center bg-gray-50 rounded-2xl p-1 border border-gray-100">
+                  <div className="flex items-center bg-gray-50 dark:bg-gray-900 rounded-2xl p-1 border border-gray-100 dark:border-gray-800">
                     <button 
                       onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                      className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white hover:shadow-sm transition-all text-gray-400 font-black text-lg"
+                      className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm transition-all text-gray-400 font-black text-lg"
                     >
                       -
                     </button>
-                    <span className="w-12 text-center font-black text-gray-900 text-sm">
+                    <span className="w-12 text-center font-black text-gray-900 dark:text-white text-sm">
                       {quantity}
                     </span>
                     <button 
                       onClick={() => setQuantity(quantity + 1)}
-                      className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white hover:shadow-sm transition-all text-gray-400 font-black text-lg"
+                      className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm transition-all text-gray-400 font-black text-lg"
                     >
                       +
                     </button>
@@ -704,18 +704,18 @@ export default function ProductDetail() {
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-6 sm:space-y-8"
               >
-                <div className="prose prose-indigo max-w-none text-gray-500 text-xs sm:text-base leading-relaxed">
-                  <p className="font-bold text-gray-900 leading-relaxed text-sm sm:text-lg">
+            <div className="prose prose-indigo max-w-none text-gray-500 dark:text-gray-400 text-xs sm:text-base leading-relaxed">
+                  <p className="font-bold text-gray-900 dark:text-white leading-relaxed text-sm sm:text-lg">
                     {product.overview || "This premium digital asset is meticulously engineered for modern development workflows. Built with performance, scalability, and ease of use in mind, it provides a robust foundation for your next big project."}
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-8">
-                    <div className="p-5 sm:p-6 bg-indigo-50/30 rounded-2xl border border-indigo-100/50">
-                      <h4 className="font-black text-indigo-900 text-[10px] sm:text-xs uppercase tracking-widest mb-2">Designed for Efficiency</h4>
-                      <p className="text-[11px] sm:text-sm text-indigo-800/70 font-medium">Reduce your time-to-market significantly with our ready-to-use components and logic. Focus on what matters most - your unique features.</p>
+                    <div className="p-5 sm:p-6 bg-indigo-50/30 dark:bg-indigo-900/10 rounded-2xl border border-indigo-100/50 dark:border-indigo-800/30">
+                      <h4 className="font-black text-indigo-900 dark:text-indigo-400 text-[10px] sm:text-xs uppercase tracking-widest mb-2">Designed for Efficiency</h4>
+                      <p className="text-[11px] sm:text-sm text-indigo-800/70 dark:text-indigo-300/70 font-medium">Reduce your time-to-market significantly with our ready-to-use components and logic. Focus on what matters most - your unique features.</p>
                     </div>
-                    <div className="p-5 sm:p-6 bg-emerald-50/30 rounded-2xl border border-emerald-100/50">
-                      <h4 className="font-black text-emerald-900 text-[10px] sm:text-xs uppercase tracking-widest mb-2">Scalable Foundation</h4>
-                      <p className="text-[11px] sm:text-sm text-emerald-800/70 font-medium">Built following industry standard best practices. Whether you're a solo dev or a large team, this asset scales with your needs.</p>
+                    <div className="p-5 sm:p-6 bg-emerald-50/30 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100/50 dark:border-emerald-800/30">
+                      <h4 className="font-black text-emerald-900 dark:text-emerald-400 text-[10px] sm:text-xs uppercase tracking-widest mb-2">Scalable Foundation</h4>
+                      <p className="text-[11px] sm:text-sm text-emerald-800/70 dark:text-emerald-300/70 font-medium">Built following industry standard best practices. Whether you're a solo dev or a large team, this asset scales with your needs.</p>
                     </div>
                   </div>
                 </div>
@@ -738,9 +738,9 @@ export default function ProductDetail() {
                   { label: "Compatibility", value: "Modern Browsers, Cross-platform" },
                   { label: "License", value: "Commercial Premium" }
                 ].map((spec, i) => (
-                  <div key={i} className="flex justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+                  <div key={i} className="flex justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800">
                     <span className="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">{spec.label}</span>
-                    <span className="text-[10px] sm:text-xs font-bold text-gray-900">{spec.value}</span>
+                    <span className="text-[10px] sm:text-xs font-bold text-gray-900 dark:text-white">{spec.value}</span>
                   </div>
                 ))}
               </motion.div>
@@ -756,9 +756,9 @@ export default function ProductDetail() {
               >
                 {/* Submit Review */}
                 {auth.currentUser ? (
-                  <div className="bg-gray-50 rounded-2xl p-4 sm:p-6 border border-gray-100 space-y-4">
+                  <div className="bg-gray-50 dark:bg-gray-900 rounded-2xl p-4 sm:p-6 border border-gray-100 dark:border-gray-800 space-y-4">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-[10px] sm:text-sm font-black text-gray-900 uppercase tracking-widest">Write a Review</h4>
+                      <h4 className="text-[10px] sm:text-sm font-black text-gray-900 dark:text-white uppercase tracking-widest">Write a Review</h4>
                       <div className="flex gap-1">
                         {[1, 2, 3, 4, 5].map((star) => (
                           <button
@@ -782,7 +782,7 @@ export default function ProductDetail() {
                       value={newReviewComment}
                       onChange={(e) => setNewReviewComment(e.target.value)}
                       placeholder="Share your experience with this asset..."
-                      className="w-full p-4 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 min-h-[100px] font-medium"
+                      className="w-full p-4 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 min-h-[100px] font-medium transition-colors text-gray-900 dark:text-white"
                     />
                     <div className="flex justify-end">
                       <button 
@@ -795,8 +795,8 @@ export default function ProductDetail() {
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-indigo-50 rounded-2xl p-6 text-center border border-indigo-100">
-                    <p className="text-sm font-bold text-indigo-900">Please <Link to="/auth" className="underline">sign in</Link> to leave a review.</p>
+                  <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl p-6 text-center border border-indigo-100 dark:border-indigo-800/30">
+                    <p className="text-sm font-bold text-indigo-900 dark:text-indigo-300">Please <Link to="/auth" className="underline hover:text-indigo-700 dark:hover:text-indigo-400 decoration-2 transition-colors">sign in</Link> to leave a review.</p>
                   </div>
                 )}
 
@@ -811,23 +811,23 @@ export default function ProductDetail() {
                     </div>
                   ) : (
                     reviews.map((review) => (
-                      <div key={review.id} className="flex gap-4 p-4 rounded-2xl border border-transparent hover:border-gray-50 transition-colors">
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-100 shrink-0 overflow-hidden border border-gray-50">
+                      <div key={review.id} className="flex gap-4 p-4 rounded-2xl border border-transparent hover:border-gray-50 dark:hover:border-gray-800 transition-colors">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-100 dark:bg-gray-800 shrink-0 overflow-hidden border border-gray-50 dark:border-gray-700">
                           <img src={review.userAvatar || `https://ui-avatars.com/api/?name=${review.userName}&background=random`} alt={review.userName} />
                         </div>
                         <div className="space-y-1.5 flex-grow">
                           <div className="flex justify-between items-center">
-                            <h5 className="text-[11px] sm:text-sm font-black text-gray-900 uppercase tracking-tight">{review.userName}</h5>
-                            <span className="text-[9px] sm:text-[10px] text-gray-400 font-medium">
+                            <h5 className="text-[11px] sm:text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">{review.userName}</h5>
+                            <span className="text-[9px] sm:text-[10px] text-gray-400 dark:text-gray-500 font-medium">
                               {review.createdAt ? new Date(review.createdAt.seconds * 1000).toLocaleDateString() : "Just now"}
                             </span>
                           </div>
                           <div className="flex gap-0.5 text-amber-400">
                             {[...Array(5)].map((_, i) => (
-                              <Star key={i} className={cn("w-3 h-3 fill-current", i < review.rating ? "text-amber-400" : "text-gray-200")} />
+                              <Star key={i} className={cn("w-3 h-3 fill-current", i < review.rating ? "text-amber-400" : "text-gray-200 dark:text-gray-700")} />
                             ))}
                           </div>
-                          <p className="text-[11px] sm:text-sm text-gray-500 font-medium leading-relaxed italic">
+                          <p className="text-[11px] sm:text-sm text-gray-500 dark:text-gray-400 font-medium leading-relaxed italic">
                             "{review.comment}"
                           </p>
                         </div>

@@ -73,6 +73,14 @@ interface SiteSettings {
   tabPermissions?: Record<string, string[]>;
   requireReviewApproval?: boolean;
   showReviews?: boolean;
+  loadingTitle?: string;
+  loadingSubtitle?: string;
+  loadingStyle?: "classic" | "minimal" | "modern" | "bento" | "waves" | "dots" | "cube" | "bars" | "ring";
+  adminLayout?: "classic" | "modern";
+  showThemeToggle?: boolean;
+  themeToggleStyle?: "classic" | "minimal" | "ios" | "glass" | "creative" | "glow" | "landscape";
+  themeTogglePosition?: "header-left" | "header-center" | "header-right" | "profile-page";
+  themeToggleSize?: "sm" | "md" | "lg";
 }
 
 const defaultSettings: SiteSettings = {
@@ -143,6 +151,14 @@ const defaultSettings: SiteSettings = {
   tabPermissions: {},
   requireReviewApproval: false,
   showReviews: true,
+  loadingTitle: "Digital Marketplace",
+  loadingSubtitle: "Syncing Workspace",
+  loadingStyle: "modern",
+  adminLayout: "classic",
+  showThemeToggle: true,
+  themeToggleStyle: "classic",
+  themeTogglePosition: "header-right",
+  themeToggleSize: "md",
 };
 
 const SettingsContext = createContext<{ settings: SiteSettings; loading: boolean }>({
@@ -151,7 +167,17 @@ const SettingsContext = createContext<{ settings: SiteSettings; loading: boolean
 });
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const [settings, setSettings] = useState<SiteSettings>(defaultSettings);
+  const [settings, setSettings] = useState<SiteSettings>(() => {
+    try {
+      const cached = localStorage.getItem("site_settings");
+      if (cached) {
+        return { ...defaultSettings, ...JSON.parse(cached) };
+      }
+    } catch (e) {
+      console.error("Failed to load cached settings:", e);
+    }
+    return defaultSettings;
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -160,6 +186,13 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         const data = snap.data() as SiteSettings;
         const mergedSettings = { ...defaultSettings, ...data };
         setSettings(mergedSettings);
+        
+        // Cache settings for next load
+        try {
+          localStorage.setItem("site_settings", JSON.stringify(mergedSettings));
+        } catch (e) {
+          console.error("Failed to cache settings:", e);
+        }
         
         // Dynamic Title and Favicon
         if (mergedSettings.tabTitle || mergedSettings.siteName) {
@@ -178,6 +211,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, "settings/site");
+      setLoading(false);
     });
 
     return () => unsub();

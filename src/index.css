@@ -37,12 +37,14 @@ html, body {
   --color-pink-600: #db2777;
 }
 
+@variant dark (&:where(.dark, .dark *));
+
 @layer base {
   html, body {
-    @apply overflow-x-hidden w-full;
+    @apply overflow-x-hidden w-full transition-colors duration-300;
   }
   body {
-    @apply bg-white text-gray-900 selection:bg-indigo-100 selection:text-indigo-900;
+    @apply bg-white text-gray-900 selection:bg-indigo-100 selection:text-indigo-900 dark:bg-gray-950 dark:text-gray-100;
   }
 }
 

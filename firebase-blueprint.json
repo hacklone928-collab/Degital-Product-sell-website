@@ -94,7 +94,8 @@
         "buyColor": { "type": "string" },
         "cartTextColor": { "type": "string" },
         "viewTextColor": { "type": "string" },
-        "buyTextColor": { "type": "string" }
+        "buyTextColor": { "type": "string" },
+        "showThemeToggle": { "type": "boolean", "description": "Whether to show the Night Mode toggle button to users" }
       },
       "required": ["siteName"]
     },

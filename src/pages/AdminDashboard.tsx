@@ -2,11 +2,13 @@ import React, { useState, useEffect } from "react";
 import { db, storage, auth } from "../lib/firebase";
 import { collection, addDoc, getDocs, deleteDoc, doc, setDoc, getDoc, serverTimestamp, updateDoc, query, where, increment, onSnapshot, orderBy, limit, collectionGroup } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { Plus, Package, Users, DollarSign, Trash2, Edit, Star, Database, Settings as SettingsIcon, Save, ShoppingBag, Clock, CheckCircle, Copy, Link as LinkIcon, Inbox, Mail, Search, ShieldCheck, TrendingUp, Calendar, Eye, EyeOff, ExternalLink, ImagePlus, Upload, Loader2, Phone, Ticket, Facebook, Twitter, Instagram, Youtube, Linkedin, Github, Share2, Send, Music, Pin, ChevronLeft, ChevronRight, Ban, UserX, FileText, MessageSquare } from "lucide-react";
+import { Plus, Package, Users, DollarSign, Trash2, Edit, Star, Database, Settings as SettingsIcon, Save, ShoppingBag, Clock, CheckCircle, Copy, Link as LinkIcon, Inbox, Mail, Search, ShieldCheck, TrendingUp, Calendar, Eye, EyeOff, ExternalLink, ImagePlus, Upload, Loader2, Phone, Ticket, Facebook, Twitter, Instagram, Youtube, Linkedin, Github, Share2, Send, Music, Pin, ChevronLeft, ChevronRight, Ban, UserX, FileText, MessageSquare, Menu, X, Moon, Sun, Sparkles, CloudSun, Zap, Mountain } from "lucide-react";
 import { motion } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "../lib/utils";
-import { handleFirestoreError, OperationType } from "../lib/firestoreUtils";
+import ThemeToggle from "../components/ThemeToggle";
+import { useSettings } from "../lib/SettingsContext";
+import { useTheme } from "../lib/ThemeContext";
 import { 
   AreaChart, 
   Area, 
@@ -19,8 +21,57 @@ import {
   Bar
 } from 'recharts';
 
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { settings: initialGlobalSettings } = useSettings();
+  const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<"products" | "settings" | "orders" | "pages" | "tickets" | "categories" | "coupons" | "withdrawals" | "users" | "analytics" | "logs" | "reviews">("analytics");
   const [revenueTimeframe, setRevenueTimeframe] = useState<"daily" | "weekly" | "monthly">("daily");
   const [datePreset, setDatePreset] = useState<"today" | "yesterday" | "last7" | "last30" | "thisMonth" | "thisYear" | "custom">("thisMonth");
@@ -109,76 +160,90 @@ export default function AdminDashboard() {
   const selectedOrder = orders.find(o => o.id === selectedOrderId);
   const [editingCredentials, setEditingCredentials] = useState<{ [key: string]: { username?: string, password?: string } }>({});
   const [editingNote, setEditingNote] = useState("");
-  const [siteSettings, setSiteSettings] = useState({
-    siteName: "",
-    tabTitle: "",
-    heroTitle: "",
-    heroSubtitle: "",
-    footerText: "",
-    footerCopyright: "",
-    footerDescription: "",
-    logoUrl: "",
-    faviconUrl: "",
-    privacyUrl: "",
-    termsUrl: "",
-    supportEmail: "",
-    supportPhone: "",
-    supportAddress: "",
-    stat1Label: "Total Users",
-    stat1Value: "50k+",
-    stat2Label: "Digital Assets",
-    stat2Value: "1,200+",
-    stat3Label: "Success Rate",
-    stat3Value: "99.9%",
-    showHero: true,
-    heroTitleSizeMobile: "28px",
-    heroTitleSizeDesktop: "60px",
-    heroSubtitleSizeMobile: "12px",
-    heroSubtitleSizeDesktop: "18px",
-    heroTitleColor: "#ffffff",
-    heroSubtitleColor: "#ffffffcc",
-    bkashNumber: "",
-    nagadNumber: "",
-    rocketNumber: "",
-    bkashLogo: "",
-    nagadLogo: "",
-    rocketLogo: "",
-    enableBinancePay: false,
-    binanceId: "",
-    binanceQR: "",
-    enablePayoneer: false,
-    payoneerEmail: "",
-    heroBanners: [] as { id: string, imageUrl: string, title?: string, subtitle?: string, link?: string, buttonText?: string }[],
-    // Ticker Settings
-    showTicker: true,
-    tickerBgColor: "#4f46e5",
-    tickerTextColor: "#ffffff",
-    tickerSpeed: 25,
-    tickerText: "🔥 Top Selling Products",
-    enableStripe: true,
-    enableLocal: true,
-    enableCOD: true,
-    hiddenCategories: [] as string[],
-    cartText: "Cart",
-    viewText: "View",
-    buyText: "Buy",
-    cartColor: "#f9fafb",
-    viewColor: "#f9fafb",
-    buyColor: "#4f46e5",
-    cartTextColor: "#6b7280",
-    viewTextColor: "#6b7280",
-    buyTextColor: "#ffffff",
-    brandColor: "#4f46e5",
-    brandSecondaryColor: "#818cf8",
-    useBrandGradient: false,
-    tabPermissions: {} as Record<string, string[]>,
-    invoiceTitle: "Official Invoice",
-    invoiceSubtitle: "Digital Asset Purchase",
-    invoiceFooter: "Thank you for choosing our platform for your digital assets.",
-    invoiceNote: "This is a computer generated invoice and does not require a physical signature.",
-    requireReviewApproval: false,
-    showReviews: true,
-    socialLinks: [] as { platform: string, url: string, icon: string }[]
+  const [siteSettings, setSiteSettings] = useState(() => {
+    // Priority: global settings from context
+    if (initialGlobalSettings && Object.keys(initialGlobalSettings).length > 0) {
+      return { ...initialGlobalSettings };
+    }
+    // Fallback: local defaults
+    return {
+      siteName: "",
+      tabTitle: "",
+      heroTitle: "",
+      heroSubtitle: "",
+      footerText: "",
+      footerCopyright: "",
+      footerDescription: "",
+      logoUrl: "",
+      faviconUrl: "",
+      privacyUrl: "",
+      termsUrl: "",
+      supportEmail: "",
+      supportPhone: "",
+      supportAddress: "",
+      stat1Label: "Total Users",
+      stat1Value: "50k+",
+      stat2Label: "Digital Assets",
+      stat2Value: "1,200+",
+      stat3Label: "Success Rate",
+      stat3Value: "99.9%",
+      showHero: true,
+      heroTitleSizeMobile: "28px",
+      heroTitleSizeDesktop: "60px",
+      heroSubtitleSizeMobile: "12px",
+      heroSubtitleSizeDesktop: "18px",
+      heroTitleColor: "#ffffff",
+      heroSubtitleColor: "#ffffffcc",
+      bkashNumber: "",
+      nagadNumber: "",
+      rocketNumber: "",
+      bkashLogo: "",
+      nagadLogo: "",
+      rocketLogo: "",
+      enableBinancePay: false,
+      binanceId: "",
+      binanceQR: "",
+      enablePayoneer: false,
+      payoneerEmail: "",
+      heroBanners: [] as { id: string, imageUrl: string, title?: string, subtitle?: string, link?: string, buttonText?: string }[],
+      showTicker: true,
+      tickerBgColor: "#4f46e5",
+      tickerTextColor: "#ffffff",
+      tickerSpeed: 25,
+      tickerText: "🔥 Top Selling Products",
+      enableStripe: true,
+      enableLocal: true,
+      enableCOD: true,
+      hiddenCategories: [] as string[],
+      cartText: "Cart",
+      viewText: "View",
+      buyText: "Buy",
+      cartColor: "#f9fafb",
+      viewColor: "#f9fafb",
+      buyColor: "#4f46e5",
+      cartTextColor: "#6b7280",
+      viewTextColor: "#6b7280",
+      buyTextColor: "#ffffff",
+      brandColor: "#4f46e5",
+      brandSecondaryColor: "#818cf8",
+      useBrandGradient: false,
+      tabPermissions: {} as Record<string, string[]>,
+      invoiceTitle: "Official Invoice",
+      invoiceSubtitle: "Digital Asset Purchase",
+      invoiceFooter: "Thank you for choosing our platform for your digital assets.",
+      invoiceNote: "This is a computer generated invoice and does not require a physical signature.",
+      requireReviewApproval: false,
+      showReviews: true,
+      loadingTitle: "Digital Marketplace",
+      loadingSubtitle: "Syncing Workspace",
+      loadingStyle: "modern",
+      adminLayout: "classic",
+      showThemeToggle: true,
+      themeToggleStyle: "classic" as "classic" | "minimal" | "ios" | "glass" | "creative" | "glow" | "landscape",
+      themeTogglePosition: "header-right" as "header-left" | "header-center" | "header-right" | "profile-page",
+      themeToggleSize: "md" as "sm" | "md" | "lg",
+      socialLinks: [] as { platform: string, url: string, icon: string }[]
+    };
   });
   const [newProduct, setNewProduct] = useState({
     name: "",
@@ -906,6 +971,186 @@ export default function AdminDashboard() {
     monthly: revenueStatsSummary.gross
   };
 
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    const saved = localStorage.getItem("admin_sidebar_collapsed");
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem("admin_sidebar_collapsed", JSON.stringify(isSidebarOpen));
+  }, [isSidebarOpen]);
+
+  useEffect(() => {
+    if (isMobileSidebarOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+    return () => {
+      document.body.style.overflow = "unset";
+    };
+  }, [isMobileSidebarOpen]);
+
+  const ModernSidebar = () => (
+    <aside className={cn(
+      "bg-white dark:bg-gray-950 border-r border-gray-100 dark:border-gray-800 flex flex-col transition-all duration-300 z-50",
+      "fixed lg:sticky top-0 h-screen",
+      isSidebarOpen ? "w-72" : "w-20",
+      isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+    )}>
+      <div className={cn("p-6 pb-4 transition-all duration-300", isSidebarOpen ? "px-8" : "px-4")}>
+        <div className="flex items-center justify-between mb-8">
+           <div className="flex items-center gap-3">
+             <div className={cn("bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200 shrink-0 transition-all", isSidebarOpen ? "w-10 h-10" : "w-12 h-12")}>
+               <ShieldCheck className="w-5 h-5 text-white" />
+             </div>
+             {isSidebarOpen && (
+               <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
+                 <h2 className="text-sm font-black text-gray-900 dark:text-gray-100 uppercase tracking-tighter leading-none">Admin</h2>
+                 <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Workspace</p>
+               </motion.div>
+             )}
+           </div>
+           
+           {/* Mobile Close Button */}
+           <button 
+             onClick={() => setIsMobileSidebarOpen(false)}
+             className="lg:hidden p-2 hover:bg-gray-100 rounded-xl transition-colors"
+           >
+             <X className="w-5 h-5 text-gray-400" />
+           </button>
+        </div>
+      </div>
+      
+      <div className="flex-1 overflow-y-auto px-4 space-y-1.5 no-scrollbar pb-10">
+        {isSidebarOpen && (
+          <div className="px-4 py-2">
+             <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">Navigation</p>
+          </div>
+        )}
+        {allowedTabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => {
+              setActiveTab(tab.id as any);
+              if (window.innerWidth < 1024) setIsMobileSidebarOpen(false);
+            }}
+            title={!isSidebarOpen ? tab.label : undefined}
+            className={cn(
+              "w-full flex items-center transition-all duration-200 group/btn relative",
+              isSidebarOpen ? "px-4 py-3.5 gap-3" : "p-3.5 justify-center",
+              activeTab === tab.id 
+                ? "bg-indigo-600 text-white shadow-xl shadow-indigo-100/50" 
+                : "text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 hover:text-gray-900 dark:hover:text-gray-100"
+            )}
+          >
+            <tab.icon className={cn(
+              "transition-transform shrink-0",
+              isSidebarOpen ? "w-5 h-5" : "w-6 h-6",
+              activeTab === tab.id ? "scale-110" : "group-hover/btn:scale-110 group-hover/btn:-rotate-3"
+            )} />
+            {isSidebarOpen && <span className="text-xs font-bold tracking-tight whitespace-nowrap">{tab.label}</span>}
+            {activeTab === tab.id && isSidebarOpen && (
+              <motion.div layoutId="active-pill" className="ml-auto w-1.5 h-1.5 bg-white rounded-full" />
+            )}
+          </button>
+        ))}
+      </div>
+       <div className={cn("p-4 border-t border-gray-50 dark:border-gray-800 transition-all duration-300", isSidebarOpen ? "p-6" : "p-3")}>
+         <div className={cn("flex items-center bg-gray-50 dark:bg-gray-900 rounded-2xl transition-all overflow-hidden", isSidebarOpen ? "p-3 gap-3" : "p-2 justify-center")}>
+            <div className="w-8 h-8 rounded-xl bg-white dark:bg-gray-800 shadow-sm flex items-center justify-center text-gray-400 dark:text-gray-500 font-black text-[10px] shrink-0">
+             {currentUserEmail?.charAt(0).toUpperCase()}
+           </div>
+           {isSidebarOpen && (
+             <div className="flex-1 min-w-0">
+               <div className="text-[10px] font-black text-gray-900 dark:text-gray-100 truncate">{currentUserEmail}</div>
+               <div className="text-[8px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">{currentUserRole}</div>
+             </div>
+           )}
+         </div>
+         {isSidebarOpen && (
+            <button 
+              onClick={() => navigate("/")}
+              className="w-full mt-4 flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 transition-all"
+            >
+              <ExternalLink className="w-3 h-3" />
+              Visit Website
+            </button>
+         )}
+      </div>
+    </aside>
+  );
+
+  const renderHeaderActions = () => (
+    <div className="flex flex-wrap gap-2 sm:gap-4 items-center w-full sm:w-auto">
+      {!isAdminChecking && !isModeratorRole && auth.currentUser && (
+        <div className="bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-4 py-2 rounded-xl text-xs font-bold border border-amber-200 dark:border-amber-800 flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4" /> VIEW ONLY MODE
+        </div>
+      )}
+      {activeTab === "products" && selectedProductIds.length > 0 && (
+        <button 
+          onClick={handleDeleteSelected}
+          className="bg-red-500 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-red-200 flex items-center gap-2 hover:bg-red-600 hover:-translate-y-0.5 active:scale-95"
+        >
+          <Trash2 className="w-4 h-4" /> Delete Selected ({selectedProductIds.length})
+        </button>
+      )}
+      {activeTab === "orders" && selectedOrderIds.length > 0 && (
+        <button 
+          onClick={handleDeleteSelected}
+          className="bg-red-500 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-red-200 flex items-center gap-2 hover:bg-red-600 hover:-translate-y-0.5 active:scale-95"
+        >
+          <Trash2 className="w-4 h-4" /> Delete Records ({selectedOrderIds.length})
+        </button>
+      )}
+      {activeTab !== "settings" && isSuperAdmin && (
+        <button 
+          onClick={() => {
+            handleClearAll();
+          }}
+          className="border px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-2 hover:-translate-y-0.5 active:scale-95 border-red-100 bg-red-50/50 text-red-600 hover:bg-red-50 hover:border-red-200"
+        >
+          <Trash2 className="w-4 h-4" /> Clear All {activeTab === "tickets" ? "Inbox" : activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
+        </button>
+      )}
+      <button 
+        onClick={() => {
+          if (!isModeratorRole) {
+            alert("Action Denied: You do not have permissions.");
+            return;
+          }
+          setIsAdding(true);
+        }}
+        className={cn(
+          "px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-2 hover:-translate-y-0.5 active:scale-95 flex-1 sm:flex-none",
+          isModeratorRole 
+            ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200" 
+            : "bg-gray-100 text-gray-400 shadow-none cursor-not-allowed"
+        )}
+      >
+        <Plus className="w-4 h-4" /> <span className="whitespace-nowrap">New Product</span>
+      </button>
+    </div>
+  );
+
+  const renderStatsRow = () => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8">
+      {stats.map((stat, i) => (
+        <div key={i} className="bg-white dark:bg-gray-950 p-5 sm:p-8 rounded-2xl sm:rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm flex items-center gap-4 sm:gap-6">
+          <div className={cn("p-3 sm:p-4 rounded-xl sm:rounded-2xl shrink-0", stat.bg)}>
+            <stat.icon className={cn("w-5 h-5 sm:w-6 sm:h-6", stat.color)} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-gray-500 dark:text-gray-400 text-[10px] sm:text-xs font-bold uppercase tracking-widest truncate">{stat.label}</div>
+            <div className="text-xl sm:text-3xl font-black text-gray-900 dark:text-white truncate">{stat.value}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   useEffect(() => {
     // Real-time Listeners
     const unsubProducts = onSnapshot(collection(db, "products"), (snap) => {
@@ -1311,7 +1556,10 @@ export default function AdminDashboard() {
         nagadNumber: "",
         rocketNumber: "",
         heroBannerUrl: "",
-        tabPermissions: {} // Reset RBAC to defaults
+        tabPermissions: {}, // Reset RBAC to defaults
+        loadingTitle: "Digital Marketplace",
+        loadingSubtitle: "Syncing Workspace",
+        loadingStyle: "modern",
       });
 
       alert("Website reset successfully! Everything has been cleared.");
@@ -1796,149 +2044,149 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="space-y-12 pb-20">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-6">
-        <div className="space-y-1">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">Admin Dashboard</h1>
-          <p className="text-xs sm:text-sm text-gray-500">Manage your product catalog and view marketplace performance.</p>
-        </div>
-        <div className="flex flex-wrap gap-2 sm:gap-4 items-center w-full sm:w-auto">
-          {!isAdminChecking && !isModeratorRole && auth.currentUser && (
-            <div className="bg-amber-50 text-amber-700 px-4 py-2 rounded-xl text-xs font-bold border border-amber-200 flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4" /> VIEW ONLY MODE
-            </div>
-          )}
-          {activeTab === "products" && selectedProductIds.length > 0 && (
-            <button 
-              onClick={handleDeleteSelected}
-              className="bg-red-500 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-red-200 flex items-center gap-2 hover:bg-red-600 hover:-translate-y-0.5 active:scale-95"
-            >
-              <Trash2 className="w-4 h-4" /> Delete Selected ({selectedProductIds.length})
-            </button>
-          )}
-          {activeTab === "orders" && selectedOrderIds.length > 0 && (
-            <button 
-              onClick={handleDeleteSelected}
-              className="bg-red-500 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-red-200 flex items-center gap-2 hover:bg-red-600 hover:-translate-y-0.5 active:scale-95"
-            >
-              <Trash2 className="w-4 h-4" /> Delete Records ({selectedOrderIds.length})
-            </button>
-          )}
-          {activeTab !== "settings" && isSuperAdmin && (
-            <button 
-              onClick={() => {
-                handleClearAll();
-              }}
-              className="border px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-2 hover:-translate-y-0.5 active:scale-95 border-red-100 bg-red-50/50 text-red-600 hover:bg-red-50 hover:border-red-200"
-            >
-              <Trash2 className="w-4 h-4" /> Clear All {activeTab === "tickets" ? "Inbox" : activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
-            </button>
-          )}
-          <button 
-            onClick={() => {
-              if (!isModeratorRole) {
-                alert("Action Denied: You do not have permissions.");
-                return;
-              }
-              setIsAdding(true);
-            }}
-            className={cn(
-              "px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-2 hover:-translate-y-0.5 active:scale-95 flex-1 sm:flex-none",
-              isModeratorRole 
-                ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200" 
-                : "bg-gray-100 text-gray-400 shadow-none cursor-not-allowed"
-            )}
-          >
-            <Plus className="w-4 h-4" /> <span className="whitespace-nowrap">New Product</span>
-          </button>
-        </div>
-      </div>
+    <div className={cn(
+      "pb-20 transition-all duration-300 min-h-screen",
+      siteSettings.adminLayout === "modern" ? "flex bg-[#F8F9FC] dark:bg-gray-950 font-sans overflow-hidden" : "space-y-12 pb-20 bg-[#F8F9FC] dark:bg-gray-950 px-4 sm:px-8"
+    )}>
+      {siteSettings.adminLayout === "modern" && <ModernSidebar />}
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-8">
-        {stats.map((stat, i) => (
-          <div key={i} className="bg-white p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-sm flex flex-col sm:flex-row items-center sm:items-center gap-3 sm:gap-6 text-center sm:text-left">
-            <div className={cn("p-2.5 sm:p-4 rounded-xl sm:rounded-2xl shrink-0", stat.bg)}>
-              <stat.icon className={cn("w-5 h-5 sm:w-6 sm:h-6", stat.color)} />
+      <div className={cn(
+        "flex-1 flex flex-col min-w-0 transition-all duration-300",
+        siteSettings.adminLayout === "modern" ? "h-screen overflow-hidden" : "space-y-12"
+      )}>
+        {siteSettings.adminLayout === "modern" ? (
+          <header className="min-h-[70px] sm:min-h-[80px] h-auto py-3 sm:py-4 bg-white dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800 flex flex-col md:flex-row items-center justify-between px-4 sm:px-8 shrink-0 sticky top-0 z-30 gap-3 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-4 w-full md:w-auto">
+              <button 
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-900 rounded-xl lg:flex hidden transition-all"
+                title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
+              >
+                <Pin className={cn("w-5 h-5 text-gray-400 dark:text-gray-600 transition-all", !isSidebarOpen && "rotate-90 text-indigo-600")} />
+              </button>
+              <button onClick={() => setIsMobileSidebarOpen(true)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-900 rounded-xl lg:hidden transition-colors" title="Open Menu">
+                <Menu className="w-5 h-5 text-gray-400 dark:text-gray-600" />
+              </button>
+              <div className="h-8 w-[1px] bg-gray-100 dark:bg-gray-800 mx-1 lg:block hidden" />
+              <div className="min-w-0">
+                <h2 className="text-lg font-black text-gray-900 dark:text-gray-100 uppercase tracking-tighter leading-none truncate">
+                  {tabs.find(t => t.id === activeTab)?.label}
+                </h2>
+                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-1 truncate">Control Center</p>
+              </div>
             </div>
-            <div>
-              <div className="text-gray-500 text-[10px] sm:text-xs font-bold uppercase tracking-widest">{stat.label}</div>
-              <div className="text-xl sm:text-3xl font-black text-gray-900 truncate">{stat.value}</div>
+            
+            <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto no-scrollbar pb-1 group-header-actions">
+              {siteSettings.themeTogglePosition !== 'profile-page' && <ThemeToggle />}
+              <div className="h-8 w-[1px] bg-gray-100 dark:bg-gray-800 mx-1 md:block hidden" />
+              {renderHeaderActions()}
+            </div>
+          </header>
+        ) : (
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-6 pt-4">
+            <div className="space-y-1">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">Admin Dashboard</h1>
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Manage your product catalog and view marketplace performance.</p>
+            </div>
+            <div className="flex items-center gap-4">
+              {siteSettings.themeTogglePosition !== 'profile-page' && <ThemeToggle />}
+              {renderHeaderActions()}
             </div>
           </div>
-        ))}
-      </div>
+        )}
 
-      {/* Revenue Statistics Section */}
-      <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-8">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-green-50 rounded-xl">
-              <TrendingUp className="w-5 h-5 text-green-600" />
-            </div>
-            <div>
-              <h3 className="font-bold text-gray-900">Revenue Statistics</h3>
-              <p className="text-xs text-gray-500">Daily earnings performance over time</p>
-            </div>
-          </div>
-          <div className="flex bg-gray-50 p-1 rounded-xl">
-            <button 
-              onClick={() => setRevenueTimeframe("daily")}
-              className={cn(
-                "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
-                revenueTimeframe === "daily" ? "bg-white shadow-sm text-gray-900" : "text-gray-400"
-              )}
-            >
-              Daily
-            </button>
-            <button 
-              onClick={() => setRevenueTimeframe("weekly")}
-              className={cn(
-                "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
-                revenueTimeframe === "weekly" ? "bg-white shadow-sm text-gray-900" : "text-gray-400"
-              )}
-            >
-              Weekly
-            </button>
-            <button 
-              onClick={() => setRevenueTimeframe("monthly")}
-              className={cn(
-                "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
-                revenueTimeframe === "monthly" ? "bg-white shadow-sm text-gray-900" : "text-gray-400"
-              )}
-            >
-              Monthly
-            </button>
-          </div>
-        </div>
+        <div className={cn(
+          "transition-all duration-300",
+          siteSettings.adminLayout === "modern" ? "flex-1 overflow-y-auto p-3 sm:p-8 space-y-6 sm:space-y-10 no-scrollbar pb-32" : "space-y-12"
+        )}>
 
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 pb-4">
-          <div className="bg-indigo-50/30 p-3 rounded-2xl border border-indigo-50">
-            <div className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-1">Today</div>
-            <div className="text-lg font-black text-indigo-600">৳{detailedStats.daily.toLocaleString()}</div>
+        {(siteSettings.adminLayout === "classic" || activeTab === "analytics") && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-8">
+            {stats.map((stat, i) => (
+              <div key={i} className="bg-white dark:bg-gray-950 p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-gray-100 dark:border-indigo-900/10 shadow-sm flex flex-col sm:flex-row items-center sm:items-center gap-3 sm:gap-6 text-center sm:text-left transition-all hover:shadow-md hover:border-indigo-100 dark:hover:border-indigo-900/40 group">
+                <div className={cn("p-2.5 sm:p-4 rounded-xl sm:rounded-2xl shrink-0 transition-transform group-hover:scale-110 group-hover:rotate-3", stat.bg)}>
+                  <stat.icon className={cn("w-5 h-5 sm:w-6 sm:h-6", stat.color)} />
+                </div>
+                <div>
+                  <div className="text-gray-500 dark:text-gray-400 text-[10px] sm:text-xs font-bold uppercase tracking-widest">{stat.label}</div>
+                  <div className="text-xl sm:text-3xl font-black text-gray-900 dark:text-gray-100 truncate tracking-tight">{stat.value}</div>
+                </div>
+              </div>
+            ))}
           </div>
-          <div className="bg-emerald-50/30 p-3 rounded-2xl border border-emerald-50">
-            <div className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-1">Weekly</div>
-            <div className="text-lg font-black text-emerald-600">৳{detailedStats.weekly.toLocaleString()}</div>
+        )}
+
+        {(siteSettings.adminLayout === "classic" || activeTab === "analytics") && (
+          <div className="bg-white dark:bg-gray-950 p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-6 sm:space-y-8">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-green-50 dark:bg-green-900/10 rounded-xl">
+                  <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 dark:text-gray-100 text-sm sm:text-base">Revenue Statistics</h3>
+                  <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">Daily earnings performance over time</p>
+                </div>
+              </div>
+              <div className="flex bg-gray-50 dark:bg-gray-900 p-1 rounded-xl border border-gray-100 dark:border-gray-800 w-full md:w-auto overflow-x-auto no-scrollbar whitespace-nowrap">
+                <button 
+                  onClick={() => setRevenueTimeframe("daily")}
+                  className={cn(
+                    "flex-1 md:flex-none px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                    revenueTimeframe === "daily" ? "bg-white dark:bg-gray-800 shadow-sm text-indigo-600 dark:text-indigo-400" : "text-gray-400 dark:text-gray-500"
+                  )}
+                >
+                  Daily
+                </button>
+                <button 
+                  onClick={() => setRevenueTimeframe("weekly")}
+                  className={cn(
+                    "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                    revenueTimeframe === "weekly" ? "bg-white dark:bg-gray-800 shadow-sm text-indigo-600 dark:text-indigo-400" : "text-gray-400 dark:text-gray-500"
+                  )}
+                >
+                  Weekly
+                </button>
+                <button 
+                  onClick={() => setRevenueTimeframe("monthly")}
+                  className={cn(
+                    "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                    revenueTimeframe === "monthly" ? "bg-white dark:bg-gray-800 shadow-sm text-indigo-600 dark:text-indigo-400" : "text-gray-400 dark:text-gray-500"
+                  )}
+                >
+                  Monthly
+                </button>
+              </div>
+            </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 pb-4">
+          <div className="bg-indigo-50/30 dark:bg-indigo-900/10 p-3 rounded-2xl border border-indigo-50 dark:border-indigo-900/20">
+            <div className="text-[9px] font-black text-indigo-400 dark:text-indigo-500 uppercase tracking-widest mb-1">Today</div>
+            <div className="text-lg font-black text-indigo-600 dark:text-indigo-400">৳{detailedStats.daily.toLocaleString()}</div>
           </div>
-          <div className="bg-amber-50/30 p-3 rounded-2xl border border-amber-50">
-            <div className="text-[9px] font-black text-amber-400 uppercase tracking-widest mb-1">Monthly</div>
-            <div className="text-lg font-black text-amber-600">৳{detailedStats.monthly.toLocaleString()}</div>
+          <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-3 rounded-2xl border border-emerald-50 dark:border-emerald-900/20">
+            <div className="text-[9px] font-black text-emerald-400 dark:text-emerald-500 uppercase tracking-widest mb-1">Weekly</div>
+            <div className="text-lg font-black text-emerald-600 dark:text-emerald-400">৳{detailedStats.weekly.toLocaleString()}</div>
           </div>
-          <div className="bg-purple-50/30 p-3 rounded-2xl border border-purple-50">
-            <div className="text-[9px] font-black text-purple-400 uppercase tracking-widest mb-1">New Orders</div>
-            <div className="text-lg font-black text-purple-600">{orderCounts.new}</div>
+          <div className="bg-amber-50/30 dark:bg-amber-900/10 p-3 rounded-2xl border border-amber-50 dark:border-amber-900/20">
+            <div className="text-[9px] font-black text-amber-400 dark:text-amber-500 uppercase tracking-widest mb-1">Monthly</div>
+            <div className="text-lg font-black text-amber-600 dark:text-amber-400">৳{detailedStats.monthly.toLocaleString()}</div>
           </div>
-          <div className="bg-rose-50/30 p-3 rounded-2xl border border-rose-100 flex justify-between items-end">
+          <div className="bg-purple-50/30 dark:bg-purple-900/10 p-3 rounded-2xl border border-purple-50 dark:border-purple-900/20">
+            <div className="text-[9px] font-black text-purple-400 dark:text-purple-500 uppercase tracking-widest mb-1">New Orders</div>
+            <div className="text-lg font-black text-purple-600 dark:text-purple-400">{orderCounts.new}</div>
+          </div>
+          <div className="bg-rose-50/30 dark:bg-rose-900/10 p-3 rounded-2xl border border-rose-100 dark:border-rose-900/20 flex justify-between items-end">
             <div>
-              <div className="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-1">Pending</div>
-              <div className="text-lg font-black text-rose-600">{orderCounts.pending}</div>
+              <div className="text-[9px] font-black text-rose-400 dark:text-rose-500 uppercase tracking-widest mb-1">Pending</div>
+              <div className="text-lg font-black text-rose-600 dark:text-rose-400">{orderCounts.pending}</div>
             </div>
             <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.6)] mb-1" />
           </div>
-          <div className="bg-emerald-50/30 p-3 rounded-2xl border border-emerald-100 flex justify-between items-end">
+          <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-3 rounded-2xl border border-emerald-100 dark:border-emerald-900/20 flex justify-between items-end">
             <div>
-              <div className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-1">Done</div>
-              <div className="text-lg font-black text-emerald-600">{orderCounts.completed}</div>
+              <div className="text-[9px] font-black text-emerald-400 dark:text-emerald-500 uppercase tracking-widest mb-1">Done</div>
+              <div className="text-lg font-black text-emerald-600 dark:text-emerald-400">{orderCounts.completed}</div>
             </div>
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)] mb-1" />
           </div>
@@ -1958,28 +2206,29 @@ export default function AdminDashboard() {
                     <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? "#1f2937" : "#f3f4f6"} />
                 <XAxis 
                   dataKey="name" 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 700 }}
+                  tick={{ fill: theme === 'dark' ? '#6b7280' : '#9ca3af', fontSize: 10, fontWeight: 700 }}
                   dy={10}
                 />
                 <YAxis 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 700 }}
+                  tick={{ fill: theme === 'dark' ? '#6b7280' : '#9ca3af', fontSize: 10, fontWeight: 700 }}
                 />
                 <Tooltip 
                   contentStyle={{ 
                     borderRadius: '16px', 
                     border: 'none', 
                     boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-                    padding: '12px'
+                    padding: '12px',
+                    backgroundColor: theme === 'dark' ? '#030712' : '#ffffff',
                   }}
                   itemStyle={{ fontWeight: 800 }}
-                  labelStyle={{ marginBottom: '4px', fontWeight: 600, color: '#111827' }}
+                  labelStyle={{ marginBottom: '4px', fontWeight: 600, color: theme === 'dark' ? '#f9fafb' : '#111827' }}
                 />
                 <Area 
                   type="monotone" 
@@ -2002,7 +2251,7 @@ export default function AdminDashboard() {
               </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-full flex items-center justify-center text-gray-400 flex-col gap-2 border-2 border-dashed border-gray-100 rounded-3xl">
+            <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-500 flex-col gap-2 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-3xl bg-white dark:bg-gray-950">
               <Calendar className="w-8 h-8 opacity-20" />
               <p className="text-sm font-medium">No sales data found to visualize yet</p>
             </div>
@@ -2010,28 +2259,28 @@ export default function AdminDashboard() {
         </div>
 
         {/* Coupon & Affiliate Analytics */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-8 border-t border-gray-100">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-8 border-t border-gray-100 dark:border-gray-800">
           <div className="space-y-4">
              <div className="flex items-center gap-2 mb-2">
-                <Ticket className="w-5 h-5 text-indigo-600" />
-                <h4 className="font-bold text-gray-900 uppercase text-xs tracking-widest">Top Coupons</h4>
+                <Ticket className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <h4 className="font-bold text-gray-900 dark:text-gray-100 uppercase text-xs tracking-widest">Top Coupons</h4>
              </div>
              <div className="space-y-3">
                 {coupons
                   .sort((a, b) => (b.usageCount || 0) - (a.usageCount || 0))
                   .slice(0, 5)
                   .map((coupon, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl border border-gray-100">
+                    <div key={i} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800">
                       <div className="flex items-center gap-3">
-                         <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center border border-gray-100 font-mono font-bold text-[10px] text-indigo-600">
+                         <div className="w-8 h-8 bg-white dark:bg-gray-800 rounded-lg flex items-center justify-center border border-gray-100 dark:border-gray-700 font-mono font-bold text-[10px] text-indigo-600 dark:text-indigo-400">
                            {i + 1}
                          </div>
                          <div>
-                            <div className="text-xs font-black text-gray-900 tracking-tight">{coupon.code}</div>
-                            <div className="text-[10px] text-gray-500 font-medium">{coupon.usageCount || 0} uses</div>
+                            <div className="text-xs font-black text-gray-900 dark:text-gray-100 tracking-tight">{coupon.code}</div>
+                            <div className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{coupon.usageCount || 0} uses</div>
                          </div>
                       </div>
-                      <div className="text-xs font-bold text-indigo-600">
+                      <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
                         ৳{orders
                           .filter(o => o.couponCode === coupon.code && (o.status === 'completed' || o.status === 'delivered'))
                           .reduce((sum, o) => sum + (o.discountAmount || 0), 0)
@@ -2048,7 +2297,7 @@ export default function AdminDashboard() {
           <div className="space-y-4">
              <div className="flex items-center gap-2 mb-2">
                 <Users className="w-5 h-5 text-emerald-600" />
-                <h4 className="font-bold text-gray-900 uppercase text-xs tracking-widest">Top Earners</h4>
+                <h4 className="font-bold text-gray-900 dark:text-gray-100 uppercase text-xs tracking-widest">Top Earners</h4>
              </div>
              <div className="space-y-3">
                 {Array.from(new Set(orders.map(o => o.bonusAssigneeEmail).filter(Boolean)))
@@ -2062,13 +2311,13 @@ export default function AdminDashboard() {
                   .sort((a, b) => b.totalBonus - a.totalBonus)
                   .slice(0, 5)
                   .map((earner, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-emerald-50/50 rounded-2xl border border-emerald-100">
+                    <div key={i} className="flex items-center justify-between p-3 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100 dark:border-emerald-900/20">
                       <div className="flex items-center gap-3">
-                         <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center border border-emerald-100 font-mono font-bold text-[10px] text-emerald-600">
+                         <div className="w-8 h-8 bg-white dark:bg-gray-800 rounded-lg flex items-center justify-center border border-emerald-100 dark:border-emerald-900/40 font-mono font-bold text-[10px] text-emerald-600 dark:text-emerald-400">
                            {i + 1}
                          </div>
                          <div>
-                            <div className="text-xs font-black text-gray-900 tracking-tight max-w-[150px] truncate">{earner.email}</div>
+                            <div className="text-xs font-black text-gray-900 dark:text-gray-100 tracking-tight max-w-[150px] truncate">{earner.email}</div>
                             <div className="text-[10px] text-gray-500 font-medium">{earner.orderCount} conversions</div>
                          </div>
                       </div>
@@ -2081,44 +2330,47 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+    )}
 
       <div className="space-y-8">
-        <div className="flex gap-1 p-1 bg-gray-100/50 rounded-2xl w-full overflow-x-auto no-scrollbar scroll-smooth whitespace-nowrap sticky top-16 z-20 backdrop-blur-sm">
-          {allowedTabs.map((tab) => (
-            <button 
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={cn(
-                "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0 flex items-center gap-2",
-                activeTab === tab.id 
-                  ? "bg-white text-indigo-600 shadow-sm" 
-                  : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-              )}
-            >
-              <tab.icon className="w-3 h-3" />
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        {siteSettings.adminLayout === "classic" && (
+          <div className="flex gap-1 p-1 bg-gray-100/50 dark:bg-gray-900/50 rounded-2xl w-full overflow-x-auto no-scrollbar scroll-smooth whitespace-nowrap sticky top-16 z-20 backdrop-blur-sm shadow-sm border border-gray-100/50 dark:border-gray-800/50">
+            {allowedTabs.map((tab) => (
+              <button 
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={cn(
+                  "px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex-shrink-0 flex items-center gap-2",
+                  activeTab === tab.id 
+                    ? "bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 shadow-sm" 
+                    : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                )}
+              >
+                <tab.icon className="w-3 h-3" />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {activeTab === "analytics" ? (
           <section className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
             {/* Professional Analytics Header */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 bg-white p-8 sm:p-10 rounded-[40px] border border-gray-100 shadow-sm relative overflow-hidden">
-               <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full blur-3xl -mr-32 -mt-32" />
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-white dark:bg-gray-950 p-6 sm:p-10 rounded-3xl sm:rounded-[40px] border border-gray-100 dark:border-gray-800 shadow-sm relative overflow-hidden">
+               <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 dark:bg-indigo-900/10 rounded-full blur-3xl -mr-32 -mt-32" />
                <div className="relative z-10 space-y-2">
-                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 rounded-full">
+                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 dark:bg-indigo-900/30 rounded-full border border-indigo-100 dark:border-indigo-800">
                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />
-                   <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Real-time Attribution</span>
+                   <span className="text-[9px] sm:text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Real-time Attribution</span>
                  </div>
-                 <h3 className="text-3xl font-black text-gray-900 tracking-tighter uppercase">Revenue Statistics</h3>
-                 <p className="text-xs font-bold text-gray-400 uppercase tracking-widest max-w-md leading-relaxed">
+                 <h3 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-gray-100 tracking-tighter uppercase">Revenue Statistics</h3>
+                 <p className="text-[10px] sm:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest max-w-md leading-relaxed">
                    Comprehensive financial performance monitoring and marketing ROI tracking
                  </p>
                </div>
 
-               <div className="relative z-10 flex flex-wrap items-center gap-3">
-                  <div className="flex bg-gray-50 p-1.5 rounded-2xl border border-gray-100">
+               <div className="relative z-10 flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+                  <div className="flex bg-gray-50 dark:bg-gray-900 p-1.5 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-x-auto no-scrollbar whitespace-nowrap">
                     {[
                       { id: "today", label: "24h" },
                       { id: "yesterday", label: "Fixed" },
@@ -2134,8 +2386,8 @@ export default function AdminDashboard() {
                         className={cn(
                           "px-4 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all",
                           datePreset === p.id 
-                            ? "bg-white text-indigo-600 shadow-md shadow-indigo-200/20" 
-                            : "text-gray-400 hover:text-gray-600"
+                            ? "bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 shadow-md shadow-indigo-200/20 dark:shadow-black/20" 
+                            : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                         )}
                       >
                         {p.label}
@@ -2165,34 +2417,34 @@ export default function AdminDashboard() {
             </div>
 
             {/* Filtered Summary Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 sm:gap-6">
                {[
-                 { label: "Filtered Gross", value: `৳${revenueStatsSummary.gross.toLocaleString()}`, icon: TrendingUp, color: "text-indigo-600", bg: "bg-indigo-50" },
-                 { label: "Filtered Net", value: `৳${revenueStatsSummary.net.toLocaleString()}`, icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-50" },
-                 { label: "Filtered Profit", value: `৳${revenueStatsSummary.profit.toLocaleString()}`, icon: CheckCircle, color: "text-blue-600", bg: "bg-blue-50" },
-                 { label: "Filtered Orders", value: revenueStatsSummary.orders.toLocaleString(), icon: ShoppingBag, color: "text-purple-600", bg: "bg-purple-50" },
-                 { label: "Bonus Attribution", value: `৳${revenueStatsSummary.commission.toLocaleString()}`, icon: Users, color: "text-amber-600", bg: "bg-amber-50" },
-                 { label: "Units Sold", value: revenueStatsSummary.units.toLocaleString(), icon: Package, color: "text-rose-600", bg: "bg-rose-50" },
+                 { label: "Filtered Gross", value: `৳${revenueStatsSummary.gross.toLocaleString()}`, icon: TrendingUp, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-900/30" },
+                 { label: "Filtered Net", value: `৳${revenueStatsSummary.net.toLocaleString()}`, icon: DollarSign, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-900/30" },
+                 { label: "Filtered Profit", value: `৳${revenueStatsSummary.profit.toLocaleString()}`, icon: CheckCircle, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/30" },
+                 { label: "Filtered Orders", value: revenueStatsSummary.orders.toLocaleString(), icon: ShoppingBag, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50 dark:bg-purple-900/30" },
+                 { label: "Bonus Attribution", value: `৳${revenueStatsSummary.commission.toLocaleString()}`, icon: Users, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/30" },
+                 { label: "Units Sold", value: revenueStatsSummary.units.toLocaleString(), icon: Package, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-900/30" },
                ].map((stat: any, i) => (
                  <motion.div
                    key={i}
                    initial={{ opacity: 0, y: 20 }}
                    animate={{ opacity: 1, y: 0 }}
                    transition={{ delay: i * 0.1 }}
-                   className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm flex items-center gap-6 group hover:shadow-lg transition-all"
+                   className="bg-white dark:bg-gray-950 p-4 sm:p-6 rounded-2xl sm:rounded-[2.5rem] border border-gray-100 dark:border-gray-800 shadow-sm flex items-center gap-4 sm:gap-6 group hover:shadow-lg transition-all"
                  >
-                   <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center p-3 transition-transform group-hover:scale-110 group-hover:rotate-6", stat.bg, stat.color)}>
+                   <div className={cn("w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center p-2.5 sm:p-3 transition-transform group-hover:scale-110 group-hover:rotate-6", stat.bg, stat.color)}>
                      <stat.icon className="w-full h-full" />
                    </div>
-                   <div className="flex-1">
-                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.label}</p>
+                   <div className="flex-1 min-w-0">
+                     <p className="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1 truncate">{stat.label}</p>
                      <div className="flex items-center justify-between">
-                       <h4 className="text-2xl font-black text-gray-900 tracking-tighter">
+                       <h4 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-gray-100 tracking-tighter truncate">
                          {stat.value}
                        </h4>
                        {stat.badge && (
                          <div className={cn(
-                           "w-2 h-2 rounded-full animate-pulse",
+                           "w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full animate-pulse",
                            stat.label.includes("Pending") ? "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]" : "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
                          )} />
                        )}
@@ -2203,71 +2455,71 @@ export default function AdminDashboard() {
             </div>
 
             {/* Recent Orders Section */}
-            <div className="bg-white p-8 rounded-[45px] border border-gray-100 shadow-sm overflow-hidden">
-               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8">
-                  <div className="flex items-center gap-6">
-                    <div className="w-16 h-16 bg-indigo-50 rounded-[28px] flex items-center justify-center flex-shrink-0">
-                      <ShoppingBag className="w-8 h-8 text-indigo-600" />
+            <div className="bg-white dark:bg-gray-950 p-5 sm:p-8 rounded-3xl sm:rounded-[45px] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8 text-center sm:text-left">
+                  <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl sm:rounded-[28px] flex items-center justify-center flex-shrink-0">
+                      <ShoppingBag className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-600 dark:text-indigo-400" />
                     </div>
                     <div>
-                      <h3 className="text-2xl font-black text-gray-900 tracking-tighter uppercase italic">Recent Operations</h3>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Real-time live transactional stream</p>
+                 <h3 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-gray-100 tracking-tighter uppercase italic">Recent Operations</h3>
+                      <p className="text-[9px] sm:text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Real-time live transactional stream</p>
                     </div>
                   </div>
                   <button 
                     onClick={() => setActiveTab("orders")}
-                    className="px-6 py-3 bg-gray-50 text-gray-900 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-100 transition-all border border-gray-100"
+                    className="w-full sm:w-auto px-6 py-3 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-100 dark:hover:bg-gray-800 transition-all border border-gray-100 dark:border-gray-800"
                   >
                     View All Orders
                   </button>
                </div>
                
-               <div className="overflow-x-auto -mx-8">
-                  <table className="w-full text-left">
-                     <thead className="bg-gray-50/50">
-                        <tr className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                           <th className="px-8 py-5">Order Details</th>
-                           <th className="px-8 py-5">Customer</th>
-                           <th className="px-8 py-5">Amount</th>
-                           <th className="px-8 py-5">Status</th>
-                           <th className="px-8 py-5 text-right">Time</th>
+               <div className="overflow-x-auto -mx-5 sm:-mx-8">
+                  <table className="w-full text-left min-w-[600px]">
+                     <thead className="bg-gray-50/50 dark:bg-gray-900/50">
+                        <tr className="text-[9px] sm:text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                           <th className="px-5 sm:px-8 py-4 sm:py-5">Order Details</th>
+                           <th className="px-5 sm:px-8 py-4 sm:py-5">Customer</th>
+                           <th className="px-5 sm:px-8 py-4 sm:py-5">Amount</th>
+                           <th className="px-5 sm:px-8 py-4 sm:py-5">Status</th>
+                           <th className="px-5 sm:px-8 py-4 sm:py-5 text-right">Time</th>
                         </tr>
                      </thead>
-                     <tbody className="divide-y divide-gray-50">
+                     <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                         {orders.slice(0, 10).map((order) => (
-                           <tr key={order.id} className="hover:bg-gray-50/30 transition-colors group">
-                              <td className="px-8 py-5">
-                                 <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-xl bg-white border border-gray-100 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
-                                       <Package className="w-5 h-5 text-indigo-500" />
+                           <tr key={order.id} className="hover:bg-gray-50/30 dark:hover:bg-gray-900/30 transition-colors group">
+                              <td className="px-5 sm:px-8 py-4 sm:py-5">
+                                 <div className="flex items-center gap-3 sm:gap-4">
+                                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                                       <Package className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-500" />
                                     </div>
-                                    <div className="min-w-0 max-w-[200px]">
-                                       <div className="text-[11px] font-black text-gray-900 uppercase truncate">{order.productName}</div>
-                                       <div className="text-[9px] font-mono text-gray-400">#{order.id.slice(-8).toUpperCase()}</div>
+                                    <div className="min-w-0 max-w-[150px] sm:max-w-[200px]">
+                                       <div className="text-[10px] sm:text-[11px] font-black text-gray-900 dark:text-gray-100 uppercase truncate">{order.productName}</div>
+                                       <div className="text-[8px] sm:text-[9px] font-mono text-gray-400 dark:text-gray-500">#{order.id.slice(-8).toUpperCase()}</div>
                                     </div>
                                  </div>
                               </td>
-                              <td className="px-8 py-5">
-                                 <div className="text-[11px] font-bold text-gray-900">{order.userName || 'Guest'}</div>
-                                 <div className="text-[9px] text-gray-400 truncate max-w-[150px]">{order.userEmail}</div>
+                              <td className="px-5 sm:px-8 py-4 sm:py-5">
+                                 <div className="text-[10px] sm:text-[11px] font-bold text-gray-900 dark:text-gray-100">{order.userName || 'Guest'}</div>
+                                 <div className="text-[8px] sm:text-[9px] text-gray-400 dark:text-gray-500 truncate max-w-[120px] sm:max-w-[150px]">{order.userEmail}</div>
                               </td>
-                              <td className="px-8 py-5">
-                                 <div className="text-xs font-black text-gray-900">৳{(order.netAmount || order.amount).toLocaleString()}</div>
+                              <td className="px-5 sm:px-8 py-4 sm:py-5">
+                                 <div className="text-[10px] sm:text-xs font-black text-gray-900 dark:text-gray-100">৳{(order.netAmount || order.amount).toLocaleString()}</div>
                               </td>
-                              <td className="px-8 py-5">
+                              <td className="px-5 sm:px-8 py-4 sm:py-5">
                                  <span className={cn(
-                                    "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border",
+                                    "px-2 sm:px-3 py-1 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-widest border",
                                     order.status === 'completed' || order.status === 'delivered'
-                                       ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                                       ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800"
                                        : order.status === 'pending'
-                                          ? "bg-rose-50 text-rose-600 border-rose-100"
-                                          : "bg-amber-50 text-amber-600 border-amber-100"
+                                          ? "bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 border-rose-100 dark:border-rose-800"
+                                          : "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-800"
                                  )}>
                                     {order.status}
                                  </span>
                               </td>
-                              <td className="px-8 py-5 text-right">
-                                 <div className="text-[10px] font-bold text-gray-400 flex items-center justify-end gap-1.5">
+                              <td className="px-5 sm:px-8 py-4 sm:py-5 text-right">
+                                 <div className="text-[9px] sm:text-[10px] font-bold text-gray-400 flex items-center justify-end gap-1.5">
                                     <Clock className="w-3 h-3" />
                                     {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
                                  </div>
@@ -2278,10 +2530,10 @@ export default function AdminDashboard() {
                            <tr>
                               <td colSpan={5} className="py-20 text-center">
                                  <div className="inline-flex flex-col items-center gap-3">
-                                    <div className="w-16 h-16 bg-gray-50 rounded-3xl flex items-center justify-center">
-                                       <ShoppingBag className="w-8 h-8 text-gray-200" />
+                                    <div className="w-16 h-16 bg-gray-50 dark:bg-gray-900 rounded-3xl flex items-center justify-center">
+                                       <ShoppingBag className="w-8 h-8 text-gray-200 dark:text-gray-700" />
                                     </div>
-                                    <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">No transaction records found</p>
+                                    <p className="text-[10px] font-black text-gray-300 dark:text-gray-600 uppercase tracking-widest">No transaction records found</p>
                                  </div>
                               </td>
                            </tr>
@@ -2292,31 +2544,31 @@ export default function AdminDashboard() {
             </div>
 
             {/* Detailed Filters Expandable */}
-            <div className="bg-white p-6 sm:p-8 rounded-[40px] border border-gray-100 shadow-sm relative overflow-hidden">
+            <div className="bg-white dark:bg-gray-950 p-6 sm:p-8 rounded-[40px] border border-gray-100 dark:border-gray-800 shadow-sm relative overflow-hidden">
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                  <div>
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block ml-1 flex items-center gap-2">
+                    <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 block ml-1 flex items-center gap-2">
                        <Ticket className="w-3 h-3" />
                        Filter by Coupon
                     </label>
                     <select 
                       value={analyticsFilters.coupon}
                       onChange={e => setAnalyticsFilters({...analyticsFilters, coupon: e.target.value})}
-                      className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-xs font-black focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                      className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4 text-xs font-black text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                     >
                       <option value="">All Marketing Channels</option>
                       {coupons.map(c => <option key={c.id} value={c.code}>{c.code}</option>)}
                     </select>
                  </div>
                  <div>
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block ml-1 flex items-center gap-2">
+                    <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 block ml-1 flex items-center gap-2">
                        <Package className="w-3 h-3" />
                        Filter by Product
                     </label>
                     <select 
                       value={analyticsFilters.product}
                       onChange={e => setAnalyticsFilters({...analyticsFilters, product: e.target.value})}
-                      className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-xs font-black focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                      className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4 text-xs font-black text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                     >
                       <option value="">All Product Categories</option>
                       {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -2325,28 +2577,28 @@ export default function AdminDashboard() {
                  {datePreset === "custom" && (
                    <>
                     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
-                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block ml-1">From Date</label>
+                       <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 block ml-1">From Date</label>
                        <input 
                          type="date"
                          value={analyticsFilters.startDate}
                          onChange={e => setAnalyticsFilters({...analyticsFilters, startDate: e.target.value})}
-                         className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-xs font-black focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                         className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4 text-xs font-black text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                        />
                     </motion.div>
                     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
-                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block ml-1">To Date</label>
+                       <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 block ml-1">To Date</label>
                        <input 
                          type="date"
                          value={analyticsFilters.endDate}
                          onChange={e => setAnalyticsFilters({...analyticsFilters, endDate: e.target.value})}
-                         className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-xs font-black focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                         className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4 text-xs font-black text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                        />
                     </motion.div>
                    </>
                  )}
                  {datePreset !== "custom" && (
                    <div className="lg:col-span-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block ml-1 flex items-center gap-2">
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 block ml-1 flex items-center gap-2">
                          <Mail className="w-3 h-3" />
                          Search Affiliate
                       </label>
@@ -2355,7 +2607,7 @@ export default function AdminDashboard() {
                         placeholder="Search by affiliate email address..."
                         value={analyticsFilters.email}
                         onChange={e => setAnalyticsFilters({...analyticsFilters, email: e.target.value})}
-                        className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-xs font-black focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                        className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4 text-xs font-black text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                       />
                    </div>
                  )}
@@ -2366,14 +2618,14 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
               <div className="lg:col-span-3 space-y-8">
                 {/* Core Revenue Cards */}
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                   {[
                     { label: "Gross Sales", value: revenueStatsSummary.gross, icon: TrendingUp, color: "text-white", bg: "bg-indigo-600", desc: "Total before discounts", live: true },
                     { label: "Net Revenue", value: revenueStatsSummary.net, icon: DollarSign, color: "text-white", bg: "bg-emerald-600", desc: "Revenue after discounts", live: true },
                     { label: "Net Profit", value: revenueStatsSummary.profit, icon: ShieldCheck, color: "text-white", bg: "bg-blue-600", desc: "Net minus commissions", live: true },
-                    { label: "Total Orders", value: revenueStatsSummary.orders, icon: ShoppingBag, color: "text-indigo-600", bg: "bg-indigo-50", desc: "Successful conversions", isCount: true, live: true },
-                    { label: "Total Units", value: revenueStatsSummary.units, icon: Package, color: "text-emerald-600", bg: "bg-emerald-50", desc: "Items sold", isCount: true },
-                    { label: "Discounts", value: revenueStatsSummary.discount, icon: Ticket, color: "text-rose-600", bg: "bg-rose-50", desc: "Coupon value" },
+                    { label: "Total Orders", value: revenueStatsSummary.orders, icon: ShoppingBag, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-900/30", desc: "Successful conversions", isCount: true, live: true },
+                    { label: "Total Units", value: revenueStatsSummary.units, icon: Package, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-900/30", desc: "Items sold", isCount: true },
+                    { label: "Discounts", value: revenueStatsSummary.discount, icon: Ticket, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-900/30", desc: "Coupon value" },
                   ].map((s, i) => (
                     <motion.div 
                       key={i}
@@ -2381,31 +2633,31 @@ export default function AdminDashboard() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.05 }}
                       className={cn(
-                        "p-8 rounded-[40px] border shadow-sm relative overflow-hidden group hover:shadow-xl transition-all",
-                        s.bg.includes('600') ? `${s.bg} border-transparent` : "bg-white border-gray-100"
+                        "p-6 sm:p-8 rounded-3xl sm:rounded-[40px] border shadow-sm relative overflow-hidden group hover:shadow-xl transition-all",
+                        s.bg.includes('600') ? `${s.bg} border-transparent` : "bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800"
                       )}
                     >
                       {s.live && (
-                        <div className="absolute top-6 right-6 flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-2 py-0.5 rounded-full">
-                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          <span className="text-[7px] font-black text-white/90 uppercase tracking-tighter">Live</span>
+                        <div className="absolute top-4 sm:top-6 right-4 sm:right-6 flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-2 py-0.5 rounded-full">
+                          <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          <span className="text-[6px] sm:text-[7px] font-black text-white/90 uppercase tracking-tighter">Live</span>
                         </div>
                       )}
-                      <div className={cn("inline-flex p-3 rounded-2xl mb-6 group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-sm", 
+                      <div className={cn("inline-flex p-2.5 sm:p-3 rounded-xl sm:rounded-2xl mb-4 sm:mb-6 group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-sm", 
                         s.bg.includes('600') ? "bg-white/20 text-white" : s.bg + " " + s.color
                       )}>
-                        <s.icon className="w-5 h-5" />
+                        <s.icon className="w-4 h-4 sm:w-5 sm:h-5" />
                       </div>
                       <div className="space-y-1">
-                        <div className={cn("text-[10px] font-black uppercase tracking-widest", 
+                        <div className={cn("text-[9px] sm:text-[10px] font-black uppercase tracking-widest", 
                           s.bg.includes('600') ? "text-white/60" : "text-gray-400"
                         )}>{s.label}</div>
-                        <div className={cn("text-2xl sm:text-3xl font-black tracking-tighter",
+                        <div className={cn("text-xl sm:text-3xl font-black tracking-tighter truncate",
                           s.bg.includes('600') ? "text-white" : "text-gray-900"
                         )}>
                           {s.isCount ? "" : "৳"}{s.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                         </div>
-                        <p className={cn("text-[9px] font-bold uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity",
+                        <p className={cn("text-[8px] sm:text-[9px] font-bold uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity",
                           s.bg.includes('600') ? "text-white/40" : "text-gray-300"
                         )}>{s.desc}</p>
                       </div>
@@ -2415,10 +2667,10 @@ export default function AdminDashboard() {
               </div>
 
               <div className="lg:col-span-1">
-                <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm h-full flex flex-col">
+                <div className="bg-white dark:bg-gray-900 p-8 rounded-[40px] border border-gray-100 dark:border-gray-800 shadow-sm h-full flex flex-col">
                   <div className="flex items-center justify-between mb-6">
                     <div>
-                      <h4 className="text-sm font-black text-gray-900 uppercase tracking-tighter">Live Sales Feed</h4>
+                      <h4 className="text-sm font-black text-gray-900 dark:text-gray-100 uppercase tracking-tighter">Live Sales Feed</h4>
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Real-time transactions</p>
                     </div>
                     <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 rounded-full">
@@ -2428,17 +2680,17 @@ export default function AdminDashboard() {
                   </div>
                   <div className="flex-1 space-y-4 overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
                     {orders.slice(0, 10).map((order, idx) => (
-                      <motion.div 
+                        <motion.div 
                         initial={{ x: 20, opacity: 0 }}
                         animate={{ x: 0, opacity: 1 }}
                         key={order.id} 
-                        className="flex items-center gap-4 p-4 rounded-2xl bg-gray-50 border border-gray-100 group hover:border-indigo-200 hover:bg-indigo-50/30 transition-all"
+                        className="flex items-center gap-4 p-4 rounded-2xl bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 group hover:border-indigo-200 dark:hover:border-indigo-500/50 hover:bg-indigo-50/30 dark:hover:bg-indigo-900/30 transition-all"
                       >
-                        <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm flex-shrink-0 group-hover:scale-110 transition-transform">
+                        <div className="w-10 h-10 rounded-xl bg-white dark:bg-gray-700 flex items-center justify-center shadow-sm flex-shrink-0 group-hover:scale-110 transition-transform">
                           {order.status === 'completed' ? <CheckCircle className="w-5 h-5 text-emerald-500" /> : <Clock className="w-5 h-5 text-amber-500" />}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="text-[10px] font-black text-gray-900 uppercase truncate mb-0.5">{order.productName}</div>
+                          <div className="text-[10px] font-black text-gray-900 dark:text-gray-100 uppercase truncate mb-0.5">{order.productName}</div>
                           <div className="flex items-center gap-2">
                              <span className="text-[10px] font-black text-indigo-600">৳{(order.netAmount || order.amount).toLocaleString()}</span>
                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">
@@ -2450,10 +2702,10 @@ export default function AdminDashboard() {
                     ))}
                     {orders.length === 0 && (
                       <div className="text-center py-12">
-                        <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                          <ShoppingBag className="w-6 h-6 text-gray-300" />
+                        <div className="w-12 h-12 bg-gray-50 dark:bg-gray-800 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                          <ShoppingBag className="w-6 h-6 text-gray-300 dark:text-gray-600" />
                         </div>
-                        <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">No recent sales</p>
+                        <p className="text-[10px] font-black text-gray-300 dark:text-gray-600 uppercase tracking-widest">No recent sales</p>
                       </div>
                     )}
                   </div>
@@ -2465,85 +2717,85 @@ export default function AdminDashboard() {
               <motion.div 
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="col-span-2 lg:col-span-3 xl:col-span-12 bg-gray-900 p-8 rounded-[45px] border border-gray-800 shadow-2xl shadow-indigo-900/10 relative overflow-hidden group"
+                className="col-span-2 lg:col-span-3 xl:col-span-12 bg-white dark:bg-gray-950 p-6 sm:p-8 rounded-3xl sm:rounded-[45px] border border-gray-100 dark:border-gray-800 shadow-sm dark:shadow-2xl dark:shadow-indigo-900/10 relative overflow-hidden group"
               >
                 <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-[80px] -mr-32 -mt-32 pointer-events-none" />
-                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-8">
-                  <div className="flex items-center gap-6">
+                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6 sm:gap-8">
+                  <div className="flex items-center gap-4 sm:gap-6">
                     <div className="relative">
-                      <div className="w-16 h-16 bg-indigo-500/10 rounded-[28px] border border-indigo-500/20 flex items-center justify-center">
-                        <Users className="w-8 h-8 text-indigo-400" />
+                      <div className="w-12 h-12 sm:w-16 sm:h-16 bg-indigo-500/10 rounded-xl sm:rounded-[28px] border border-indigo-500/20 flex items-center justify-center">
+                        <Users className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-400" />
                       </div>
-                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-4 border-gray-900 animate-pulse" />
+                      <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white dark:border-gray-950 animate-pulse" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="text-2xl font-black text-white tracking-tighter uppercase italic">Active Operations</h3>
-                        <span className="bg-emerald-500/10 text-emerald-400 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-500/20">LIVE</span>
+                        <h3 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white tracking-tighter uppercase italic">Active Operations</h3>
+                        <span className="bg-emerald-500/10 text-emerald-400 text-[8px] sm:text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-500/20">LIVE</span>
                       </div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Real-time pulse of your digital marketplace</p>
+                      <p className="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Real-time marketplace pulse</p>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-6 md:gap-12">
+                  <div className="flex flex-wrap items-center gap-4 sm:gap-6 md:gap-12">
                     <div className="space-y-1">
-                      <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest block">Real-time Pulse</span>
+                      <span className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest block">Online Users</span>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-4xl font-black text-white tracking-tighter">{activeSessions.length}</span>
-                        <span className="text-xs font-bold text-indigo-400 uppercase">Users Online</span>
+                        <span className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white tracking-tighter">{activeSessions.length}</span>
+                        <span className="text-[10px] font-bold text-indigo-400 uppercase">Live</span>
                       </div>
                     </div>
                     
-                    <div className="hidden sm:block h-10 w-px bg-gray-800" />
+                    <div className="hidden sm:block h-10 w-px bg-gray-100 dark:bg-gray-800" />
 
-                    <div className="flex -space-x-3 overflow-hidden">
+                    <div className="flex -space-x-2.5 sm:-space-x-3 overflow-hidden">
                       {activeSessions.slice(0, 5).map((s, i) => (
-                        <div key={i} className="w-10 h-10 rounded-full border-2 border-gray-900 bg-gray-800 flex items-center justify-center overflow-hidden ring-2 ring-indigo-500/20 group-hover:translate-x-1 transition-transform cursor-pointer" title={s.email || "Guest"}>
+                        <div key={i} className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-white dark:border-gray-950 bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden ring-2 ring-indigo-500/20 group-hover:translate-x-1 transition-transform cursor-pointer" title={s.email || "Guest"}>
                           <img src={`https://ui-avatars.com/api/?name=${s.email || i}&background=random&color=fff&size=64`} className="w-full h-full object-cover" />
                         </div>
                       ))}
                       {activeSessions.length > 5 && (
-                        <div className="w-10 h-10 rounded-full border-2 border-gray-900 bg-gray-800 flex items-center justify-center text-[10px] font-black text-gray-400 ring-2 ring-indigo-500/20">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-white dark:border-gray-950 bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-[9px] sm:text-[10px] font-black text-gray-400 ring-2 ring-indigo-500/20">
                           +{activeSessions.length - 5}
                         </div>
                       )}
                     </div>
 
-                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest max-w-[180px] leading-relaxed hidden lg:block">
+                    <p className="text-[9px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest max-w-[180px] leading-relaxed hidden lg:block">
                       {activeSessions.length > 0 ? (
-                        <>Current global traffic distributed across <span className="text-white">{new Set(activeSessions.map(s => s.path)).size} unique entry points</span></>
+                        <>Current global traffic distributed across <span className="text-gray-900 dark:text-white">{new Set(activeSessions.map(s => s.path)).size} unique entry points</span></>
                       ) : "Searching for active user heartbeat..."}
                     </p>
                   </div>
                 </div>
               </motion.div>
 
-            {/* Real-time Order Stream & Product Performance */}
+               {/* Real-time Order Stream & Product Performance */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                <div className="lg:col-span-6">
-                  <div className="bg-white p-8 rounded-[45px] border border-gray-100 shadow-sm overflow-hidden flex flex-col h-full">
+                  <div className="bg-white dark:bg-gray-900 p-8 rounded-[45px] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden flex flex-col h-full">
                      <div className="flex items-center gap-6 mb-8">
-                        <div className="w-16 h-16 bg-emerald-50 rounded-[28px] flex items-center justify-center flex-shrink-0">
-                           <ShoppingBag className="w-8 h-8 text-emerald-600" />
+                        <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-900/20 rounded-[28px] flex items-center justify-center flex-shrink-0">
+                           <ShoppingBag className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
                         </div>
                         <div>
-                           <h3 className="text-xl font-black text-gray-900 tracking-tighter uppercase italic">Best Sellers</h3>
-                           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Real-time sales distribution</p>
+                           <h3 className="text-xl font-black text-gray-900 dark:text-white tracking-tighter uppercase italic">Best Sellers</h3>
+                           <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Real-time sales distribution</p>
                         </div>
                      </div>
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {productStats.slice(0, 6).map((p, i) => (
-                           <div key={i} className="bg-gray-50 px-6 py-4 rounded-[24px] border border-gray-100 flex items-center gap-4 hover:bg-emerald-50 hover:border-emerald-100 transition-all cursor-default group">
-                              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform flex-shrink-0">
-                                 <Package className="w-5 h-5 text-emerald-500" />
+                           <div key={i} className="bg-gray-50 dark:bg-gray-800/50 px-6 py-4 rounded-[24px] border border-gray-100 dark:border-gray-800 flex items-center gap-4 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 hover:border-emerald-100 dark:hover:border-emerald-800 transition-all cursor-default group">
+                              <div className="w-10 h-10 bg-white dark:bg-gray-800 rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform flex-shrink-0 border border-gray-100 dark:border-gray-700">
+                                 <Package className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />
                               </div>
                               <div className="min-w-0">
-                                 <div className="text-[10px] font-black text-gray-900 uppercase tracking-tighter truncate">{p.name}</div>
+                                 <div className="text-[10px] font-black text-gray-900 dark:text-gray-100 uppercase tracking-tighter truncate">{p.name}</div>
                                  <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-[10px] font-black text-emerald-600">{p.sold} Sold</span>
-                                    <div className="w-1 h-1 rounded-full bg-gray-200" />
-                                    <span className="text-[10px] font-black text-gray-400">
-                                      {!isSuperAdmin && currentUserRole === 'moderator' ? '৳••••••' : `৳${p.net.toLocaleString()}`}
+                                    <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400">{p.sold} Sold</span>
+                                    <div className="w-1 h-1 rounded-full bg-gray-200 dark:bg-gray-700" />
+                                    <span className="text-[10px] font-black text-gray-400 dark:text-gray-500">
+                                      {isModeratorRole ? `৳${p.net.toLocaleString()}` : '৳••••••'}
                                     </span>
                                  </div>
                               </div>
@@ -2554,28 +2806,28 @@ export default function AdminDashboard() {
                </div>
 
                <div className="lg:col-span-6">
-                  <div className="bg-white p-8 rounded-[45px] border border-gray-100 shadow-sm overflow-hidden flex flex-col h-full">
+                  <div className="bg-white dark:bg-gray-900 p-8 rounded-[45px] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden flex flex-col h-full">
                      <div className="flex items-center gap-6 mb-8">
-                        <div className="w-16 h-16 bg-indigo-50 rounded-[28px] flex items-center justify-center flex-shrink-0">
-                           <Eye className="w-8 h-8 text-indigo-600" />
+                        <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/20 rounded-[28px] flex items-center justify-center flex-shrink-0">
+                           <Eye className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
                         </div>
                         <div>
-                           <h3 className="text-xl font-black text-gray-900 tracking-tighter uppercase italic">Most Seen</h3>
+                           <h3 className="text-xl font-black text-gray-900 dark:text-white tracking-tighter uppercase italic">Most Seen</h3>
                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Hottest items by visitor interest</p>
                         </div>
                      </div>
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {mostViewedProducts.slice(0, 6).map((p, i) => (
-                           <div key={i} className="bg-gray-50 px-6 py-4 rounded-[24px] border border-gray-100 flex items-center gap-4 hover:bg-indigo-50 hover:border-indigo-100 transition-all cursor-default group">
-                              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform flex-shrink-0">
-                                 <Eye className="w-5 h-5 text-indigo-500" />
+                           <div key={i} className="bg-gray-50 dark:bg-gray-800/50 px-6 py-4 rounded-[24px] border border-gray-100 dark:border-gray-800 flex items-center gap-4 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:border-indigo-100 dark:hover:border-indigo-800 transition-all cursor-default group">
+                              <div className="w-10 h-10 bg-white dark:bg-gray-800 rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform flex-shrink-0 border border-gray-100 dark:border-gray-700">
+                                 <Eye className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
                               </div>
                               <div className="min-w-0">
-                                 <div className="text-[10px] font-black text-gray-900 uppercase tracking-tighter truncate">{p.name}</div>
+                                 <div className="text-[10px] font-black text-gray-900 dark:text-gray-100 uppercase tracking-tighter truncate">{p.name}</div>
                                  <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-[10px] font-black text-indigo-600">{p.views || 0} Views</span>
-                                    <div className="w-1 h-1 rounded-full bg-gray-200" />
-                                    <span className="text-[10px] font-black text-gray-400 truncate">{p.category}</span>
+                                    <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400">{p.views || 0} Views</span>
+                                    <div className="w-1 h-1 rounded-full bg-gray-200 dark:bg-gray-700" />
+                                    <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 truncate">{p.category}</span>
                                  </div>
                               </div>
                            </div>
@@ -2589,7 +2841,7 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
                {/* Left: Line Charts */}
                <div className="xl:col-span-8 space-y-8">
-                  <div className="bg-white p-10 rounded-[45px] border border-gray-100 shadow-sm space-y-10 relative overflow-hidden group">
+                  <div className="bg-white dark:bg-gray-900 p-10 rounded-[45px] border border-gray-100 dark:border-gray-800 shadow-sm space-y-10 relative overflow-hidden group">
                      <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-50/30 rounded-full blur-[100px] -mr-48 -mt-48 pointer-events-none" />
                      <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                         <div className="flex items-center gap-5">
@@ -2598,18 +2850,18 @@ export default function AdminDashboard() {
                            </div>
                            <div>
                               <div className="flex items-center gap-2">
-                                <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tighter italic">Earnings Velocity</h3>
-                                <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 rounded-full border border-emerald-100">
+                                <h3 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tighter italic">Earnings Velocity</h3>
+                                <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-900/30 rounded-full border border-emerald-100 dark:border-emerald-800">
                                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                  <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest leading-none">Live Sync</span>
+                                  <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest leading-none">Live Sync</span>
                                 </div>
                               </div>
-                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
+                              <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">
                                 Real-time {revenueTimeframe} financial momentum tracking
                               </p>
                            </div>
                         </div>
-                        <div className="flex items-center gap-2 bg-gray-50/80 backdrop-blur-md p-2 rounded-2xl border border-gray-100 self-start">
+                        <div className="flex items-center gap-2 bg-gray-50/80 dark:bg-gray-800/80 backdrop-blur-md p-2 rounded-2xl border border-gray-100 dark:border-gray-700 self-start">
                           {(["daily", "weekly", "monthly"] as const).map((t) => (
                             <button
                               key={t}
@@ -2617,8 +2869,8 @@ export default function AdminDashboard() {
                               className={cn(
                                 "px-6 py-3 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all",
                                 revenueTimeframe === t 
-                                  ? "bg-white text-indigo-600 shadow-md shadow-indigo-500/5 ring-1 ring-black/5" 
-                                  : "text-gray-400 hover:text-gray-600 hover:bg-white/50"
+                                  ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-md shadow-indigo-500/5 ring-1 ring-black/5 dark:ring-white/5" 
+                                  : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-white/50 dark:hover:bg-gray-700/50"
                               )}
                             >
                               {t}
@@ -2627,10 +2879,10 @@ export default function AdminDashboard() {
                         </div>
                      </div>
 
-                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 p-8 bg-gray-50/80 rounded-[2.5rem] border border-gray-100 shadow-inner">
+                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 p-8 bg-gray-50/80 dark:bg-gray-800/50 rounded-[2.5rem] border border-gray-100 dark:border-gray-800 shadow-inner">
                         <div className="space-y-1">
                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Avg Order Value</span>
-                           <div className="text-2xl font-black text-gray-900 tracking-tighter">৳{revenueStatsSummary.orders ? Math.round(revenueStatsSummary.net / revenueStatsSummary.orders).toLocaleString() : '0'}</div>
+                           <div className="text-2xl font-black text-gray-900 dark:text-gray-100 tracking-tighter">৳{revenueStatsSummary.orders ? Math.round(revenueStatsSummary.net / revenueStatsSummary.orders).toLocaleString() : '0'}</div>
                         </div>
                         <div className="space-y-1">
                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Conv. Rate</span>
@@ -2677,13 +2929,13 @@ export default function AdminDashboard() {
                                 <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                               </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="6 6" vertical={false} stroke="#e5e7eb" opacity={0.5} />
+                            <CartesianGrid strokeDasharray="6 6" vertical={false} stroke={theme === 'dark' ? "#374151" : "#e5e7eb"} opacity={0.5} />
                             <XAxis 
                               dataKey="date" 
                               axisLine={false} 
                               tickLine={false} 
                               minTickGap={30}
-                              tick={{ fontSize: 10, fontWeight: 900, fill: '#6b7280' }}
+                              tick={{ fontSize: 10, fontWeight: 900, fill: theme === 'dark' ? '#9ca3af' : '#6b7280' }}
                               tickFormatter={(val) => {
                                 const d = new Date(val);
                                 if (revenueTimeframe === "daily") return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
@@ -2694,14 +2946,21 @@ export default function AdminDashboard() {
                             <YAxis 
                               axisLine={false} 
                               tickLine={false} 
-                              tick={{ fontSize: 10, fontWeight: 900, fill: '#6b7280' }}
+                              tick={{ fontSize: 10, fontWeight: 900, fill: theme === 'dark' ? '#9ca3af' : '#6b7280' }}
                               tickFormatter={(val) => `৳${val >= 1000 ? (val/1000).toFixed(0) + 'k' : val}`}
                             />
                             <Tooltip 
-                              cursor={{ stroke: '#4f46e5', strokeWidth: 2, strokeDasharray: '5 5' }}
-                              contentStyle={{ borderRadius: '32px', border: 'none', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.2)', padding: '24px', backgroundColor: '#ffffff', outline: 'none' }}
-                              labelStyle={{ fontWeight: 900, marginBottom: '16px', color: '#111827', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.1em' }}
-                              itemStyle={{ fontSize: '12px', fontWeight: 900, padding: '4px 0' }}
+                              cursor={{ stroke: theme === 'dark' ? '#6366f1' : '#4f46e5', strokeWidth: 2, strokeDasharray: '5 5' }}
+                              contentStyle={{ 
+                                borderRadius: '32px', 
+                                border: 'none', 
+                                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.2)', 
+                                padding: '24px', 
+                                backgroundColor: theme === 'dark' ? '#111827' : '#ffffff', 
+                                outline: 'none' 
+                              }}
+                              labelStyle={{ fontWeight: 900, marginBottom: '16px', color: theme === 'dark' ? '#f3f4f6' : '#111827', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.1em' }}
+                              itemStyle={{ fontSize: '12px', fontWeight: 900, padding: '4px 0', color: theme === 'dark' ? '#f3f4f6' : '#111827' }}
                               formatter={(value: any) => [`৳${Number(value).toLocaleString()}`, '']}
                               labelFormatter={(label) => {
                                 const d = new Date(label);
@@ -2723,40 +2982,57 @@ export default function AdminDashboard() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                     <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm space-y-6">
+                     <div className="bg-white dark:bg-gray-900 p-8 rounded-[40px] border border-gray-100 dark:border-gray-800 shadow-sm space-y-6">
                         <div className="flex items-center gap-3 border-l-4 border-amber-400 pl-4 py-1">
                           <div>
-                            <h3 className="text-lg font-black text-gray-900 uppercase tracking-tighter">Coupon Contribution</h3>
+                            <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tighter">Coupon Contribution</h3>
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Marketing efficiency metrics</p>
                           </div>
                         </div>
                         <div className="h-[250px]">
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={chartData}>
-                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? "#374151" : "#f3f4f6"} />
                               <XAxis dataKey="date" hide />
                               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 800, fill: '#9ca3af' }} />
-                              <Tooltip cursor={{fill: '#f9fafb'}} contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} />
+                              <Tooltip 
+                                cursor={{fill: theme === 'dark' ? '#1f2937' : '#f9fafb'}} 
+                                contentStyle={{ 
+                                  borderRadius: '20px', 
+                                  border: 'none', 
+                                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                                  backgroundColor: theme === 'dark' ? '#030712' : '#ffffff'
+                                }} 
+                                labelStyle={{ color: theme === 'dark' ? '#f9fafb' : '#111827' }}
+                              />
                               <Bar dataKey="discount" name="Discount" fill="#f59e0b" radius={[8, 8, 0, 0]} />
                             </BarChart>
                           </ResponsiveContainer>
                         </div>
                      </div>
-                     <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm space-y-6">
+                     <div className="bg-white dark:bg-gray-900 p-8 rounded-[40px] border border-gray-100 dark:border-gray-800 shadow-sm space-y-6">
                         <div className="flex items-center gap-3 border-l-4 border-indigo-400 pl-4 py-1">
                           <div>
-                            <h3 className="text-lg font-black text-gray-900 uppercase tracking-tighter">Order Volume</h3>
+                            <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tighter">Order Volume</h3>
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Customer activity trends</p>
                           </div>
                         </div>
                         <div className="h-[250px]">
                           <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={chartData}>
-                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? "#374151" : "#f3f4f6"} />
                               <XAxis dataKey="date" hide />
                               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 800, fill: '#9ca3af' }} />
-                              <Tooltip contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} />
-                              <Area type="stepAfter" dataKey="orders" name="Orders" stroke="#6366f1" fill="#e0e7ff" strokeWidth={3} />
+                              <Tooltip 
+                                contentStyle={{ 
+                                  borderRadius: '20px', 
+                                  border: 'none', 
+                                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                                  backgroundColor: theme === 'dark' ? '#111827' : '#ffffff'
+                                }} 
+                                labelStyle={{ color: theme === 'dark' ? '#f9fafb' : '#111827' }}
+                              />
+                              <Area type="stepAfter" dataKey="orders" name="Orders" stroke="#6366f1" fill={theme === 'dark' ? "#312e81" : "#e0e7ff"} strokeWidth={3} />
                             </AreaChart>
                           </ResponsiveContainer>
                         </div>
@@ -2766,18 +3042,18 @@ export default function AdminDashboard() {
 
                {/* Right: Revenue Heatmap */}
                <div className="xl:col-span-4 space-y-8">
-                 <div className="bg-white p-8 rounded-[45px] border border-gray-100 shadow-sm">
+                 <div className="bg-white dark:bg-gray-900 p-8 rounded-[45px] border border-gray-100 dark:border-gray-800 shadow-sm">
                     <div className="flex items-center justify-between mb-8">
-                       <h3 className="text-lg font-black text-gray-900 uppercase tracking-tighter flex items-center gap-2">
-                          <Calendar className="w-5 h-5 text-indigo-600" />
+                       <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tighter flex items-center gap-2">
+                          <Calendar className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                           Calendar Heatmap
                        </h3>
-                       <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl">
-                          <button onClick={() => setSelectedCalendarMonth(new Date(selectedCalendarMonth.setMonth(selectedCalendarMonth.getMonth() - 1)))} className="p-1 hover:bg-white rounded-lg transition-colors"><Plus className="w-3 h-3 rotate-45" /></button>
-                          <span className="text-[10px] font-black uppercase tracking-widest px-2 min-w-[100px] text-center">
+                       <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-800 p-1 rounded-xl">
+                          <button onClick={() => setSelectedCalendarMonth(new Date(selectedCalendarMonth.setMonth(selectedCalendarMonth.getMonth() - 1)))} className="p-1 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-colors"><Plus className="w-3 h-3 rotate-45" /></button>
+                          <span className="text-[10px] font-black uppercase tracking-widest px-2 min-w-[100px] text-center dark:text-gray-200">
                             {selectedCalendarMonth.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
                           </span>
-                          <button onClick={() => setSelectedCalendarMonth(new Date(selectedCalendarMonth.setMonth(selectedCalendarMonth.getMonth() + 1)))} className="p-1 hover:bg-white rounded-lg transition-colors"><Plus className="w-3 h-3" /></button>
+                          <button onClick={() => setSelectedCalendarMonth(new Date(selectedCalendarMonth.setMonth(selectedCalendarMonth.getMonth() + 1)))} className="p-1 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-colors"><Plus className="w-3 h-3" /></button>
                        </div>
                     </div>
 
@@ -2813,7 +3089,7 @@ export default function AdminDashboard() {
                        })}
                     </div>
 
-                    <div className="mt-8 p-6 bg-gray-50 rounded-3xl border border-gray-100 min-h-[160px] flex flex-col justify-center">
+                    <div className="mt-8 p-6 bg-gray-50 dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 min-h-[160px] flex flex-col justify-center">
                        {selectedCalendarDay ? (
                          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
                             <div className="flex items-center justify-between">
@@ -2823,7 +3099,7 @@ export default function AdminDashboard() {
                             <div className="grid grid-cols-2 gap-4">
                                <div>
                                   <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Gross</div>
-                                  <div className="text-sm font-black text-gray-900">৳{selectedCalendarDay.gross.toLocaleString()}</div>
+                                  <div className="text-sm font-black text-gray-900 dark:text-gray-100">৳{selectedCalendarDay.gross.toLocaleString()}</div>
                                </div>
                                <div>
                                   <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Net</div>
@@ -2837,8 +3113,8 @@ export default function AdminDashboard() {
                          </motion.div>
                        ) : (
                          <div className="text-center space-y-2 py-4">
-                            <Calendar className="w-8 h-8 text-gray-200 mx-auto" />
-                            <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Select a day to view details</p>
+                            <Calendar className="w-8 h-8 text-gray-200 dark:text-gray-700 mx-auto" />
+                            <p className="text-[10px] font-black text-gray-300 dark:text-gray-600 uppercase tracking-widest">Select a day to view details</p>
                          </div>
                        )}
                     </div>
@@ -2883,68 +3159,68 @@ export default function AdminDashboard() {
             </div>
 
             {/* Master Analytics Table */}
-            <div className="bg-white rounded-[50px] border border-gray-100 shadow-sm overflow-hidden">
-               <div className="p-8 sm:p-10 border-b border-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-gray-50/20">
-                  <div className="space-y-1">
-                    <h3 className="text-xl font-black text-gray-900 tracking-tighter uppercase">Detailed Revenue Ledger</h3>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Full transactional breakdown by date</p>
+            <div className="bg-white dark:bg-gray-950 rounded-[32px] sm:rounded-[50px] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+               <div className="p-5 sm:p-10 border-b border-gray-50 dark:border-gray-800 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 bg-gray-50/20 dark:bg-gray-900/20">
+                  <div className="space-y-1 text-center sm:text-left">
+                    <h3 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white tracking-tighter uppercase">Detailed Revenue Ledger</h3>
+                    <p className="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest">Full breakdown by date</p>
                   </div>
                   <div className="flex items-center gap-4">
-                     <div className="relative">
+                     <div className="relative w-full md:w-auto">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                         <input 
                           type="text" 
-                          placeholder="Search dates (YYYY-MM-DD)..."
+                          placeholder="Search dates..."
                           value={revenueSearch}
                           onChange={e => setRevenueSearch(e.target.value)}
-                          className="pl-12 pr-6 py-3 bg-white border border-gray-100 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 min-w-[250px] shadow-sm"
+                          className="w-full md:min-w-[250px] pl-12 pr-6 py-3 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm dark:text-white"
                         />
                      </div>
                   </div>
                </div>
 
                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
+                  <table className="w-full text-left min-w-[800px]">
                      <thead>
-                        <tr className="bg-white border-b border-gray-50">
-                           <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">Analytics Period</th>
-                           <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Gross Sales</th>
-                           <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Marketing Cost</th>
-                           <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Net Revenue</th>
-                           <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Affiliate Bonus</th>
-                           <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Estimated Profit</th>
-                           <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Volume</th>
+                        <tr className="bg-white dark:bg-gray-900 border-b border-gray-50 dark:border-gray-800">
+                           <th className="px-6 sm:px-10 py-5 sm:py-6 text-[9px] sm:text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Analytics Period</th>
+                           <th className="px-6 sm:px-10 py-5 sm:py-6 text-[9px] sm:text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-right">Gross Sales</th>
+                           <th className="px-6 sm:px-10 py-5 sm:py-6 text-[9px] sm:text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-right">Mktg Cost</th>
+                           <th className="px-6 sm:px-10 py-5 sm:py-6 text-[9px] sm:text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-right">Net Revenue</th>
+                           <th className="px-6 sm:px-10 py-5 sm:py-6 text-[9px] sm:text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-right">Affiliate</th>
+                           <th className="px-6 sm:px-10 py-5 sm:py-6 text-[9px] sm:text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-right">Profit</th>
+                           <th className="px-6 sm:px-10 py-5 sm:py-6 text-[9px] sm:text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-center">Volume</th>
                         </tr>
                      </thead>
-                     <tbody className="divide-y divide-gray-50">
+                     <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                         {paginatedRevenue.map((row, i) => (
-                           <tr key={i} className="hover:bg-gray-50/50 transition-colors group">
-                              <td className="px-10 py-6">
+                           <tr key={i} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors group">
+                              <td className="px-6 sm:px-10 py-4 sm:py-6">
                                  <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-mono font-black text-xs">
+                                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg sm:rounded-xl flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-mono font-black text-[10px] sm:text-xs">
                                        {new Date(row.date).getDate()}
                                     </div>
                                     <div>
-                                       <div className="text-xs font-black text-gray-900 uppercase tracking-tight">{new Date(row.date).toLocaleDateString('en-GB', { weekday: 'long' })}</div>
-                                       <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{row.date}</div>
+                                       <div className="text-[10px] sm:text-xs font-black text-gray-900 dark:text-gray-100 uppercase tracking-tight">{new Date(row.date).toLocaleDateString('en-GB', { weekday: 'long' })}</div>
+                                       <div className="text-[9px] sm:text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest">{row.date}</div>
                                     </div>
                                  </div>
                               </td>
-                              <td className="px-10 py-6 text-right font-bold text-xs text-gray-800">৳{row.gross.toLocaleString()}</td>
-                              <td className="px-10 py-6 text-right font-bold text-xs text-rose-500">-৳{row.discount.toLocaleString()}</td>
-                              <td className="px-10 py-6 text-right">
-                                 <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg font-black text-xs">
+                              <td className="px-6 sm:px-10 py-4 sm:py-6 text-right font-bold text-[10px] sm:text-xs text-gray-800 dark:text-gray-200">৳{row.gross.toLocaleString()}</td>
+                              <td className="px-6 sm:px-10 py-4 sm:py-6 text-right font-bold text-[10px] sm:text-xs text-rose-500">-৳{row.discount.toLocaleString()}</td>
+                              <td className="px-6 sm:px-10 py-4 sm:py-6 text-right">
+                                 <span className="px-2 sm:px-3 py-1 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg font-black text-[10px] sm:text-xs">
                                     ৳{row.net.toLocaleString()}
                                  </span>
                               </td>
-                              <td className="px-10 py-6 text-right font-bold text-xs text-amber-600">৳{row.commission.toLocaleString()}</td>
-                              <td className="px-10 py-6 text-right">
-                                 <div className="text-sm font-black text-indigo-600 tracking-tighter">৳{row.profit.toLocaleString()}</div>
+                              <td className="px-6 sm:px-10 py-4 sm:py-6 text-right font-bold text-[10px] sm:text-xs text-amber-600 dark:text-amber-400">৳{row.commission.toLocaleString()}</td>
+                              <td className="px-6 sm:px-10 py-4 sm:py-6 text-right">
+                                 <div className="text-xs sm:text-sm font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">৳{row.profit.toLocaleString()}</div>
                               </td>
-                              <td className="px-10 py-6 text-center">
-                                 <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-xl">
-                                    <ShoppingBag className="w-3 h-3 text-gray-400" />
-                                    <span className="text-[10px] font-black text-gray-900">{row.orders}</span>
+                              <td className="px-6 sm:px-10 py-4 sm:py-6 text-center">
+                                 <div className="inline-flex items-center gap-2 px-2 sm:px-3 py-1 sm:py-1.5 bg-gray-100 dark:bg-gray-800 rounded-lg sm:rounded-xl">
+                                    <ShoppingBag className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+                                    <span className="text-[9px] sm:text-[10px] font-black text-gray-900 dark:text-gray-100">{row.orders}</span>
                                  </div>
                               </td>
                            </tr>
@@ -2953,16 +3229,16 @@ export default function AdminDashboard() {
                   </table>
                </div>
 
-               {/* Table Pagination */}
-               <div className="p-8 bg-gray-50/30 border-t border-gray-50 flex items-center justify-between">
-                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                {/* Table Pagination */}
+               <div className="p-8 bg-gray-50/30 dark:bg-gray-900/30 border-t border-gray-50 dark:border-gray-800 flex items-center justify-between">
+                  <div className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">
                      Showing {Math.min(filteredRevenueTable.length, (revenueTablePage - 1) * revenueTablePageSize + 1)} - {Math.min(filteredRevenueTable.length, revenueTablePage * revenueTablePageSize)} of {filteredRevenueTable.length} entries
                   </div>
                   <div className="flex items-center gap-2">
                      <button 
                        disabled={revenueTablePage === 1}
                        onClick={() => setRevenueTablePage(p => p - 1)}
-                       className="p-2 border border-gray-200 rounded-xl hover:bg-white disabled:opacity-30 transition-all"
+                       className="p-2 border border-gray-200 dark:border-gray-800 rounded-xl hover:bg-white dark:hover:bg-gray-800 disabled:opacity-30 transition-all text-gray-900 dark:text-gray-100"
                      >
                        <ChevronLeft className="w-4 h-4" />
                      </button>
@@ -2971,7 +3247,7 @@ export default function AdminDashboard() {
                            <button 
                              key={i} 
                              onClick={() => setRevenueTablePage(i + 1)}
-                             className={cn("w-8 h-8 rounded-xl text-[10px] font-black transition-all", revenueTablePage === i + 1 ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" : "text-gray-400 hover:bg-white hover:text-gray-600")}
+                             className={cn("w-8 h-8 rounded-xl text-[10px] font-black transition-all", revenueTablePage === i + 1 ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" : "text-gray-400 hover:bg-white dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-200")}
                            >
                              {i + 1}
                            </button>
@@ -2980,7 +3256,7 @@ export default function AdminDashboard() {
                      <button 
                        disabled={revenueTablePage === Math.ceil(filteredRevenueTable.length / revenueTablePageSize)}
                        onClick={() => setRevenueTablePage(p => p + 1)}
-                       className="p-2 border border-gray-200 rounded-xl hover:bg-white disabled:opacity-30 transition-all"
+                       className="p-2 border border-gray-200 dark:border-gray-800 rounded-xl hover:bg-white dark:hover:bg-gray-800 disabled:opacity-30 transition-all text-gray-900 dark:text-gray-100"
                      >
                        <ChevronRight className="w-4 h-4" />
                      </button>
@@ -2989,44 +3265,44 @@ export default function AdminDashboard() {
             </div>
 
             {/* Performance Drill-down Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
                {/* 1. Coupon Analytics */}
-               <div className="bg-white rounded-[45px] border border-gray-100 shadow-sm overflow-hidden flex flex-col">
-                  <div className="p-8 border-b border-gray-50 bg-indigo-50/20">
-                     <h3 className="text-lg font-black text-gray-900 tracking-tighter uppercase">Coupon ROI</h3>
-                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Marketing efficiency attribution</p>
+               <div className="bg-white dark:bg-gray-950 rounded-3xl sm:rounded-[45px] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden flex flex-col">
+                  <div className="p-6 sm:p-8 border-b border-gray-50 dark:border-gray-800 bg-indigo-50/20 dark:bg-indigo-900/10 text-center sm:text-left">
+                     <h3 className="text-lg font-black text-gray-900 dark:text-white tracking-tighter uppercase">Coupon ROI</h3>
+                     <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Marketing efficiency attribution</p>
                   </div>
                   <div className="flex-1 overflow-y-auto max-h-[500px] p-2">
                      <div className="space-y-2">
                         {analyticsData.map((data, i) => (
-                           <div key={i} className="p-6 hover:bg-gray-50 rounded-[35px] transition-all border border-transparent hover:border-indigo-100 group">
+                           <div key={i} className="p-4 sm:p-6 hover:bg-gray-50 dark:hover:bg-gray-900 rounded-2xl sm:rounded-[35px] transition-all border border-transparent hover:border-indigo-100 dark:hover:border-indigo-900/40 group">
                               <div className="flex items-center justify-between mb-4">
                                  <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-black text-xs shadow-lg shadow-indigo-500/20">
+                                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-indigo-600 text-white rounded-lg sm:rounded-xl flex items-center justify-center font-black text-[10px] sm:text-xs shadow-lg shadow-indigo-500/20">
                                        {data.code[0]}
                                     </div>
                                     <div>
-                                       <div className="text-sm font-black text-gray-900 uppercase tracking-tighter">{data.code}</div>
-                                       <div className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">{data.type} discount</div>
+                                       <div className="text-xs sm:text-sm font-black text-gray-900 dark:text-gray-100 uppercase tracking-tighter">{data.code}</div>
+                                       <div className="text-[8px] sm:text-[9px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest">{data.type} discount</div>
                                     </div>
                                  </div>
                                  <div className="text-right">
-                                    <div className="text-sm font-black text-indigo-600">৳{data.netRevenue.toLocaleString()}</div>
-                                    <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Net Revenue</div>
+                                    <div className="text-[11px] sm:text-sm font-black text-indigo-600 dark:text-indigo-400">৳{data.netRevenue.toLocaleString()}</div>
+                                    <div className="text-[8px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Net Sales</div>
                                  </div>
                               </div>
                               <div className="grid grid-cols-3 gap-2">
-                                 <div className="bg-white p-2.5 rounded-2xl border border-gray-50 text-center">
-                                    <div className="text-[8px] font-black text-gray-300 uppercase mb-0.5">Uses</div>
-                                    <div className="text-[11px] font-black text-gray-900">{data.actualUsage}</div>
+                                 <div className="bg-white dark:bg-gray-800 p-2 rounded-xl sm:rounded-2xl border border-gray-50 dark:border-gray-700 text-center flex flex-col justify-center">
+                                    <div className="text-[7px] sm:text-[8px] font-black text-gray-300 dark:text-gray-500 uppercase mb-0.5">Uses</div>
+                                    <div className="text-[9px] sm:text-[11px] font-black text-gray-900 dark:text-gray-100">{data.actualUsage}</div>
                                  </div>
-                                 <div className="bg-white p-2.5 rounded-2xl border border-gray-50 text-center">
-                                    <div className="text-[8px] font-black text-gray-300 uppercase mb-0.5">Discount</div>
-                                    <div className="text-[11px] font-black text-rose-500">৳{data.discountGiven.toLocaleString()}</div>
+                                 <div className="bg-white dark:bg-gray-800 p-2 rounded-xl sm:rounded-2xl border border-gray-50 dark:border-gray-700 text-center flex flex-col justify-center">
+                                    <div className="text-[7px] sm:text-[8px] font-black text-gray-300 dark:text-gray-500 uppercase mb-0.5">Discount</div>
+                                    <div className="text-[9px] sm:text-[11px] font-black text-rose-500 truncate">৳{data.discountGiven.toLocaleString()}</div>
                                  </div>
-                                 <div className="bg-white p-2.5 rounded-2xl border border-gray-50 text-center">
-                                    <div className="text-[8px] font-black text-gray-300 uppercase mb-0.5">Earnings</div>
-                                    <div className="text-[11px] font-black text-emerald-600">৳{(data.netRevenue - data.affiliateBonus).toLocaleString()}</div>
+                                 <div className="bg-white dark:bg-gray-800 p-2 rounded-xl sm:rounded-2xl border border-gray-50 dark:border-gray-700 text-center flex flex-col justify-center">
+                                    <div className="text-[7px] sm:text-[8px] font-black text-gray-300 dark:text-gray-500 uppercase mb-0.5">Profit</div>
+                                    <div className="text-[9px] sm:text-[11px] font-black text-emerald-600 truncate">৳{(data.netRevenue - data.affiliateBonus).toLocaleString()}</div>
                                  </div>
                               </div>
                            </div>
@@ -3036,38 +3312,38 @@ export default function AdminDashboard() {
                </div>
 
                {/* 2. Product Performance */}
-               <div className="bg-white rounded-[45px] border border-gray-100 shadow-sm overflow-hidden flex flex-col">
-                  <div className="p-8 border-b border-gray-50 bg-emerald-50/20">
-                     <h3 className="text-lg font-black text-gray-900 tracking-tighter uppercase">Product Volume</h3>
-                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Inventory performance & revenue</p>
+               <div className="bg-white dark:bg-gray-950 rounded-3xl sm:rounded-[45px] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden flex flex-col">
+                  <div className="p-6 sm:p-8 border-b border-gray-50 dark:border-gray-800 bg-emerald-50/20 dark:bg-emerald-900/10 text-center sm:text-left">
+                     <h3 className="text-lg font-black text-gray-900 dark:text-white tracking-tighter uppercase">Product Volume</h3>
+                     <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Inventory performance</p>
                   </div>
                   <div className="flex-1 overflow-y-auto max-h-[500px] p-2">
                      <div className="space-y-2">
                         {productStats.map((data, i) => (
-                           <div key={i} className="p-6 hover:bg-gray-50 rounded-[35px] transition-all border border-transparent hover:border-emerald-100 group">
+                           <div key={i} className="p-4 sm:p-6 hover:bg-gray-50 dark:hover:bg-gray-900 rounded-2xl sm:rounded-[35px] transition-all border border-transparent hover:border-emerald-100 dark:hover:border-emerald-900/40 group">
                               <div className="flex items-center justify-between mb-4">
                                  <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center font-black text-[10px]">
+                                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg sm:rounded-xl flex items-center justify-center font-black text-[9px] sm:text-[10px]">
                                        {i + 1}
                                     </div>
                                     <div className="min-w-0">
-                                       <div className="text-sm font-black text-gray-900 truncate tracking-tighter max-w-[120px]">{data.name}</div>
-                                       <div className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">{data.sold} Units Sold</div>
+                                       <div className="text-xs sm:text-sm font-black text-gray-900 dark:text-gray-100 truncate tracking-tighter max-w-[120px]">{data.name}</div>
+                                       <div className="text-[8px] sm:text-[9px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest">{data.sold} Units Sold</div>
                                     </div>
                                  </div>
                                  <div className="text-right">
-                                    <div className="text-sm font-black text-emerald-600">৳{data.net.toLocaleString()}</div>
-                                    <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Net Sales</div>
+                                    <div className="text-[11px] sm:text-sm font-black text-emerald-600 dark:text-emerald-400">৳{data.net.toLocaleString()}</div>
+                                    <div className="text-[8px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Net Sales</div>
                                  </div>
                               </div>
-                              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-1 sm:h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                                  <motion.div 
                                     initial={{ width: 0 }}
                                     animate={{ width: `${(data.net / (productStats[0].net || 1)) * 100}%` }}
                                     className="h-full bg-emerald-500" 
                                  />
                               </div>
-                              <div className="flex justify-between items-center mt-3 text-[9px] font-black uppercase tracking-widest text-gray-400">
+                              <div className="flex justify-between items-center mt-3 text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
                                  <span>Net Profit: ৳{(data.net - data.bonus).toLocaleString()}</span>
                                  <span>Share: {((data.net / (revenueStatsSummary.net || 1)) * 100).toFixed(1)}%</span>
                               </div>
@@ -3078,39 +3354,39 @@ export default function AdminDashboard() {
                </div>
 
                {/* 3. Top Affiliates */}
-               <div className="bg-white rounded-[45px] border border-gray-100 shadow-sm overflow-hidden flex flex-col">
-                  <div className="p-8 border-b border-gray-50 bg-amber-50/20">
-                     <h3 className="text-lg font-black text-gray-900 tracking-tighter uppercase">Top Promoters</h3>
-                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Growth engine & conversion rates</p>
+               <div className="bg-white dark:bg-gray-950 rounded-3xl sm:rounded-[45px] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden flex flex-col">
+                  <div className="p-6 sm:p-8 border-b border-gray-50 dark:border-gray-800 bg-amber-50/20 dark:bg-amber-900/10 text-center sm:text-left">
+                     <h3 className="text-lg font-black text-gray-900 dark:text-white tracking-tighter uppercase">Top Promoters</h3>
+                     <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Growth engine conversion</p>
                   </div>
                   <div className="flex-1 overflow-y-auto max-h-[500px] p-2">
                      <div className="space-y-2">
                         {affiliateStats.map((data, i) => (
-                           <div key={i} className="p-6 hover:bg-gray-50 rounded-[35px] transition-all border border-transparent hover:border-amber-100 group">
+                           <div key={i} className="p-4 sm:p-6 hover:bg-gray-50 dark:hover:bg-gray-900 rounded-2xl sm:rounded-[35px] transition-all border border-transparent hover:border-amber-100 dark:hover:border-amber-900/40 group">
                               <div className="flex items-center justify-between mb-4">
                                  <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center">
-                                       <Users className="w-5 h-5 text-amber-500" />
+                                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-amber-50 dark:bg-amber-900/30 rounded-lg sm:rounded-xl flex items-center justify-center">
+                                       <Users className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500" />
                                     </div>
                                     <div>
-                                       <div className="text-sm font-black text-gray-900 tracking-tighter">{data.displayName}</div>
-                                       <div className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">{data.conversions} Conversions</div>
+                                       <div className="text-xs sm:text-sm font-black text-gray-900 dark:text-gray-100 tracking-tighter">{data.displayName}</div>
+                                       <div className="text-[8px] sm:text-[9px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest">{data.conversions} Conversions</div>
                                     </div>
                                  </div>
                                  <div className="text-right">
-                                    <div className="text-sm font-black text-amber-600">৳{data.totalBonus.toLocaleString()}</div>
-                                    <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Total Payout</div>
+                                    <div className="text-[11px] sm:text-sm font-black text-amber-600">৳{data.totalBonus.toLocaleString()}</div>
+                                    <div className="text-[8px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Payout</div>
                                  </div>
                               </div>
-                              <div className="flex items-center gap-2 p-2.5 bg-white rounded-2xl border border-gray-50">
-                                 <div className="flex-1 space-y-1">
-                                    <div className="text-[8px] font-black text-gray-300 uppercase tracking-widest">Gross Captured</div>
-                                    <div className="text-xs font-black text-gray-700">৳{data.grossGenerated.toLocaleString()}</div>
+                              <div className="flex items-center gap-2 p-2 sm:p-2.5 bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-50 dark:border-gray-700">
+                                 <div className="flex-1 space-y-0.5 sm:space-y-1">
+                                    <div className="text-[7px] sm:text-[8px] font-black text-gray-300 dark:text-gray-500 uppercase tracking-widest">Gross Captured</div>
+                                    <div className="text-[10px] sm:text-xs font-black text-gray-700 dark:text-gray-200">৳{data.grossGenerated.toLocaleString()}</div>
                                  </div>
-                                 <div className="h-8 w-px bg-gray-50" />
-                                 <div className="px-4 text-center">
-                                    <div className="text-[8px] font-black text-gray-300 uppercase tracking-widest">ROI</div>
-                                    <div className="text-xs font-black text-amber-500">x{((data.grossGenerated / (data.totalBonus || 1)).toFixed(1))}</div>
+                                 <div className="h-6 sm:h-8 w-px bg-gray-50 dark:bg-gray-700" />
+                                 <div className="px-3 sm:px-4 text-center">
+                                    <div className="text-[7px] sm:text-[8px] font-black text-gray-300 dark:text-gray-500 uppercase tracking-widest">ROI</div>
+                                    <div className="text-[10px] sm:text-xs font-black text-amber-500">x{((data.grossGenerated / (data.totalBonus || 1)).toFixed(1))}</div>
                                  </div>
                               </div>
                            </div>
@@ -3122,9 +3398,9 @@ export default function AdminDashboard() {
           </section>
         ) : activeTab === "categories" ? (
           <section className="space-y-6">
-            <div className="flex justify-between items-center bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-gray-900 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm">
               <div>
-                <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">Category Management</h3>
+                <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Category Management</h3>
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Manage product categories and filters</p>
               </div>
               <button 
@@ -3135,10 +3411,10 @@ export default function AdminDashboard() {
               </button>
             </div>
             
-            <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm space-y-6">
+            <div className="bg-white dark:bg-gray-900 p-8 rounded-[40px] border border-gray-100 dark:border-gray-800 shadow-sm space-y-6">
               <div className="flex items-center gap-3 border-l-4 border-amber-500 pl-4 py-1">
                 <div>
-                  <h3 className="text-lg font-black text-gray-900 uppercase tracking-tighter">Visibility & Filtering</h3>
+                  <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tighter">Visibility & Filtering</h3>
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Control which categories appear on the storefront</p>
                 </div>
               </div>
@@ -3164,20 +3440,20 @@ export default function AdminDashboard() {
                       className={cn(
                         "p-4 rounded-2xl border transition-all text-center space-y-2 flex flex-col items-center justify-center group",
                         isHidden 
-                          ? "bg-gray-50 border-gray-200 text-gray-400 grayscale" 
-                          : "bg-indigo-50 border-indigo-100 text-indigo-700 shadow-sm"
+                          ? "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 grayscale" 
+                          : "bg-indigo-50 dark:bg-indigo-900/30 border-indigo-100 dark:border-indigo-800 text-indigo-700 dark:text-indigo-400 shadow-sm"
                       )}
                     >
                       <div className={cn(
                         "p-2 rounded-xl transition-colors",
-                        isHidden ? "bg-gray-200" : "bg-white"
+                        isHidden ? "bg-gray-200 dark:bg-gray-950" : "bg-white dark:bg-gray-900"
                       )}>
                         {isHidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </div>
                       <span className="text-[10px] font-black uppercase tracking-tighter truncate w-full">{catName}</span>
                       <div className={cn(
                         "text-[8px] font-bold px-2 py-0.5 rounded-full uppercase",
-                        isHidden ? "bg-red-100 text-red-600" : "bg-green-100 text-green-600"
+                        isHidden ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400" : "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
                       )}>
                         {isHidden ? "Hidden" : "Visible"}
                       </div>
@@ -3198,26 +3474,26 @@ export default function AdminDashboard() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {categories.map(category => (
-                <div key={category.id} className="bg-white rounded-[32px] p-6 border border-gray-100 shadow-sm relative group overflow-hidden">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50/50 rounded-bl-[60px] -mr-8 -mt-8 transition-all group-hover:bg-indigo-100/50" />
+                <div key={category.id} className="bg-white dark:bg-gray-900 rounded-[32px] p-6 border border-gray-100 dark:border-gray-800 shadow-sm relative group overflow-hidden">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50/50 dark:bg-indigo-900/10 rounded-bl-[60px] -mr-8 -mt-8 transition-all group-hover:bg-indigo-100/50 dark:group-hover:bg-indigo-900/20" />
                   
                   <div className="relative">
-                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4">
+                    <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mb-4 border border-indigo-100 dark:border-indigo-800">
                       {category.icon === "Package" ? <Package className="w-6 h-6" /> : <Database className="w-6 h-6" />}
                     </div>
                     
-                    <h4 className="text-lg font-black text-gray-900 uppercase tracking-tighter flex items-center gap-2">
+                    <h4 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tighter flex items-center gap-2">
                       {category.name}
                       {siteSettings.hiddenCategories?.includes(category.name) && (
-                        <span className="text-[8px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Hidden</span>
+                        <span className="text-[8px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full border border-red-200 dark:border-red-800">Hidden</span>
                       )}
                     </h4>
-                    <p className="text-sm text-gray-500 mt-2 line-clamp-2 leading-relaxed">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 line-clamp-2 leading-relaxed">
                       {category.description || "No description provided."}
                     </p>
                     
-                    <div className="mt-6 pt-6 border-t border-gray-50 flex items-center justify-between">
-                      <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest bg-gray-50 px-3 py-1.5 rounded-full">
+                    <div className="mt-6 pt-6 border-t border-gray-50 dark:border-gray-800 flex items-center justify-between">
+                      <div className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-full border border-gray-100 dark:border-gray-700">
                         {products.filter(p => p.category === category.name).length} Products
                       </div>
                       <div className="flex gap-2">
@@ -3231,7 +3507,7 @@ export default function AdminDashboard() {
                           }}
                           className={cn(
                             "p-2 rounded-xl transition-colors",
-                            isModeratorRole ? "text-indigo-600 bg-indigo-50 hover:bg-indigo-100" : "text-gray-200 bg-gray-50/50 cursor-not-allowed"
+                            isModeratorRole ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50" : "text-gray-200 dark:text-gray-800 bg-gray-50/50 dark:bg-gray-900/50 cursor-not-allowed"
                           )}
                         >
                           <Edit className="w-4 h-4" />
@@ -3246,7 +3522,7 @@ export default function AdminDashboard() {
                           }}
                           className={cn(
                             "p-2 rounded-xl transition-colors",
-                            isModeratorRole ? "text-red-600 bg-red-50 hover:bg-red-100" : "text-gray-200 bg-gray-50/50 cursor-not-allowed"
+                            isModeratorRole ? "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50" : "text-gray-200 dark:text-gray-800 bg-gray-50/50 dark:bg-gray-900/50 cursor-not-allowed"
                           )}
                         >
                           <Trash2 className="w-4 h-4" />
@@ -3266,18 +3542,18 @@ export default function AdminDashboard() {
             </div>
           </section>
         ) : activeTab === "products" ? (
-          <section className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
-            <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-center bg-gray-50/50 gap-4">
+          <section className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm">
+            <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row justify-between items-center bg-gray-50/50 dark:bg-gray-800/50 gap-4">
               <div className="flex items-center gap-4 w-full sm:w-auto">
-                <h3 className="font-bold text-gray-900 whitespace-nowrap">Product Inventory</h3>
+                <h3 className="font-bold text-gray-900 dark:text-white whitespace-nowrap">Product Inventory</h3>
                 <div className="relative flex-grow sm:w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
                   <input 
                     type="text"
                     placeholder="Search products..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    className="w-full pl-9 pr-4 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all dark:text-gray-100"
                   />
                 </div>
               </div>
@@ -3285,7 +3561,7 @@ export default function AdminDashboard() {
                 {selectedProductIds.length > 0 && (
                   <button 
                     onClick={handleDeleteSelected}
-                    className="bg-red-50 text-red-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-100 transition-colors flex items-center gap-2"
+                    className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors flex items-center gap-2 border border-red-100 dark:border-red-900/20"
                   >
                     <Trash2 className="w-3.5 h-3.5" /> Delete ({selectedProductIds.length})
                   </button>
@@ -3293,13 +3569,13 @@ export default function AdminDashboard() {
                 {isSuperAdmin && products.length > 0 && (
                   <button 
                     onClick={handleClearAll}
-                    className="bg-gray-100 text-gray-500 hover:text-red-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-50 transition-colors flex items-center gap-2"
+                    className="bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors flex items-center gap-2 border border-transparent hover:border-red-100 dark:hover:border-red-900/20"
                     title="Clear all products"
                   >
                     <Database className="w-3.5 h-3.5" /> Clear All
                   </button>
                 )}
-                <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full uppercase tracking-widest whitespace-nowrap">
+                <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-full uppercase tracking-widest whitespace-nowrap border border-indigo-100 dark:border-indigo-800">
                   {products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())).length} Items
                 </span>
               </div>
@@ -3307,68 +3583,68 @@ export default function AdminDashboard() {
 
     <div className="overflow-x-auto">
       <table className="w-full text-left">
-        <thead className="bg-gray-50 text-[9px] sm:text-[10px] uppercase font-black text-gray-400 tracking-widest">
+        <thead className="bg-gray-50 dark:bg-gray-800 text-[9px] sm:text-[10px] uppercase font-black text-gray-400 dark:text-gray-500 tracking-widest">
           <tr>
             <th className="px-3 sm:px-6 py-4 sm:py-5 w-10">
               <input 
                 type="checkbox" 
                 checked={selectedProductIds.length === products.length && products.length > 0}
                 onChange={toggleSelectAll}
-                className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                className="w-4 h-4 rounded border-gray-300 dark:border-gray-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer bg-transparent"
               />
             </th>
             <th className="px-3 sm:px-6 py-4 sm:py-5">Product</th>
             <th className="hidden sm:table-cell px-6 py-5">Category</th>
-            <th className="px-3 sm:px-6 py-4 sm:py-5 border-l border-gray-100">Price</th>
-            <th className="hidden md:table-cell px-6 py-5 border-l border-gray-100">Stats</th>
-            <th className="px-3 sm:px-6 py-4 sm:py-5 text-right border-l border-gray-100">Actions</th>
+            <th className="px-3 sm:px-6 py-4 sm:py-5 border-l border-gray-100 dark:border-gray-800">Price</th>
+            <th className="hidden md:table-cell px-6 py-5 border-l border-gray-100 dark:border-gray-800">Stats</th>
+            <th className="px-3 sm:px-6 py-4 sm:py-5 text-right border-l border-gray-100 dark:border-gray-800">Actions</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-50">
+        <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
           {products
             .filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
             .map(p => (
             <tr key={p.id} className={cn(
-              "hover:bg-gray-50/80 transition-colors group",
-              selectedProductIds.includes(p.id) && "bg-indigo-50/30"
+              "hover:bg-gray-50/80 dark:hover:bg-gray-800/80 transition-colors group",
+              selectedProductIds.includes(p.id) && "bg-indigo-50/30 dark:bg-indigo-900/10"
             )}>
               <td className="px-3 sm:px-6 py-3 sm:py-4">
                 <input 
                   type="checkbox" 
                   checked={selectedProductIds.includes(p.id)}
                   onChange={() => toggleSelectProduct(p.id)}
-                  className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  className="w-4 h-4 rounded border-gray-300 dark:border-gray-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer bg-transparent"
                 />
               </td>
               <td className="px-3 sm:px-6 py-3 sm:py-4">
                 <div className="flex items-center gap-2 sm:gap-4">
-                  <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gray-100 overflow-hidden shadow-inner border border-gray-100 group-hover:scale-105 transition-transform flex-shrink-0">
+                  <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gray-100 dark:bg-gray-800 overflow-hidden shadow-inner border border-gray-100 dark:border-gray-800 group-hover:scale-105 transition-transform flex-shrink-0">
                     <img src={p.imageUrl || "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=200&q=80"} className="w-full h-full object-cover" />
                   </div>
                   <div className="min-w-0">
-                    <div className="font-black text-gray-900 text-xs sm:text-sm truncate">{p.name}</div>
-                    <div className="text-[8px] sm:text-[10px] text-gray-400 uppercase font-bold tracking-tight">ID: {p.id.slice(0, 6)}</div>
+                    <div className="font-black text-gray-900 dark:text-gray-100 text-xs sm:text-sm truncate">{p.name}</div>
+                    <div className="text-[8px] sm:text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-tight">ID: {p.id.slice(0, 6)}</div>
                   </div>
                 </div>
               </td>
               <td className="hidden sm:table-cell px-6 py-4">
-                <span className="px-3 py-1 rounded-lg bg-gray-100 text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                <span className="px-3 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest border border-gray-200 dark:border-gray-700">
                   {p.category}
                 </span>
               </td>
-              <td className="px-3 sm:px-6 py-3 sm:py-4 border-l border-gray-50 sm:border-gray-100">
-                <div className="bg-emerald-50 text-emerald-700 px-2 sm:px-3 py-1 rounded-lg inline-block font-mono font-black text-[10px] sm:text-xs">
+              <td className="px-3 sm:px-6 py-3 sm:py-4 border-l border-gray-50 dark:border-gray-800 sm:border-gray-100 dark:sm:border-gray-800">
+                <div className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 sm:px-3 py-1 rounded-lg inline-block font-mono font-black text-[10px] sm:text-xs border border-emerald-100 dark:border-emerald-800">
                   ৳{p.price.toLocaleString()}
                 </div>
               </td>
-              <td className="hidden md:table-cell px-6 py-4 border-l border-gray-100">
+              <td className="hidden md:table-cell px-6 py-4 border-l border-gray-100 dark:border-gray-800">
                 <div className="flex items-center gap-1.5 font-bold text-xs">
                   <Star className="w-3.5 h-3.5 text-amber-400 fill-current" />
-                  <span className="text-gray-900">{p.rating}</span>
-                  <span className="text-gray-400 font-medium">({p.reviewCount})</span>
+                  <span className="text-gray-900 dark:text-gray-100">{p.rating}</span>
+                  <span className="text-gray-400 dark:text-gray-500 font-medium">({p.reviewCount})</span>
                 </div>
               </td>
-              <td className="px-3 sm:px-6 py-3 sm:py-4 text-right border-l border-gray-50 sm:border-gray-100">
+              <td className="px-3 sm:px-6 py-3 sm:py-4 text-right border-l border-gray-50 dark:border-gray-800 sm:border-gray-100 dark:sm:border-gray-800">
                 <div className="flex justify-end gap-1">
                   <button 
                     onClick={() => {
@@ -3379,7 +3655,7 @@ export default function AdminDashboard() {
                       handleEditProduct(p);
                     }}
                     title="Edit Product"
-                    className="p-2 sm:p-3 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl sm:rounded-2xl transition-all border border-transparent hover:border-indigo-100 shadow-sm hover:shadow-indigo-50 active:scale-90"
+                    className="p-2 sm:p-3 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl sm:rounded-2xl transition-all border border-transparent hover:border-indigo-100 dark:hover:border-indigo-800 shadow-sm hover:shadow-indigo-50 dark:hover:shadow-none active:scale-90"
                   >
                     <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </button>
@@ -3419,7 +3695,7 @@ export default function AdminDashboard() {
               <td colSpan={5} className="px-6 py-20 text-center">
                 <div className="flex flex-col items-center gap-3 opacity-30">
                   <Package className="w-12 h-12" />
-                  <p className="font-bold text-gray-900">No products found matching your search</p>
+                  <p className="font-bold text-gray-900 dark:text-white">No products found matching your search</p>
                 </div>
               </td>
             </tr>
@@ -3430,15 +3706,15 @@ export default function AdminDashboard() {
   </section>
         ) : activeTab === "orders" ? (
           <section className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-3xl border border-gray-100 shadow-sm">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-gray-900 p-4 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm">
               <div className="flex items-center gap-4">
-                <h3 className="font-bold text-gray-900">Sales Ledger</h3>
-                <div className="flex bg-gray-100 p-1 rounded-xl">
+                <h3 className="font-bold text-gray-900 dark:text-white">Sales Ledger</h3>
+                <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
                   <button 
                     onClick={() => setShowSalesStats(false)}
                     className={cn(
                       "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-                      !showSalesStats ? "bg-white shadow-sm text-gray-900" : "text-gray-400"
+                      !showSalesStats ? "bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-gray-100" : "text-gray-400 dark:text-gray-500"
                     )}
                   >
                     Recent Sales
@@ -3447,7 +3723,7 @@ export default function AdminDashboard() {
                     onClick={() => setShowSalesStats(true)}
                     className={cn(
                       "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-                      showSalesStats ? "bg-white shadow-sm text-gray-900" : "text-gray-400"
+                      showSalesStats ? "bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-gray-100" : "text-gray-400 dark:text-gray-500"
                     )}
                   >
                     Analytics & Trends
@@ -3455,51 +3731,60 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <div className="relative w-full sm:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
                 <input 
                   type="text"
                   placeholder="Find orders..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-gray-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  className="w-full pl-9 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all dark:text-gray-100"
                 />
               </div>
             </div>
 
             {showSalesStats ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-                  <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6">Daily Revenue Breakdown</h4>
+                <div className="bg-white dark:bg-gray-950 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                  <h4 className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-6">Daily Revenue Breakdown</h4>
                   <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                     {Object.entries(orders.reduce((acc: any, o) => {
                       const d = o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Unknown';
                       acc[d] = (acc[d] || 0) + (o.amount || 0);
                       return acc;
                     }, {})).sort((a: any, b: any) => new Date(b[0]).getTime() - new Date(a[0]).getTime()).map(([date, amount]: any) => (
-                      <div key={date} className="flex justify-between items-center p-4 bg-gray-50 rounded-2xl border border-gray-100/50">
+                      <div key={date} className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-100/50 dark:border-gray-800/50">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center border border-gray-100">
-                             <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                          <div className="w-8 h-8 rounded-full bg-white dark:bg-gray-800 flex items-center justify-center border border-gray-100 dark:border-gray-800">
+                             <Calendar className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
                           </div>
-                          <span className="text-sm font-bold text-gray-700">{date}</span>
+                          <span className="text-sm font-bold text-gray-700 dark:text-gray-300">{date}</span>
                         </div>
-                        <span className="text-sm font-black text-indigo-600">৳{amount.toLocaleString()}</span>
+                        <span className="text-sm font-black text-indigo-600 dark:text-indigo-400">৳{amount.toLocaleString()}</span>
                       </div>
                     ))}
                     {orders.length === 0 && (
-                      <div className="text-center py-12 text-gray-400">No sales data available.</div>
+                      <div className="text-center py-12 text-gray-400 dark:text-gray-600 italic">No sales data available.</div>
                     )}
                   </div>
                 </div>
-                <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-                  <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6">Revenue Growth</h4>
+                <div className="bg-white dark:bg-gray-950 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                  <h4 className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-6">Revenue Growth</h4>
                   <div className="h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 700 }} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 700 }} />
-                        <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? "#1f2937" : "#f3f4f6"} />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: theme === 'dark' ? '#4b5563' : '#9ca3af', fontSize: 10, fontWeight: 700 }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fill: theme === 'dark' ? '#4b5563' : '#9ca3af', fontSize: 10, fontWeight: 700 }} />
+                        <Tooltip 
+                          contentStyle={{ 
+                            borderRadius: '16px', 
+                            border: 'none', 
+                            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                            backgroundColor: theme === 'dark' ? '#111827' : '#ffffff',
+                            color: theme === 'dark' ? '#f3f4f6' : '#111827'
+                          }} 
+                          itemStyle={{ color: theme === 'dark' ? '#f3f4f6' : '#111827' }}
+                        />
                         <Bar dataKey="revenue" fill="#4f46e5" radius={[6, 6, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -3507,28 +3792,28 @@ export default function AdminDashboard() {
                 </div>
               </div>
             ) : (
-              <section className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+              <section className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
-                    <thead className="bg-gray-50 text-[9px] sm:text-[10px] uppercase font-black text-gray-400 tracking-widest border-b border-gray-100">
+                    <thead className="bg-gray-50 dark:bg-gray-900 text-[9px] sm:text-[10px] uppercase font-black text-gray-400 dark:text-gray-500 tracking-widest border-b border-gray-100 dark:border-gray-800">
                       <tr>
                         <th className="px-3 sm:px-6 py-4 sm:py-5 w-10">
                           <input 
                             type="checkbox" 
                             checked={selectedOrderIds.length === orders.length && orders.length > 0}
                             onChange={toggleSelectAll}
-                            className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            className="w-4 h-4 rounded border-gray-300 dark:border-gray-700 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-500 cursor-pointer bg-transparent"
                           />
                         </th>
                         <th className="px-3 sm:px-6 py-4 sm:py-5">Order ID</th>
                         <th className="px-3 sm:px-6 py-4 sm:py-5">Customer</th>
-                        <th className="hidden sm:table-cell px-6 py-5 border-l border-gray-100">Method</th>
+                        <th className="hidden sm:table-cell px-6 py-5 border-l border-gray-100 dark:border-gray-800">Method</th>
                         <th className="px-3 sm:px-6 py-4 sm:py-5">Status</th>
-                        <th className="px-3 sm:px-6 py-4 sm:py-5 border-l border-gray-100">Amount</th>
-                        <th className="px-3 sm:px-6 py-4 sm:py-5 text-right border-l border-gray-100">Action</th>
+                        <th className="px-3 sm:px-6 py-4 sm:py-5 border-l border-gray-100 dark:border-gray-800">Amount</th>
+                        <th className="px-3 sm:px-6 py-4 sm:py-5 text-right border-l border-gray-100 dark:border-gray-800">Action</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                       {orders
                         .filter(o => {
                           const term = searchTerm.toLowerCase().replace(/^#/, '');
@@ -3545,31 +3830,31 @@ export default function AdminDashboard() {
                         })
                         .map(o => (
                         <tr key={o.id} className={cn(
-                          "hover:bg-gray-50/50 transition-colors group",
-                          selectedOrderIds.includes(o.id) && "bg-indigo-50/30"
+                          "hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors group",
+                          selectedOrderIds.includes(o.id) && "bg-indigo-50/30 dark:bg-indigo-900/10"
                         )}>
                           <td className="px-3 sm:px-6 py-3 sm:py-4">
                             <input 
                               type="checkbox" 
                               checked={selectedOrderIds.includes(o.id)}
                               onChange={() => toggleSelectOrder(o.id)}
-                              className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                              className="w-4 h-4 rounded border-gray-300 dark:border-gray-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer bg-transparent"
                             />
                           </td>
                           <td className="px-3 sm:px-6 py-3 sm:py-4">
                             <div className="flex flex-col">
-                              <span className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase font-mono">#{o.id.slice(-8).toUpperCase()}</span>
-                              <span className="text-[8px] sm:text-[9px] text-gray-400 mt-0.5 whitespace-nowrap">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'Just now'}</span>
+                              <span className="text-[9px] sm:text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase font-mono">#{o.id.slice(-8).toUpperCase()}</span>
+                              <span className="text-[8px] sm:text-[9px] text-gray-400 dark:text-gray-500 mt-0.5 whitespace-nowrap">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'Just now'}</span>
                             </div>
                           </td>
                           <td className="px-3 sm:px-6 py-3 sm:py-4">
                             <div className="flex flex-col max-w-[100px] sm:max-w-none">
-                              <span className="text-xs sm:text-sm font-bold text-gray-900 truncate">{o.customerName || "Anonymous"}</span>
+                              <span className="text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{o.customerName || "Anonymous"}</span>
                               <div className="flex flex-col">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-[10px] sm:text-xs text-gray-500 truncate">{o.customerEmail || o.email}</span>
+                                  <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 truncate">{o.customerEmail || o.email}</span>
                                   {o.deliveryAddress && (
-                                    <span className="flex items-center gap-0.5 text-[8px] font-black bg-purple-50 text-purple-600 px-1 rounded uppercase tracking-tighter">
+                                    <span className="flex items-center gap-0.5 text-[8px] font-black bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 px-1 rounded uppercase tracking-tighter">
                                       <ShoppingBag className="w-2 h-2" />
                                       Details
                                     </span>
@@ -3577,11 +3862,11 @@ export default function AdminDashboard() {
                                 </div>
                                 {o.couponCode && (
                                   <div className="mt-1 flex items-center gap-1">
-                                    <span className="text-[9px] font-black bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded uppercase tracking-widest border border-indigo-100/50">
+                                    <span className="text-[9px] font-black bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded uppercase tracking-widest border border-indigo-100/50 dark:border-indigo-800/50">
                                       Coupon: {o.couponCode}
                                     </span>
                                     {(o.discountAmount || 0) > 0 && (
-                                      <span className="text-[9px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded uppercase tracking-widest border border-emerald-100/50 font-mono">
+                                      <span className="text-[9px] font-black bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded uppercase tracking-widest border border-emerald-100/50 dark:border-emerald-800/50 font-mono">
                                         -৳{o.discountAmount.toLocaleString()}
                                       </span>
                                     )}
@@ -3589,7 +3874,7 @@ export default function AdminDashboard() {
                                 )}
                                 {o.isFake && (
                                   <div className="mt-1 flex items-center gap-1">
-                                    <span className="text-[9px] font-black bg-red-50 text-red-600 px-1.5 py-0.5 rounded uppercase tracking-widest border border-red-200">
+                                    <span className="text-[9px] font-black bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded uppercase tracking-widest border border-red-200 dark:border-red-900/20">
                                       FAKE ORDER
                                     </span>
                                   </div>
@@ -3597,19 +3882,19 @@ export default function AdminDashboard() {
                               </div>
                             </div>
                           </td>
-                          <td className="hidden sm:table-cell px-6 py-4 border-l border-gray-50">
+                          <td className="hidden sm:table-cell px-6 py-4 border-l border-gray-50 dark:border-gray-800">
                             <div className="flex items-center gap-2">
                               <span className={cn(
                                 "text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg",
-                                o.paymentMethod === "bkash" ? "bg-pink-50 text-pink-600 border border-pink-100" :
-                                o.paymentMethod === "nagad" ? "bg-orange-50 text-orange-600 border border-orange-100" : 
-                                o.paymentMethod === "binance" ? "bg-yellow-50 text-yellow-600 border border-yellow-100" :
-                                o.paymentMethod === "payoneer" ? "bg-cyan-50 text-cyan-600 border border-cyan-100" :
-                                "bg-indigo-50 text-indigo-600 border border-indigo-100"
+                                o.paymentMethod === "bkash" ? "bg-pink-50 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 border border-pink-100 dark:border-pink-800" :
+                                o.paymentMethod === "nagad" ? "bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-100 dark:border-orange-800" : 
+                                o.paymentMethod === "binance" ? "bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 border border-yellow-100 dark:border-yellow-800" :
+                                o.paymentMethod === "payoneer" ? "bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 border border-cyan-100 dark:border-cyan-800" :
+                                "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800"
                               )}>
                                 {o.paymentMethod}
                               </span>
-                              <span className="text-[10px] font-mono font-bold text-gray-400">{o.transactionId}</span>
+                              <span className="text-[10px] font-mono font-bold text-gray-400 dark:text-gray-500">{o.transactionId}</span>
                             </div>
                           </td>
                           <td className="px-3 sm:px-6 py-3 sm:py-4">
@@ -3621,23 +3906,23 @@ export default function AdminDashboard() {
                               )}
                               <span className={cn(
                                 "text-[8px] sm:text-[10px] font-black uppercase tracking-widest",
-                                o.status === "completed" ? "text-green-600" : "text-amber-600"
+                                o.status === "completed" ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"
                               )}>
                                 {o.status}
                               </span>
                             </div>
                           </td>
-                          <td className="px-3 sm:px-6 py-3 sm:py-4 border-l border-gray-50">
-                            <span className="text-xs sm:text-sm font-black text-gray-900">৳{(o.amount || 0).toLocaleString()}</span>
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 border-l border-gray-50 dark:border-gray-800">
+                            <span className="text-xs sm:text-sm font-black text-gray-900 dark:text-gray-100">৳{(o.amount || 0).toLocaleString()}</span>
                           </td>
-                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-right border-l border-gray-50">
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-right border-l border-gray-50 dark:border-gray-800">
                             <div className="flex justify-end gap-1">
                               <button 
                                 onClick={() => handleToggleFakeOrder(o.id, o.isFake)}
                                 title={o.isFake ? "Mark as Valid" : "Mark as Fake"}
                                 className={cn(
                                   "p-2 sm:p-3 rounded-xl sm:rounded-2xl transition-all border border-transparent shadow-sm active:scale-90",
-                                  o.isFake ? "text-emerald-500 bg-emerald-50 hover:bg-emerald-100" : "text-amber-500 bg-amber-50 hover:bg-amber-100"
+                                  o.isFake ? "text-emerald-500 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50" : "text-amber-500 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50"
                                 )}
                               >
                                 <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -3648,14 +3933,14 @@ export default function AdminDashboard() {
                                   setEditingCredentials(o.credentials || {});
                                   setEditingNote(o.adminNote || "");
                                 }}
-                                className="p-2 sm:p-3 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl sm:rounded-2xl transition-all border border-transparent hover:border-indigo-100 shadow-sm active:scale-90"
+                                className="p-2 sm:p-3 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl sm:rounded-2xl transition-all border border-transparent hover:border-indigo-100 dark:hover:border-indigo-800 shadow-sm dark:shadow-none active:scale-90"
                               >
                                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                               </button>
                               {o.status === "pending" && isModeratorRole && (
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); handleConfirmOrder(o.id); }}
-                                  className="bg-indigo-600 text-white px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
+                                  className="bg-indigo-600 text-white px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-95"
                                 >
                                   OK
                                 </button>
@@ -3679,22 +3964,22 @@ export default function AdminDashboard() {
           </section>
         ) : activeTab === "withdrawals" ? (
           <section className="space-y-6">
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex justify-between items-center bg-gray-50/50">
+            <div className="bg-gray-50/50 dark:bg-gray-900/50 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">Withdrawal Requests</h3>
+                  <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Withdrawal Requests</h3>
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Review and process user bonus withdrawals</p>
                 </div>
-                <div className="text-right">
-                  <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full uppercase tracking-widest">
+                <div className="text-right w-full sm:w-auto flex justify-start sm:justify-end">
+                  <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-full uppercase tracking-widest border border-indigo-100 dark:border-indigo-800">
                     {withdrawals.filter(w => w.status === 'pending').length} Pending
                   </span>
                 </div>
             </div>
 
-            <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+            <div className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
-                  <thead className="bg-gray-50 text-[10px] uppercase font-black text-gray-400 tracking-widest">
+                  <thead className="bg-gray-50 dark:bg-gray-800 text-[10px] uppercase font-black text-gray-400 dark:text-gray-500 tracking-widest">
                     <tr>
                       <th className="px-6 py-5">User</th>
                       <th className="px-6 py-5">Amount</th>
@@ -3703,36 +3988,38 @@ export default function AdminDashboard() {
                       <th className="px-6 py-5 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                     {withdrawals
                       .sort((a, b) => (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0))
                       .map(w => (
-                      <tr key={w.id} className="hover:bg-gray-50/50 transition-colors">
+                      <tr key={w.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
                         <td className="px-6 py-4">
-                          <div className="font-black text-gray-900 text-sm">{w.userEmail}</div>
+                          <div className="font-black text-gray-900 dark:text-gray-100 text-sm">{w.userEmail}</div>
                           <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
                             {w.createdAt?.toDate?.().toLocaleDateString() || "Recently"}
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-lg font-black text-indigo-600">৳{w.amount.toLocaleString()}</span>
+                          <span className="text-lg font-black text-indigo-600 dark:text-indigo-400">৳{w.amount.toLocaleString()}</span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                              <div className={cn(
-                               "px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-tight shadow-sm",
-                               w.method === 'bkash' ? "bg-pink-100 text-pink-600" : "bg-indigo-100 text-indigo-600"
+                               "px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-tight shadow-sm border",
+                               w.method === 'bkash' 
+                                ? "bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 border-pink-200 dark:border-pink-800" 
+                                : "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800"
                              )}>
                                {w.method}
                              </div>
-                             <span className="font-mono text-xs font-bold text-gray-700">{w.accountNumber}</span>
+                             <span className="font-mono text-xs font-bold text-gray-700 dark:text-gray-300">{w.accountNumber}</span>
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className={cn(
-                            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest",
-                            w.status === 'completed' ? "bg-emerald-50 text-emerald-600" : 
-                            w.status === 'pending' ? "bg-amber-50 text-amber-600" : "bg-red-50 text-red-600"
+                            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border",
+                            w.status === 'completed' ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800" : 
+                            w.status === 'pending' ? "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-800" : "bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-100 dark:border-red-800"
                           )}>
                              <Clock className="w-3 h-3" />
                              {w.status}
@@ -3743,19 +4030,19 @@ export default function AdminDashboard() {
                             <div className="flex justify-end gap-2">
                               <button 
                                 onClick={() => handleProcessWithdrawal(w.id, "rejected")}
-                                className="px-4 py-2 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-all active:scale-95 border border-red-100"
+                                className="px-4 py-2 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 dark:hover:bg-red-900/50 transition-all active:scale-95 border border-red-100 dark:border-red-900/20"
                               >
                                 Reject
                               </button>
                               <button 
                                 onClick={() => handleProcessWithdrawal(w.id, "completed")}
-                                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-emerald-700 transition-all active:scale-95"
+                                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-emerald-100 dark:shadow-none hover:bg-emerald-700 transition-all active:scale-95"
                               >
                                 Complete Payment
                               </button>
                             </div>
                           ) : (
-                            <span className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">Processed</span>
+                            <span className="text-[10px] font-bold text-gray-300 dark:text-gray-600 uppercase tracking-widest">Processed</span>
                           )}
                         </td>
                       </tr>
@@ -3774,9 +4061,9 @@ export default function AdminDashboard() {
           </section>
         ) : activeTab === "coupons" ? (
           <section className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-gray-900 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm">
               <div>
-                <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">Coupon Management</h3>
+                <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Coupon Management</h3>
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Manage discount codes and promotions</p>
               </div>
               <button 
@@ -3787,21 +4074,21 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {coupons.map(coupon => (
-                <div key={coupon.id} className="bg-white rounded-[32px] p-6 border border-gray-100 shadow-sm relative group overflow-hidden">
-                   <div className="absolute top-0 right-0 p-4 flex gap-1">
+                <div key={coupon.id} className="bg-white dark:bg-gray-900 rounded-3xl p-5 sm:p-6 border border-gray-100 dark:border-gray-800 shadow-sm relative group overflow-hidden">
+                   <div className="absolute top-0 right-0 p-3 sm:p-4 flex gap-1 z-10 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-bl-2xl">
                      <button 
                        onClick={() => setEditingCoupon(coupon)}
-                       className="p-2 text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
+                       className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all"
                      >
-                       <Edit className="w-4 h-4" />
+                       <Edit className="w-3.5 h-3.5" />
                      </button>
                      <button 
                        onClick={() => handleDeleteCoupon(coupon.id)}
-                       className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                       className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all"
                      >
-                       <Trash2 className="w-4 h-4" />
+                       <Trash2 className="w-3.5 h-3.5" />
                      </button>
                    </div>
 
@@ -3812,21 +4099,21 @@ export default function AdminDashboard() {
                             <Database className="w-5 h-5" />
                          </div>
                          <div>
-                           <div className="text-lg font-black text-gray-900 tracking-tight">{coupon.code}</div>
+                           <div className="text-lg font-black text-gray-900 dark:text-gray-100 tracking-tight">{coupon.code}</div>
                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{coupon.type} Discount</div>
                          </div>
                        </div>
                        {!coupon.isActive && (
-                         <span className="text-[8px] font-black bg-red-50 text-red-600 px-2 py-0.5 rounded-full uppercase tracking-widest">Inactive</span>
+                         <span className="text-[8px] font-black bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full uppercase tracking-widest border border-red-100 dark:border-red-800">Inactive</span>
                        )}
                        {coupon.expiryDate && new Date(coupon.expiryDate) < new Date() && (
-                         <span className="text-[8px] font-black bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full uppercase tracking-widest">Expired</span>
+                         <span className="text-[8px] font-black bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full uppercase tracking-widest border border-amber-100 dark:border-amber-800">Expired</span>
                        )}
                      </div>
 
                      {coupon.assignedEmail && (
-                       <div className="flex items-center gap-2 bg-amber-50 px-3 py-2 rounded-xl border border-amber-100">
-                         <Mail className="w-3.5 h-3.5 text-amber-600" />
+                       <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/30 px-3 py-2 rounded-xl border border-amber-100 dark:border-amber-800">
+                         <Mail className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                          <div className="flex flex-col">
                            <span className="text-[8px] font-black text-amber-500 uppercase tracking-widest leading-none">Assigned To</span>
                            <span className="text-[10px] font-bold text-amber-900 truncate max-w-[150px]">{coupon.assignedEmail}</span>
@@ -3843,13 +4130,13 @@ export default function AdminDashboard() {
                         </div>
                         <div>
                           <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Bonus</div>
-                          <div className="text-xl font-black text-emerald-600">
+                          <div className="text-xl font-black text-emerald-600 dark:text-emerald-400">
                              {coupon.bonusPercentage || 0}%
                           </div>
                         </div>
                         <div>
                           <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Uses</div>
-                          <div className="text-sm font-black text-gray-900">
+                          <div className="text-sm font-black text-gray-900 dark:text-gray-100">
                             {coupon.usageCount || 0} / {coupon.usageLimit > 0 ? coupon.usageLimit : '∞'}
                           </div>
                         </div>
@@ -3867,7 +4154,7 @@ export default function AdminDashboard() {
                            return (
                              <span className={cn(
                                "px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest",
-                               isExpired ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"
+                               isExpired ? "bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-100 dark:border-red-800" : "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800"
                              )}>
                                {isExpired ? "Expired" : "Active"}
                              </span>
@@ -3879,17 +4166,17 @@ export default function AdminDashboard() {
               ))}
 
               {coupons.length === 0 && (
-                <div className="col-span-full py-20 text-center bg-gray-50/50 rounded-[40px] border-2 border-dashed border-gray-200">
-                  <Database className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-                  <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">No coupons found. Create one to get started.</p>
+                <div className="col-span-full py-20 text-center bg-gray-50/50 dark:bg-gray-900/50 rounded-[40px] border-2 border-dashed border-gray-200 dark:border-gray-800">
+                  <Database className="w-12 h-12 text-gray-200 dark:text-gray-700 mx-auto mb-4" />
+                  <p className="text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest text-[10px]">No coupons found. Create one to get started.</p>
                 </div>
               )}
             </div>
           </section>
         ) : activeTab === "pages" ? (
-          <section className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h3 className="font-bold text-gray-900">Custom Pages</h3>
+          <section className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm">
+            <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-50/50 dark:bg-gray-900/50 gap-4">
+              <h3 className="font-bold text-gray-900 dark:text-white">Custom Pages</h3>
               <button 
                 onClick={() => setIsAddingPage(true)}
                 className="bg-indigo-600 text-white px-5 py-2.5 rounded-2xl text-[10px] uppercase font-black tracking-widest hover:bg-indigo-700 transition-all flex items-center gap-2 active:scale-95 shadow-lg shadow-indigo-100"
@@ -3899,7 +4186,7 @@ export default function AdminDashboard() {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
-                <thead className="bg-gray-50 text-xs uppercase font-bold text-gray-400 tracking-wider">
+                <thead className="bg-gray-50 dark:bg-gray-900 text-xs uppercase font-bold text-gray-400 dark:text-gray-500 tracking-wider">
                   <tr>
                     <th className="px-6 py-4">Title</th>
                     <th className="px-6 py-4">Slug</th>
@@ -3907,12 +4194,12 @@ export default function AdminDashboard() {
                     <th className="px-6 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                   {pages.map(page => (
-                    <tr key={page.id} className="hover:bg-gray-50 transition-colors group">
-                      <td className="px-6 py-4 font-bold text-gray-900">{page.title}</td>
-                      <td className="px-6 py-4 font-mono text-xs text-indigo-600">/{page.slug}</td>
-                      <td className="px-6 py-4 text-xs text-gray-500">
+                    <tr key={page.id} className="hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors group">
+                      <td className="px-6 py-4 font-bold text-gray-900 dark:text-gray-100">{page.title}</td>
+                      <td className="px-6 py-4 font-mono text-xs text-indigo-600 dark:text-indigo-400">/{page.slug}</td>
+                      <td className="px-6 py-4 text-xs text-gray-500 dark:text-gray-400">
                         {page.updatedAt?.toDate().toLocaleDateString() || "Recently"}
                       </td>
                       <td className="px-6 py-4 text-right">
@@ -3924,7 +4211,7 @@ export default function AdminDashboard() {
                               alert("Link copied to clipboard!");
                             }}
                             title="Copy Link"
-                            className="p-2 text-gray-400 hover:text-emerald-600 transition-colors"
+                            className="p-2 text-gray-400 dark:text-gray-500 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
                           >
                             <Copy className="w-4 h-4" />
                           </button>
@@ -3936,7 +4223,7 @@ export default function AdminDashboard() {
                               }
                               setEditingPage(page);
                             }}
-                            className="p-2 text-gray-400 hover:text-indigo-600 transition-colors"
+                            className="p-2 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                           >
                             <Edit className="w-4 h-4" />
                           </button>
@@ -3959,7 +4246,7 @@ export default function AdminDashboard() {
                             }}
                             className={cn(
                               "p-2 transition-colors",
-                              isActuallyAdmin ? "text-gray-400 hover:text-red-600" : "text-gray-200"
+                              isActuallyAdmin ? "text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400" : "text-gray-200 dark:text-gray-800"
                             )}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -3970,7 +4257,7 @@ export default function AdminDashboard() {
                   ))}
                   {pages.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-6 py-10 text-center text-gray-400 font-medium">
+                      <td colSpan={4} className="px-6 py-10 text-center text-gray-400 dark:text-gray-500 font-medium">
                         No pages created yet.
                       </td>
                     </tr>
@@ -3980,16 +4267,16 @@ export default function AdminDashboard() {
             </div>
           </section>
         ) : activeTab === "tickets" ? (
-          <section className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h3 className="font-bold text-gray-900">Support Inbox</h3>
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+          <section className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm">
+            <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-50/50 dark:bg-gray-900/50 gap-4">
+              <h3 className="font-bold text-gray-900 dark:text-white">Support Inbox</h3>
+              <span className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
                 {tickets.length} Messages
               </span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
-                <thead className="bg-gray-50 text-xs uppercase font-bold text-gray-400 tracking-wider">
+                <thead className="bg-gray-50 dark:bg-gray-900 text-xs uppercase font-bold text-gray-400 dark:text-gray-500 tracking-wider">
                   <tr>
                     <th className="px-6 py-4">Sender</th>
                     <th className="px-6 py-4">Subject</th>
@@ -3998,25 +4285,25 @@ export default function AdminDashboard() {
                     <th className="px-6 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                   {tickets.map(t => (
-                    <tr key={t.id} className="hover:bg-gray-50 transition-colors group">
+                    <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors group">
                       <td className="px-6 py-4">
-                        <div className="font-bold text-gray-900">{t.name}</div>
-                        <div className="text-xs text-gray-400">{t.email}</div>
+                        <div className="font-bold text-gray-900 dark:text-gray-100">{t.name}</div>
+                        <div className="text-xs text-gray-400 dark:text-gray-500">{t.email}</div>
                       </td>
-                      <td className="px-6 py-4 font-medium text-gray-900">{t.subject}</td>
+                      <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-200">{t.subject}</td>
                       <td className="px-6 py-4 max-w-xs">
-                        <p className="text-xs text-gray-500 line-clamp-2">{t.message}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{t.message}</p>
                       </td>
-                      <td className="px-6 py-4 text-xs text-gray-400">
+                      <td className="px-6 py-4 text-xs text-gray-400 dark:text-gray-500">
                         {t.createdAt?.toDate().toLocaleDateString() || "Recently"}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-2">
                           <button 
                             onClick={() => setSelectedTicket(t)}
-                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            className="p-2 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
                           >
                             <Inbox className="w-4 h-4" />
                           </button>
@@ -4039,7 +4326,7 @@ export default function AdminDashboard() {
                             }}
                             className={cn(
                               "p-2 transition-colors",
-                              isActuallyAdmin ? "text-gray-400 hover:text-red-600" : "text-gray-200"
+                              isActuallyAdmin ? "text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400" : "text-gray-200 dark:text-gray-800"
                             )}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -4050,7 +4337,7 @@ export default function AdminDashboard() {
                   ))}
                   {tickets.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-6 py-10 text-center text-gray-400 font-medium">
+                      <td colSpan={5} className="px-6 py-10 text-center text-gray-400 dark:text-gray-500 font-medium">
                         Your inbox is empty.
                       </td>
                     </tr>
@@ -4061,22 +4348,22 @@ export default function AdminDashboard() {
           </section>
          ) : activeTab === "reviews" ? (
           <section className="space-y-6">
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/50">
-                <div>
-                  <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">Review Management</h3>
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Moderate client reviews and product ratings</p>
-                </div>
+             <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/50 dark:bg-gray-800/50">
+                 <div>
+                   <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Review Management</h3>
+                   <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Moderate client reviews and product ratings</p>
+                 </div>
                 <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-                  <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full uppercase tracking-widest whitespace-nowrap">
+                  <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-full uppercase tracking-widest whitespace-nowrap border border-indigo-100 dark:border-indigo-800">
                     {reviews.length} Total Reviews
                   </span>
                 </div>
             </div>
 
-            <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+            <div className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
-                  <thead className="bg-gray-50 text-[10px] uppercase font-black text-gray-400 tracking-widest">
+                  <thead className="bg-gray-50 dark:bg-gray-900 text-[10px] uppercase font-black text-gray-400 dark:text-gray-500 tracking-widest">
                     <tr>
                       <th className="px-6 py-5">Product</th>
                       <th className="px-6 py-5">User</th>
@@ -4085,47 +4372,47 @@ export default function AdminDashboard() {
                       <th className="px-6 py-5 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {reviews
-                      .sort((a, b) => (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0))
-                      .map(r => (
-                      <tr key={r.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="font-black text-gray-900 text-xs truncate max-w-[150px]">
-                            {r.productName || "Deleted Product"}
-                          </div>
-                          <div className="text-[10px] text-gray-400 font-mono">
-                            {r.productId || "N/A"}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-[10px] font-black text-gray-500 uppercase">
-                              {r.userName?.charAt(0) || "?"}
-                            </div>
-                            <div>
-                              <div className="text-xs font-bold text-gray-900">{r.userName}</div>
-                              <div className="text-[8px] font-bold text-gray-400 uppercase">{r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : 'Just now'}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-1 mb-1">
-                            {[...Array(5)].map((_, i) => (
-                              <Star 
-                                key={i} 
-                                className={cn("w-2.5 h-2.5", i < r.rating ? "fill-amber-400 text-amber-400" : "text-gray-200")} 
-                              />
-                            ))}
-                          </div>
-                          <p className="text-xs text-gray-600 line-clamp-2 max-w-xs">{r.comment}</p>
-                        </td>
+                   <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                     {reviews
+                       .sort((a, b) => (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0))
+                       .map(r => (
+                       <tr key={r.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/50 transition-colors">
+                         <td className="px-6 py-4">
+                           <div className="font-black text-gray-900 dark:text-gray-100 text-xs truncate max-w-[150px]">
+                             {r.productName || "Deleted Product"}
+                           </div>
+                           <div className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">
+                             {r.productId || "N/A"}
+                           </div>
+                         </td>
+                         <td className="px-6 py-4 whitespace-nowrap">
+                           <div className="flex items-center gap-2">
+                             <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase">
+                               {r.userName?.charAt(0) || "?"}
+                             </div>
+                             <div>
+                               <div className="text-xs font-bold text-gray-900 dark:text-gray-100">{r.userName}</div>
+                               <div className="text-[8px] font-bold text-gray-400 dark:text-gray-500 uppercase">{r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : 'Just now'}</div>
+                             </div>
+                           </div>
+                         </td>
+                         <td className="px-6 py-4">
+                           <div className="flex items-center gap-1 mb-1">
+                             {[...Array(5)].map((_, i) => (
+                               <Star 
+                                 key={i} 
+                                 className={cn("w-2.5 h-2.5", i < r.rating ? "fill-amber-400 text-amber-400" : "text-gray-200 dark:text-gray-800")} 
+                               />
+                             ))}
+                           </div>
+                           <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 max-w-xs">{r.comment}</p>
+                         </td>
                         <td className="px-6 py-4">
                            <button 
                              onClick={() => handleToggleReviewStatus(r.id, r.status)}
                              className={cn(
                                "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all",
-                               r.status === "approved" ? "bg-emerald-100 text-emerald-600 hover:bg-emerald-200" : "bg-amber-100 text-amber-600 hover:bg-amber-200"
+                               r.status === "approved" ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-200" : "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 hover:bg-amber-200"
                              )}
                            >
                              {r.status === "approved" ? <CheckCircle className="w-2.5 h-2.5" /> : <Clock className="w-2.5 h-2.5" />}
@@ -4136,7 +4423,7 @@ export default function AdminDashboard() {
                           <div className="flex justify-end gap-2">
                               <button 
                                 onClick={() => handleDeleteReview(r.id)}
-                                className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all active:scale-95"
+                                className="p-2 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/50 transition-all active:scale-95"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -4146,7 +4433,7 @@ export default function AdminDashboard() {
                     ))}
                     {reviews.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-6 py-20 text-center text-gray-400 italic">
+                        <td colSpan={5} className="px-6 py-20 text-center text-gray-400 dark:text-gray-500 italic">
                           No reviews found.
                         </td>
                       </tr>
@@ -4158,59 +4445,58 @@ export default function AdminDashboard() {
           </section>
         ) : activeTab === "logs" ? (
           <section className="space-y-6">
-            <div className="bg-white p-8 rounded-[45px] border border-gray-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
-                <div>
-                  <h3 className="text-2xl font-black text-gray-900 tracking-tighter uppercase italic">System Activity Logs</h3>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Audit trail of all administrative actions</p>
+            <div className="bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded-3xl shadow-sm flex flex-col md:flex-row justify-between items-center gap-6 p-6 sm:p-8">
+                <div className="w-full md:w-auto text-left">
+                  <h3 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white tracking-tighter uppercase italic">System Activity Logs</h3>
+                  <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Audit trail of all administrative actions</p>
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="bg-indigo-50 px-4 py-2 rounded-2xl border border-indigo-100 text-center">
-                    <div className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Logged Events</div>
-                    <div className="text-xl font-black text-indigo-600">Live</div>
+                <div className="flex items-center gap-4 w-full md:w-auto justify-end">
+                  <div className="bg-indigo-50 dark:bg-indigo-900/10 px-4 py-2 rounded-2xl border border-indigo-100 dark:border-indigo-900/20 text-center flex-1 md:flex-none">
+                    <div className="text-[9px] font-black text-indigo-400 dark:text-indigo-500 uppercase tracking-widest">Logged Events</div>
+                    <div className="text-lg sm:text-xl font-black text-indigo-600 dark:text-indigo-400">Live</div>
                   </div>
                 </div>
             </div>
 
-            <div className="bg-white rounded-[45px] border border-gray-100 overflow-hidden shadow-sm">
+            <div className="bg-white dark:bg-gray-950 rounded-[45px] border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
-                  <thead className="bg-gray-50 text-[10px] uppercase font-black text-gray-400 tracking-widest border-b border-gray-100">
+                  <thead className="bg-gray-50 dark:bg-gray-800 text-[10px] uppercase font-black text-gray-400 dark:text-gray-500 tracking-widest border-b border-gray-100 dark:border-gray-800">
                     <tr>
                       <th className="px-8 py-6">Admin</th>
                       <th className="px-8 py-6">Action</th>
-                      <th className="px-8 py-6">Target</th>
-                      <th className="px-8 py-6">Timestamp</th>
+                      <th className="px-8 py-6 text-right">Timestamp</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                     {logs.length === 0 ? (
-                      <tr className="hover:bg-gray-50/50 transition-colors">
-                        <td colSpan={4} className="px-8 py-20 text-center text-gray-400 font-bold italic">
+                      <tr className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
+                        <td colSpan={4} className="px-8 py-20 text-center text-gray-400 dark:text-gray-500 font-bold italic">
                           No activity logs found. Administrative actions will appear here in real-time.
                         </td>
                       </tr>
                     ) : (
                       logs.map(log => (
-                        <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
+                        <tr key={log.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
                           <td className="px-8 py-6">
                             <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-[10px] font-black text-gray-500 uppercase">
+                              <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase">
                                 {log.adminEmail?.charAt(0).toUpperCase()}
                               </div>
-                              <span className="text-[11px] font-bold text-gray-700">{log.adminEmail}</span>
+                              <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">{log.adminEmail}</span>
                             </div>
                           </td>
                           <td className="px-8 py-6">
-                            <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full uppercase tracking-widest border border-indigo-100">
+                            <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-1 rounded-full uppercase tracking-widest border border-indigo-100 dark:border-indigo-800">
                               {log.action?.replace(/_/g, ' ')}
                             </span>
                           </td>
                           <td className="px-8 py-6">
-                            <code className="text-[9px] font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded-md max-w-[200px] truncate block">
+                            <code className="text-[9px] font-bold text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded-md max-w-[200px] truncate block border border-gray-100 dark:border-gray-700">
                               {JSON.stringify(log.details)}
                             </code>
                           </td>
-                          <td className="px-8 py-6 text-[10px] font-bold text-gray-400">
+                          <td className="px-8 py-6 text-[10px] font-bold text-gray-400 dark:text-gray-500">
                             {log.createdAt?.toDate ? log.createdAt.toDate().toLocaleString() : 'Just now'}
                           </td>
                         </tr>
@@ -4223,32 +4509,32 @@ export default function AdminDashboard() {
           </section>
         ) : activeTab === "users" ? (
           <section className="space-y-6">
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/50">
+            <div className="bg-white dark:bg-gray-950 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/50 dark:bg-gray-900/50">
                 <div>
-                  <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">User Management</h3>
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Manage user roles and permissions</p>
+                  <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">User Management</h3>
+                  <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Manage user roles and permissions</p>
                 </div>
                 <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
                   <div className="relative w-full sm:w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
                     <input 
                       type="text" 
                       placeholder="Search email or name..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold text-gray-900"
+                      className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl pl-10 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold text-gray-900 dark:text-gray-100"
                     />
                   </div>
-                  <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full uppercase tracking-widest whitespace-nowrap">
+                  <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-full uppercase tracking-widest whitespace-nowrap border border-indigo-100 dark:border-indigo-800">
                     {users.length} Total Users
                   </span>
                 </div>
             </div>
 
-            <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+            <div className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
-                  <thead className="bg-gray-50 text-[10px] uppercase font-black text-gray-400 tracking-widest">
+                  <thead className="bg-gray-50 dark:bg-gray-900 text-[10px] uppercase font-black text-gray-400 dark:text-gray-500 tracking-widest">
                     <tr>
                       <th className="px-6 py-5">User</th>
                       <th className="px-6 py-5">Balance</th>
@@ -4257,7 +4543,7 @@ export default function AdminDashboard() {
                       <th className="px-6 py-5 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                     {users
                       .filter(u => {
                         const term = searchTerm.toLowerCase();
@@ -4269,24 +4555,24 @@ export default function AdminDashboard() {
                       })
                       .sort((a, b) => (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0))
                       .map(u => (
-                      <tr key={u.id} className={cn("hover:bg-gray-50/50 transition-colors", u.isBanned && "opacity-60 grayscale-[0.5]")}>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-xs">
-                              {u.displayName?.charAt(0).toUpperCase() || u.email?.charAt(0).toUpperCase() || "?"}
+                      <tr key={u.id} className={cn("hover:bg-gray-50/50 dark:hover:bg-gray-900/50 transition-colors text-xs sm:text-sm", u.isBanned && "opacity-60 grayscale-[0.5]")}>
+                        <td className="px-3 sm:px-6 py-4">
+                          <div className="flex items-center gap-2 sm:gap-3">
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-black text-[10px] sm:text-xs shrink-0">
+                               {u.displayName?.charAt(0).toUpperCase() || u.email?.charAt(0).toUpperCase() || "?"}
                             </div>
-                            <div>
-                              <div className="font-black text-gray-900 text-sm flex items-center gap-2">
+                            <div className="min-w-0">
+                              <div className="font-black text-gray-900 dark:text-gray-100 text-xs sm:text-sm flex items-center gap-2 truncate">
                                 {u.displayName || "Anonymous User"}
-                                {u.isBanned && <Ban className="w-3 h-3 text-red-500" />}
+                                {u.isBanned && <Ban className="w-3 h-3 text-red-500 shrink-0" />}
                               </div>
-                              <div className="text-[10px] font-bold text-gray-400 lowercase tracking-tight">
+                              <div className="text-[9px] sm:text-[10px] font-bold text-gray-400 dark:text-gray-500 lowercase tracking-tight truncate">
                                 {u.email}
                               </div>
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-3 sm:px-6 py-4">
                           <div className="flex items-center gap-2">
                             <input 
                               type="number" 
@@ -4296,45 +4582,45 @@ export default function AdminDashboard() {
                                   handleUpdateUserBalance(u.id, e.target.value);
                                 }
                               }}
-                              className="w-20 bg-gray-50 border-none rounded-lg px-2 py-1 text-xs font-black text-indigo-600 focus:ring-1 focus:ring-indigo-500 outline-none"
+                              className="w-16 sm:w-20 bg-gray-50 dark:bg-gray-900 border-none rounded-lg px-2 py-1 text-[10px] sm:text-xs font-black text-indigo-600 dark:text-indigo-400 focus:ring-1 focus:ring-indigo-500 outline-none"
                             />
-                            <div className="text-[8px] font-bold text-gray-400 hidden sm:block uppercase tracking-widest">Bonus</div>
+                            <div className="text-[8px] font-bold text-gray-400 dark:text-gray-500 hidden lg:block uppercase tracking-widest">Bonus</div>
                           </div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-3 sm:px-6 py-4">
                           <select 
                              value={u.role || 'user'} 
                              onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
                              disabled={u.email === currentUserEmail || (!isSuperAdmin && u.role === 'super_admin')}
-                             className="bg-gray-50 border-none rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
+                             className="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border-none rounded-xl px-2 sm:px-3 py-1.5 text-[9px] sm:text-[10px] font-black uppercase tracking-widest focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
                            >
                              <option value="user">User</option>
-                             <option value="moderator">Moderator</option>
+                             <option value="moderator">Mod</option>
                              <option value="admin">Admin</option>
-                             {isSuperAdmin && <option value="super_admin">Super Admin</option>}
+                             {isSuperAdmin && <option value="super_admin">S-Admin</option>}
                            </select>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-3 sm:px-6 py-4">
                            <div className={cn(
-                             "inline-flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest",
-                             u.isBanned ? "bg-red-100 text-red-600" : "bg-emerald-100 text-emerald-600"
+                             "inline-flex items-center gap-1 px-2 py-1 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-widest whitespace-nowrap",
+                             u.isBanned ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400" : "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
                            )}>
-                             {u.isBanned ? <UserX className="w-2.5 h-2.5" /> : <ShieldCheck className="w-2.5 h-2.5" />}
-                             {u.isBanned ? "Banned" : "Active"}
+                             {u.isBanned ? <UserX className="w-2.5 h-2.5 shrink-0" /> : <ShieldCheck className="w-2.5 h-2.5 shrink-0" />}
+                             <span className="hidden sm:inline">{u.isBanned ? "Banned" : "Active"}</span>
                            </div>
                         </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex justify-end gap-2">
+                        <td className="px-3 sm:px-6 py-4 text-right">
+                          <div className="flex justify-end gap-1 sm:gap-2">
                               <button 
                                 onClick={() => handleToggleUserStatus(u.id, u.isBanned || false)}
                                 title={u.isBanned ? "Unban User" : "Ban User"}
                                 disabled={u.email === currentUserEmail || (!isSuperAdmin && u.role === 'super_admin')}
                                 className={cn(
-                                  "p-2 rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-50",
-                                  u.isBanned ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100" : "bg-red-50 text-red-600 hover:bg-red-100"
+                                  "p-1.5 sm:p-2 rounded-lg sm:rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-50",
+                                  u.isBanned ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100" : "bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100"
                                 )}
                               >
-                                {u.isBanned ? <CheckCircle className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
+                                {u.isBanned ? <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Ban className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                               </button>
                           </div>
                         </td>
@@ -4345,7 +4631,7 @@ export default function AdminDashboard() {
                       return u.email?.toLowerCase().includes(term) || u.displayName?.toLowerCase().includes(term);
                     }).length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-6 py-20 text-center text-gray-400 italic">
+                        <td colSpan={5} className="px-6 py-20 text-center text-gray-400 dark:text-gray-500 italic">
                           No users matching your search.
                         </td>
                       </tr>
@@ -4355,40 +4641,40 @@ export default function AdminDashboard() {
               </div>
             </div>
           </section>
-        ) : (
-          <section className="bg-white rounded-3xl border border-gray-100 p-8 shadow-sm">
+        ) : activeTab === "settings" ? (
+          <section className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-100 dark:border-gray-800 p-8 shadow-sm">
             <div className="flex items-center gap-4 mb-8">
-              <div className="p-3 bg-indigo-50 rounded-xl">
-                <SettingsIcon className="w-6 h-6 text-indigo-600" />
+              <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl">
+                <SettingsIcon className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-gray-900">Website Configuration</h3>
-                <p className="text-sm text-gray-500">Customize the site appearance and hero content.</p>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Website Configuration</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Customize the site appearance and hero content.</p>
               </div>
             </div>
 
             {isSuperAdmin && (
               <div className="mb-8 space-y-6">
-                <div className="flex items-center gap-4 bg-purple-50 border border-purple-100 p-6 rounded-[2rem]">
-                  <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-purple-600">
+                <div className="flex items-center gap-4 bg-purple-50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-900/20 p-6 rounded-[2rem]">
+                  <div className="w-12 h-12 rounded-2xl bg-white dark:bg-gray-800 shadow-sm flex items-center justify-center text-purple-600 dark:text-purple-400">
                     <ShieldCheck className="w-6 h-6" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-black text-purple-900 uppercase tracking-tighter">Role-Based Access Control</h4>
-                    <p className="text-[10px] font-bold text-purple-600 uppercase tracking-widest mt-0.5">Manage page visibility for Admin & Moderator roles</p>
+                    <h4 className="text-sm font-black text-purple-900 dark:text-purple-100 uppercase tracking-tighter">Role-Based Access Control</h4>
+                    <p className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-widest mt-0.5">Manage page visibility for Admin & Moderator roles</p>
                   </div>
                 </div>
 
-                <div className="bg-white border border-gray-100 rounded-[2.5rem] overflow-hidden shadow-sm">
+                <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-[2.5rem] overflow-hidden shadow-sm">
                   <table className="w-full text-left">
                     <thead>
-                      <tr className="bg-gray-50/50 border-b border-gray-100">
-                        <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Page / Tab</th>
-                        <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Admin Access</th>
-                        <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Moderator Access</th>
+                      <tr className="bg-gray-50/50 dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800">
+                        <th className="px-6 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Page / Tab</th>
+                        <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Admin Access</th>
+                        <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Moderator Access</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                       {tabs.map(tab => {
                         const currentRoles = getTabRoles(tab.id);
                         const toggleRole = async (role: string) => {
@@ -4412,13 +4698,13 @@ export default function AdminDashboard() {
                         };
 
                         return (
-                          <tr key={tab.id} className="hover:bg-gray-50/30 transition-colors group">
+                          <tr key={tab.id} className="hover:bg-gray-50/30 dark:hover:bg-gray-950/30 transition-colors group">
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
-                                <div className="p-2 bg-gray-50 rounded-lg group-hover:bg-purple-50 transition-colors">
-                                  <tab.icon className="w-4 h-4 text-gray-400 group-hover:text-purple-600" />
+                                <div className="p-2 bg-gray-50 dark:bg-gray-950 rounded-lg group-hover:bg-purple-50 dark:group-hover:bg-purple-900/20 transition-colors">
+                                  <tab.icon className="w-4 h-4 text-gray-400 dark:text-gray-500 group-hover:text-purple-600 dark:group-hover:text-purple-400" />
                                 </div>
-                                <span className="text-sm font-black text-gray-700">{tab.label}</span>
+                                <span className="text-sm font-black text-gray-700 dark:text-gray-200">{tab.label}</span>
                               </div>
                             </td>
                             <td className="px-6 py-4 text-center">
@@ -4429,7 +4715,7 @@ export default function AdminDashboard() {
                                   checked={currentRoles.includes('admin')}
                                   onChange={() => toggleRole('admin')}
                                 />
-                                <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                                <div className="w-10 h-5 bg-gray-200 dark:bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
                               </label>
                             </td>
                             <td className="px-6 py-4 text-center">
@@ -4440,7 +4726,7 @@ export default function AdminDashboard() {
                                   checked={currentRoles.includes('moderator')}
                                   onChange={() => toggleRole('moderator')}
                                 />
-                                <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                                <div className="w-10 h-5 bg-gray-200 dark:bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
                               </label>
                             </td>
                           </tr>
@@ -4454,58 +4740,58 @@ export default function AdminDashboard() {
 
             {isSuperAdmin && (
               <div className="space-y-6">
-                <div className="flex items-center gap-4 bg-indigo-50 border border-indigo-100 p-6 rounded-[2rem]">
-                  <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-indigo-600">
+                <div className="flex items-center gap-4 bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/20 p-6 rounded-[2rem]">
+                  <div className="w-12 h-12 rounded-2xl bg-white dark:bg-gray-800 shadow-sm flex items-center justify-center text-indigo-600 dark:text-indigo-400">
                     <FileText className="w-6 h-6" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-black text-indigo-900 uppercase tracking-tighter">Invoice Customization</h4>
-                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mt-0.5">Control the text displayed on user invoices</p>
+                    <h4 className="text-sm font-black text-indigo-900 dark:text-indigo-100 uppercase tracking-tighter">Invoice Customization</h4>
+                    <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mt-0.5">Control the text displayed on user invoices</p>
                   </div>
                 </div>
 
-                <div className="bg-white border border-gray-100 rounded-[2.5rem] p-8 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded-[2.5rem] p-8 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <div>
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Invoice Header Title</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Invoice Header Title</label>
                       <input 
                         type="text" 
                         value={siteSettings.invoiceTitle}
                         onChange={e => setSiteSettings({...siteSettings, invoiceTitle: e.target.value})}
                         placeholder="Official Invoice"
-                        className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Item Subtitle (Description)</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Item Subtitle (Description)</label>
                       <input 
                         type="text" 
                         value={siteSettings.invoiceSubtitle}
                         onChange={e => setSiteSettings({...siteSettings, invoiceSubtitle: e.target.value})}
                         placeholder="Digital Asset Purchase"
-                        className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                       />
                     </div>
                   </div>
                   <div className="space-y-4">
                     <div>
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Footer Message</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Footer Message</label>
                       <textarea 
                         rows={2}
                         value={siteSettings.invoiceFooter}
                         onChange={e => setSiteSettings({...siteSettings, invoiceFooter: e.target.value})}
                         placeholder="Thank you for choosing our platform..."
-                        className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Bottom Disclaimer/Note</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Bottom Disclaimer/Note</label>
                       <input 
                         type="text" 
                         value={siteSettings.invoiceNote}
                         onChange={e => setSiteSettings({...siteSettings, invoiceNote: e.target.value})}
                         placeholder="This is a computer generated invoice..."
-                        className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                       />
                     </div>
                   </div>
@@ -4515,21 +4801,21 @@ export default function AdminDashboard() {
 
             {isSuperAdmin && (
               <div className="space-y-6">
-                <div className="flex items-center gap-4 bg-amber-50 border border-amber-100 p-6 rounded-[2rem]">
-                  <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-amber-600">
+                <div className="flex items-center gap-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/20 p-6 rounded-[2rem]">
+                  <div className="w-12 h-12 rounded-2xl bg-white dark:bg-gray-800 shadow-sm flex items-center justify-center text-amber-600 dark:text-amber-400">
                     <Star className="w-6 h-6" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-black text-amber-900 uppercase tracking-tighter">Review & Rating Controls</h4>
-                    <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mt-0.5">Control how customer reviews are handled</p>
+                    <h4 className="text-sm font-black text-amber-900 dark:text-amber-100 uppercase tracking-tighter">Review & Rating Controls</h4>
+                    <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest mt-0.5">Control how customer reviews are handled</p>
                   </div>
                 </div>
 
-                <div className="bg-white border border-gray-100 rounded-[2.5rem] p-8 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="flex items-center justify-between p-4 bg-gray-50/50 rounded-2xl border border-gray-100">
+                <div className="bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded-[2.5rem] p-8 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
                     <div>
-                      <div className="text-xs font-black text-gray-900 uppercase tracking-tight">Enable Reviews</div>
-                      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Show review section on products</div>
+                      <div className="text-xs font-black text-gray-900 dark:text-gray-100 uppercase tracking-tight">Enable Reviews</div>
+                      <div className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Show review section on products</div>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input 
@@ -4538,14 +4824,14 @@ export default function AdminDashboard() {
                         checked={siteSettings.showReviews}
                         onChange={e => setSiteSettings({...siteSettings, showReviews: e.target.checked})}
                       />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                      <div className="w-11 h-6 bg-gray-200 dark:bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                     </label>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-gray-50/50 rounded-2xl border border-gray-100">
+                  <div className="flex items-center justify-between p-4 bg-gray-50/50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
                     <div>
-                      <div className="text-xs font-black text-gray-900 uppercase tracking-tight">Manual Approval</div>
-                      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Admins must approve new reviews</div>
+                      <div className="text-xs font-black text-gray-900 dark:text-gray-100 uppercase tracking-tight">Manual Approval</div>
+                      <div className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Admins must approve new reviews</div>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input 
@@ -4554,7 +4840,7 @@ export default function AdminDashboard() {
                         checked={siteSettings.requireReviewApproval}
                         onChange={e => setSiteSettings({...siteSettings, requireReviewApproval: e.target.checked})}
                       />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                      <div className="w-11 h-6 bg-gray-200 dark:bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                     </label>
                   </div>
                 </div>
@@ -4562,17 +4848,49 @@ export default function AdminDashboard() {
             )}
 
             {isSuperAdmin && (
-              <div className="flex justify-between items-center bg-red-50 border border-red-100 p-6 rounded-2xl">
+              <div className="space-y-6">
+                <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-900/20 border border-gray-100 dark:border-gray-800 p-6 rounded-[2rem]">
+                  <div className="w-12 h-12 rounded-2xl bg-white dark:bg-gray-800 shadow-sm flex items-center justify-center text-gray-900 dark:text-white">
+                    <Moon className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-gray-900 dark:text-gray-100 uppercase tracking-tighter">Day/Night Mode Controls</h4>
+                    <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-0.5">Manage visibility of the dark mode toggle</p>
+                  </div>
+                </div>
+
+                <div className="bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded-[2.5rem] p-8 shadow-sm">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
+                    <div>
+                      <div className="text-xs font-black text-gray-900 dark:text-gray-100 uppercase tracking-tight">Show Night Mode Button</div>
+                      <div className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Allow users to toggle between Light and Dark mode</div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        className="sr-only peer"
+                        checked={siteSettings.showThemeToggle ?? true}
+                        onChange={e => setSiteSettings({...siteSettings, showThemeToggle: e.target.checked})}
+                      />
+                      <div className="w-11 h-6 bg-gray-200 dark:bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isSuperAdmin && (
+              <div className="flex justify-between items-center bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 p-6 rounded-2xl">
                 <div>
-                  <h4 className="text-sm font-bold text-red-900">Danger Zone</h4>
-                  <p className="text-xs text-red-600">Wipe all data and reset the marketplace to factory defaults.</p>
+                  <h4 className="text-sm font-bold text-red-900 dark:text-red-100">Danger Zone</h4>
+                  <p className="text-xs text-red-600 dark:text-red-400">Wipe all data and reset the marketplace to factory defaults.</p>
                 </div>
                 <button 
                   type="button"
                   onClick={() => {
                     handleFullReset();
                   }}
-                  className="bg-red-600 text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all hover:bg-red-700 shadow-lg shadow-red-100"
+                  className="bg-red-600 text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all hover:bg-red-700 shadow-lg shadow-red-100 dark:shadow-none"
                 >
                   Reset Website
                 </button>
@@ -4583,48 +4901,48 @@ export default function AdminDashboard() {
               <div className="space-y-4">
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Website Name</label>
+                    <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Website Name</label>
                     <input 
                       type="text" 
                       value={siteSettings.siteName}
                       onChange={e => setSiteSettings({...siteSettings, siteName: e.target.value})}
-                      className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Favicon Name (Tab Title)</label>
+                    <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Favicon Name (Tab Title)</label>
                     <input 
                       type="text" 
                       value={siteSettings.tabTitle || ""}
                       onChange={e => setSiteSettings({...siteSettings, tabTitle: e.target.value})}
-                      className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                       placeholder="Name shown in browser tab"
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Favicon URL</label>
+                    <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Favicon URL</label>
                     <input 
                       type="text" 
                       value={siteSettings.faviconUrl || ""}
                       onChange={e => setSiteSettings({...siteSettings, faviconUrl: e.target.value})}
-                      className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                       placeholder="https://example.com/favicon.ico"
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1 mb-1 block">Brand Name Style</label>
-                    <div className="flex flex-wrap items-center gap-3 bg-gray-50 p-2.5 rounded-2xl border border-gray-100/50">
-                      <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-sm border border-gray-100">
+                    <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1 mb-1 block">Brand Name Style</label>
+                    <div className="flex flex-wrap items-center gap-3 bg-gray-50 dark:bg-gray-900/50 p-2.5 rounded-2xl border border-gray-100/50 dark:border-gray-800">
+                      <div className="flex items-center gap-2 bg-white dark:bg-gray-800 px-3 py-1.5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                         <input 
                           type="color" 
                           value={siteSettings.brandColor || "#4f46e5"} 
                           onChange={e => setSiteSettings({...siteSettings, brandColor: e.target.value})} 
                           className="w-6 h-6 rounded border-none cursor-pointer" 
                         />
-                        <span className="text-[10px] font-mono font-bold text-gray-600">{siteSettings.brandColor || "#4f46e5"}</span>
+                        <span className="text-[10px] font-mono font-bold text-gray-600 dark:text-gray-400">{siteSettings.brandColor || "#4f46e5"}</span>
                       </div>
                       
-                      <div className="h-6 w-px bg-gray-200" />
+                      <div className="h-6 w-px bg-gray-200 dark:bg-gray-800" />
 
                       <label className="flex items-center gap-2 cursor-pointer group">
                         <div className="relative">
@@ -4634,64 +4952,154 @@ export default function AdminDashboard() {
                             checked={siteSettings.useBrandGradient || false}
                             onChange={e => setSiteSettings({...siteSettings, useBrandGradient: e.target.checked})}
                           />
-                          <div className="w-8 h-4 bg-gray-200 rounded-full peer peer-checked:bg-indigo-600 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-4" />
+                          <div className="w-8 h-4 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-checked:bg-indigo-600 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-4" />
                         </div>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 group-hover:text-gray-600 transition-colors">Gradient</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors">Gradient</span>
                       </label>
 
                       {siteSettings.useBrandGradient && (
-                        <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-300 bg-white px-3 py-1.5 rounded-xl shadow-sm border border-gray-100">
+                        <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-300 bg-white dark:bg-gray-800 px-3 py-1.5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                           <input 
                             type="color" 
                             value={siteSettings.brandSecondaryColor || "#818cf8"} 
                             onChange={e => setSiteSettings({...siteSettings, brandSecondaryColor: e.target.value})} 
                             className="w-6 h-6 rounded border-none cursor-pointer" 
                           />
-                          <span className="text-[10px] font-mono font-bold text-gray-600">{siteSettings.brandSecondaryColor || "#818cf8"}</span>
+                          <span className="text-[10px] font-mono font-bold text-gray-600 dark:text-gray-400">{siteSettings.brandSecondaryColor || "#818cf8"}</span>
                         </div>
                       )}
                     </div>
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Logo URL</label>
+                  <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Logo URL</label>
                   <input 
                     type="text" 
                     value={siteSettings.logoUrl}
                     onChange={e => setSiteSettings({...siteSettings, logoUrl: e.target.value})}
-                    className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                   />
                 </div>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Hero Title</label>
+                  <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Hero Title</label>
                   <input 
                     type="text" 
                     value={siteSettings.heroTitle}
                     onChange={e => setSiteSettings({...siteSettings, heroTitle: e.target.value})}
-                    className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Hero Subtitle</label>
+                  <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Hero Subtitle</label>
                   <textarea 
                     rows={3}
                     value={siteSettings.heroSubtitle}
                     onChange={e => setSiteSettings({...siteSettings, heroSubtitle: e.target.value})}
-                    className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                   />
                 </div>
 
-                <div className="md:col-span-2 pt-6 border-t border-gray-100">
-                  <h4 className="font-bold text-gray-900 border-l-4 border-indigo-600 pl-3 mb-4 uppercase text-sm tracking-tighter">Hero Text Styling</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 bg-gray-50/50 p-6 rounded-3xl border border-gray-100">
+                <div className="md:col-span-2 pt-6 border-t border-gray-100 dark:border-gray-800">
+                  <h4 className="font-bold text-gray-900 dark:text-white border-l-4 border-emerald-600 pl-3 mb-4 uppercase text-sm tracking-tighter">Loading Page Settings (Reload/Refresh)</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-emerald-50/30 dark:bg-emerald-900/10 p-6 rounded-3xl border border-emerald-100 dark:border-emerald-800/50">
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Loading Title</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.loadingTitle || ""}
+                        onChange={e => setSiteSettings({...siteSettings, loadingTitle: e.target.value})}
+                        className="w-full mt-1 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4 outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
+                        placeholder="e.g. Digital Marketplace"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Loading Subtitle</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.loadingSubtitle || ""}
+                        onChange={e => setSiteSettings({...siteSettings, loadingSubtitle: e.target.value})}
+                        className="w-full mt-1 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4 outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
+                        placeholder="e.g. Syncing Workspace"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1 block mb-3">Loading Animation Style</label>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {[
+                          { id: 'modern', label: 'Modern Circle', desc: 'Sleek animated ring with pulsing core' },
+                          { id: 'classic', label: 'Classic Spinner', desc: 'Traditional high-performance spinner' },
+                          { id: 'minimal', label: 'Minimal Flow', desc: 'Understated progress bar with soft fade' },
+                          { id: 'bento', label: 'Bento Blocks', desc: 'Shifting geometric grid segments' },
+                          { id: 'waves', label: 'Fluid Waves', desc: 'Soft floating wave paths' },
+                          { id: 'dots', label: 'Rhythm Dots', desc: 'Three-point orchestral bounce' },
+                          { id: 'cube', label: '3D Cube', desc: 'Rotating isometric geometry' },
+                          { id: 'bars', label: 'Spectral Bars', desc: 'Dynamic frequency visualization' },
+                          { id: 'ring', label: 'Eclipse Ring', desc: 'Expanding gradient resonance' }
+                        ].map((style) => (
+                          <button
+                            key={style.id}
+                            onClick={() => setSiteSettings({...siteSettings, loadingStyle: style.id as any})}
+                            className={`p-4 rounded-2xl border text-left transition-all ${
+                              siteSettings.loadingStyle === style.id 
+                                ? 'bg-emerald-600 border-emerald-600 shadow-lg shadow-emerald-200 dark:shadow-none text-white' 
+                                : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-300 hover:border-emerald-200 dark:hover:border-emerald-800'
+                            }`}
+                          >
+                            <div className="font-bold text-xs uppercase tracking-wider mb-1">{style.label}</div>
+                            <div className={`text-[10px] ${siteSettings.loadingStyle === style.id ? 'text-emerald-100' : 'text-gray-400 dark:text-gray-500'}`}>
+                              {style.desc}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="sm:col-span-2 pt-6 border-t border-gray-100 dark:border-gray-800">
+                      <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1 block mb-3">Admin Dashboard Layout</label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {[
+                          { id: 'classic', label: 'Classic Layout', desc: 'Standard top-to-bottom scrollable unified view', icon: Pin },
+                          { id: 'modern', label: 'Modern Sidebar', desc: 'Professional left-aligned navigation with centered content', icon: ShieldCheck }
+                        ].map((layout) => (
+                          <button
+                            key={layout.id}
+                            onClick={() => setSiteSettings({...siteSettings, adminLayout: layout.id as any})}
+                            className={`p-5 rounded-3xl border text-left transition-all flex items-start gap-4 ${
+                              siteSettings.adminLayout === layout.id 
+                                ? 'bg-indigo-600 border-indigo-600 shadow-xl shadow-indigo-200 dark:shadow-none text-white' 
+                                : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-300 hover:border-indigo-200 dark:hover:border-indigo-800'
+                            }`}
+                          >
+                            <div className={cn(
+                              "p-3 rounded-2xl shrink-0 transition-colors",
+                              siteSettings.adminLayout === layout.id ? "bg-white/20" : "bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400"
+                            )}>
+                              <layout.icon className="w-5 h-5" />
+                            </div>
+                            <div>
+                               <div className="font-black text-xs uppercase tracking-wider mb-1">{layout.label}</div>
+                              <div className={`text-[10px] sm:text-xs font-medium leading-relaxed ${siteSettings.adminLayout === layout.id ? 'text-indigo-100' : 'text-gray-400 dark:text-gray-500'}`}>
+                                {layout.desc}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="md:col-span-2 pt-6 border-t border-gray-100 dark:border-gray-800">
+                  <h4 className="font-bold text-gray-900 dark:text-white border-l-4 border-indigo-600 pl-3 mb-4 uppercase text-sm tracking-tighter">Hero Text Styling</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 bg-gray-50/50 dark:bg-gray-900/50 p-6 rounded-3xl border border-gray-100 dark:border-gray-800">
                     <div className="space-y-4">
-                      <h5 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Title Styling</h5>
+                      <h5 className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Title Styling</h5>
                       <div>
-                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1 block">Title Color</label>
-                        <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-gray-100">
+                        <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-1 block">Title Color</label>
+                        <div className="flex items-center gap-2 bg-white dark:bg-gray-950 p-2 rounded-xl border border-gray-100 dark:border-gray-800">
                           <input 
                             type="color" 
                             value={siteSettings.heroTitleColor || "#ffffff"}
@@ -4702,39 +5110,39 @@ export default function AdminDashboard() {
                             type="text" 
                             value={siteSettings.heroTitleColor || "#ffffff"}
                             onChange={e => setSiteSettings({...siteSettings, heroTitleColor: e.target.value})}
-                            className="text-xs font-mono bg-transparent border-none outline-none w-20"
+                            className="text-xs font-mono bg-transparent border-none outline-none w-20 dark:text-white"
                           />
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Mobile Size</label>
+                          <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Mobile Size</label>
                           <input 
                             type="text" 
                             value={siteSettings.heroTitleSizeMobile || "28px"}
                             onChange={e => setSiteSettings({...siteSettings, heroTitleSizeMobile: e.target.value})}
                             placeholder="28px"
-                            className="w-full bg-white border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                            className="w-full bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500 dark:text-white"
                           />
                         </div>
                         <div>
-                          <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Desktop Size</label>
+                          <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Desktop Size</label>
                           <input 
                             type="text" 
                             value={siteSettings.heroTitleSizeDesktop || "60px"}
                             onChange={e => setSiteSettings({...siteSettings, heroTitleSizeDesktop: e.target.value})}
                             placeholder="60px"
-                            className="w-full bg-white border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                            className="w-full bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500 dark:text-white"
                           />
                         </div>
                       </div>
                     </div>
 
                     <div className="space-y-4">
-                      <h5 className="text-[10px] font-black text-purple-600 uppercase tracking-widest">Subtitle Styling</h5>
+                      <h5 className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-widest">Subtitle Styling</h5>
                       <div>
-                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1 block">Subtitle Color</label>
-                        <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-gray-100">
+                        <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-1 block">Subtitle Color</label>
+                        <div className="flex items-center gap-2 bg-white dark:bg-gray-950 p-2 rounded-xl border border-gray-100 dark:border-gray-800">
                           <input 
                             type="color" 
                             value={siteSettings.heroSubtitleColor || "#ffffffcc"}
@@ -4745,72 +5153,72 @@ export default function AdminDashboard() {
                             type="text" 
                             value={siteSettings.heroSubtitleColor || "#ffffffcc"}
                             onChange={e => setSiteSettings({...siteSettings, heroSubtitleColor: e.target.value})}
-                            className="text-xs font-mono bg-transparent border-none outline-none w-20"
+                            className="text-xs font-mono bg-transparent border-none outline-none w-20 dark:text-white"
                           />
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Mobile Size</label>
+                          <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Mobile Size</label>
                           <input 
                             type="text" 
                             value={siteSettings.heroSubtitleSizeMobile || "12px"}
                             onChange={e => setSiteSettings({...siteSettings, heroSubtitleSizeMobile: e.target.value})}
                             placeholder="12px"
-                            className="w-full bg-white border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                            className="w-full bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500 dark:text-white"
                           />
                         </div>
                         <div>
-                          <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Desktop Size</label>
+                          <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Desktop Size</label>
                           <input 
                             type="text" 
                             value={siteSettings.heroSubtitleSizeDesktop || "18px"}
                             onChange={e => setSiteSettings({...siteSettings, heroSubtitleSizeDesktop: e.target.value})}
                             placeholder="18px"
-                            className="w-full bg-white border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                            className="w-full bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500 dark:text-white"
                           />
                         </div>
                       </div>
                     </div>
 
                     <div className="space-y-4">
-                      <h5 className="text-[10px] font-black text-gray-900 uppercase tracking-widest">Guide</h5>
-                      <p className="text-[9px] text-gray-500 leading-relaxed bg-indigo-50/50 p-3 rounded-xl border border-indigo-100/50">
-                        Use standard CSS values like <code className="text-indigo-600 font-bold px-1">28px</code>, <code className="text-indigo-600 font-bold px-1">3.5rem</code>, or <code className="text-indigo-600 font-bold px-1">2vw</code>. 
+                      <h5 className="text-[10px] font-black text-gray-900 dark:text-gray-100 uppercase tracking-widest">Guide</h5>
+                      <p className="text-[9px] text-gray-500 dark:text-gray-400 leading-relaxed bg-indigo-50/50 dark:bg-indigo-900/10 p-3 rounded-xl border border-indigo-100/50 dark:border-indigo-900/20">
+                        Use standard CSS values like <code className="text-indigo-600 dark:text-indigo-400 font-bold px-1">28px</code>, <code className="text-indigo-600 dark:text-indigo-400 font-bold px-1">3.5rem</code>, or <code className="text-indigo-600 dark:text-indigo-400 font-bold px-1">2vw</code>. 
                         Colors can be Hex codes or names. Changes apply globally to all Hero sliders.
                       </p>
                     </div>
                   </div>
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Footer Description</label>
+                <div className="md:col-span-1">
+                  <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Footer Description</label>
                   <textarea 
                     rows={2}
                     value={siteSettings.footerDescription}
                     onChange={e => setSiteSettings({...siteSettings, footerDescription: e.target.value})}
-                    className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                     placeholder="Short description for the footer..."
                   />
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Copyright Text (@copyright)</label>
+                <div className="md:col-span-1">
+                  <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Copyright Text (@copyright)</label>
                   <input 
                     type="text" 
                     value={siteSettings.footerCopyright}
                     onChange={e => setSiteSettings({...siteSettings, footerCopyright: e.target.value})}
-                    className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                     placeholder="© 2026 Your Brand. All rights reserved."
                   />
                 </div>
 
-                <div className="md:col-span-2 space-y-4 pt-6 border-t border-gray-100">
+                <div className="md:col-span-2 space-y-4 pt-6 border-t border-gray-100 dark:border-gray-800">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="text-xs font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
-                        <Share2 className="w-3 h-3 text-indigo-600" />
+                      <h4 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
+                        <Share2 className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
                         Social Media Links
                       </h4>
-                      <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">Add your social profiles for the footer</p>
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase mt-1">Add your social profiles for the footer</p>
                     </div>
                     <button 
                       type="button"
@@ -4821,7 +5229,7 @@ export default function AdminDashboard() {
                           socialLinks: [...current, { platform: "Facebook", url: "", icon: "Facebook" }]
                         });
                       }}
-                      className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-indigo-100 transition-colors flex items-center gap-2"
+                      className="px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-2"
                     >
                       <Plus className="w-4 h-4" />
                       Add Link
@@ -4830,7 +5238,7 @@ export default function AdminDashboard() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                     {(siteSettings.socialLinks || []).map((social, idx) => (
-                      <div key={idx} className="bg-gray-50 p-4 rounded-2xl space-y-3 relative group border border-transparent hover:border-indigo-100 transition-colors">
+                      <div key={idx} className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl space-y-3 relative group border border-transparent hover:border-indigo-100 dark:hover:border-indigo-800 transition-colors">
                         <button 
                           type="button"
                           onClick={() => {
@@ -4838,14 +5246,14 @@ export default function AdminDashboard() {
                             next.splice(idx, 1);
                             setSiteSettings({ ...siteSettings, socialLinks: next });
                           }}
-                          className="absolute -top-2 -right-2 w-6 h-6 bg-red-50 text-red-500 rounded-full flex items-center justify-center hover:bg-red-100 transition-colors opacity-0 group-hover:opacity-100 shadow-sm"
+                          className="absolute -top-2 -right-2 w-6 h-6 bg-red-50 dark:bg-red-900/50 text-red-500 dark:text-red-400 rounded-full flex items-center justify-center hover:bg-red-100 dark:hover:bg-red-900/80 transition-colors opacity-0 group-hover:opacity-100 shadow-sm"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
 
                         <div className="flex items-center gap-2">
                           <div className="flex-1">
-                            <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Platform</label>
+                            <label className="text-[8px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Platform</label>
                             <select 
                               value={social.platform}
                               onChange={(e) => {
@@ -4869,7 +5277,7 @@ export default function AdminDashboard() {
                                 };
                                 setSiteSettings({ ...siteSettings, socialLinks: next });
                               }}
-                              className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                              className="w-full bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500 dark:text-white"
                             >
                               <option value="Facebook">Facebook</option>
                               <option value="Twitter">Twitter</option>
@@ -4883,7 +5291,7 @@ export default function AdminDashboard() {
                               <option value="Pinterest">Pinterest</option>
                             </select>
                           </div>
-                          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-gray-100 mt-4">
+                          <div className="w-10 h-10 bg-white dark:bg-gray-950 rounded-xl flex items-center justify-center border border-gray-100 dark:border-gray-800 mt-4">
                             {React.createElement(
                               social.platform === "Facebook" ? Facebook : 
                               social.platform === "Twitter" ? Twitter :
@@ -4895,13 +5303,13 @@ export default function AdminDashboard() {
                               social.platform === "TikTok" ? Music :
                               social.platform === "Pinterest" ? Pin :
                               social.platform === "Telegram" ? Send : ExternalLink,
-                              { className: "w-5 h-5 text-indigo-500" }
+                              { className: "w-5 h-5 text-indigo-500 dark:text-indigo-400" }
                             )}
                           </div>
                         </div>
 
                         <div>
-                          <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Profile URL</label>
+                          <label className="text-[8px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Profile URL</label>
                           <input 
                             type="url" 
                             value={social.url}
@@ -4911,24 +5319,24 @@ export default function AdminDashboard() {
                               setSiteSettings({ ...siteSettings, socialLinks: next });
                             }}
                             placeholder="https://..."
-                            className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                            className="w-full bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500 dark:text-white"
                           />
                         </div>
                       </div>
                     ))}
                     {(siteSettings.socialLinks || []).length === 0 && (
-                      <div className="col-span-full py-8 border-2 border-dashed border-gray-100 rounded-4xl flex flex-col items-center justify-center gap-2 group">
-                        <div className="w-10 h-10 rounded-2xl bg-gray-50 flex items-center justify-center group-hover:bg-indigo-50 transition-colors">
-                          <Share2 className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 transition-colors" />
+                      <div className="col-span-full py-8 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-4xl flex flex-col items-center justify-center gap-2 group">
+                        <div className="w-10 h-10 rounded-2xl bg-gray-50 dark:bg-gray-900 flex items-center justify-center group-hover:bg-indigo-50 dark:group-hover:bg-indigo-900/30 transition-colors">
+                          <Share2 className="w-5 h-5 text-gray-300 dark:text-gray-600 group-hover:text-indigo-400 dark:group-hover:text-indigo-500 transition-colors" />
                         </div>
-                        <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">No social links added</p>
+                        <p className="text-[10px] font-black text-gray-300 dark:text-gray-600 uppercase tracking-widest">No social links added</p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div className="md:col-span-2 pt-6 border-t border-gray-100">
-                  <div className="bg-gray-900 rounded-3xl p-6 sm:p-8 text-white relative overflow-hidden group">
+                <div className="md:col-span-2 pt-6 border-t border-gray-100 dark:border-gray-800">
+                  <div className="bg-indigo-600 dark:bg-gray-900 rounded-3xl p-6 sm:p-8 text-white relative overflow-hidden group">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl -mr-32 -mt-32" />
                     
                     <div className="relative z-10 space-y-6">
@@ -5017,91 +5425,91 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="md:col-span-2 pt-6 border-t border-gray-100">
-                  <h4 className="font-bold text-gray-900 border-l-4 border-indigo-600 pl-3 mb-4 uppercase text-sm tracking-tighter">Marketplace Buttons</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 bg-indigo-50/30 p-6 rounded-3xl border border-indigo-100/50">
-                    <div className="space-y-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                      <h5 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Cart/Add Button</h5>
+                <div className="md:col-span-2 pt-6 border-t border-gray-100 dark:border-gray-800">
+                  <h4 className="font-bold text-gray-900 dark:text-white border-l-4 border-indigo-600 pl-3 mb-4 uppercase text-sm tracking-tighter">Marketplace Buttons</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 bg-indigo-50/30 dark:bg-indigo-900/10 p-6 rounded-3xl border border-indigo-100/50 dark:border-indigo-800/50">
+                    <div className="space-y-4 bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                      <h5 className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Cart/Add Button</h5>
                       <div>
-                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Button Text</label>
+                        <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Button Text</label>
                         <input 
                           type="text" 
                           value={siteSettings.cartText || "Cart"}
                           onChange={e => setSiteSettings({...siteSettings, cartText: e.target.value})}
-                          className="w-full bg-gray-50 border-none rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                          className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500 dark:text-white"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Background</label>
-                          <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-100">
+                          <label className="text-[8px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Background</label>
+                          <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-950 p-1.5 rounded-lg border border-gray-100 dark:border-gray-800">
                              <input type="color" value={siteSettings.cartColor || "#f9fafb"} onChange={e => setSiteSettings({...siteSettings, cartColor: e.target.value})} className="w-6 h-6 rounded border-none cursor-pointer" />
-                             <span className="text-[9px] font-mono text-gray-400">{siteSettings.cartColor || "#f9fafb"}</span>
+                             <span className="text-[9px] font-mono text-gray-400 dark:text-gray-500">{siteSettings.cartColor || "#f9fafb"}</span>
                           </div>
                         </div>
                         <div>
-                          <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Text Color</label>
-                          <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-100">
+                          <label className="text-[8px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Text Color</label>
+                          <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-950 p-1.5 rounded-lg border border-gray-100 dark:border-gray-800">
                              <input type="color" value={siteSettings.cartTextColor || "#6b7280"} onChange={e => setSiteSettings({...siteSettings, cartTextColor: e.target.value})} className="w-6 h-6 rounded border-none cursor-pointer" />
-                             <span className="text-[9px] font-mono text-gray-400">{siteSettings.cartTextColor || "#6b7280"}</span>
+                             <span className="text-[9px] font-mono text-gray-400 dark:text-gray-500">{siteSettings.cartTextColor || "#6b7280"}</span>
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="space-y-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                      <h5 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">View/Details Button</h5>
+                    <div className="space-y-4 bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                      <h5 className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">View/Details Button</h5>
                       <div>
-                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Button Text</label>
+                        <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Button Text</label>
                         <input 
                           type="text" 
                           value={siteSettings.viewText || "View"}
                           onChange={e => setSiteSettings({...siteSettings, viewText: e.target.value})}
-                          className="w-full bg-gray-50 border-none rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                          className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500 dark:text-white"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Background</label>
-                          <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-100">
+                          <label className="text-[8px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Background</label>
+                          <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-950 p-1.5 rounded-lg border border-gray-100 dark:border-gray-800">
                              <input type="color" value={siteSettings.viewColor || "#f9fafb"} onChange={e => setSiteSettings({...siteSettings, viewColor: e.target.value})} className="w-6 h-6 rounded border-none cursor-pointer" />
-                             <span className="text-[9px] font-mono text-gray-400">{siteSettings.viewColor || "#f9fafb"}</span>
+                             <span className="text-[9px] font-mono text-gray-400 dark:text-gray-500">{siteSettings.viewColor || "#f9fafb"}</span>
                           </div>
                         </div>
                         <div>
-                          <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Text Color</label>
-                          <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-100">
+                          <label className="text-[8px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Text Color</label>
+                          <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-950 p-1.5 rounded-lg border border-gray-100 dark:border-gray-800">
                              <input type="color" value={siteSettings.viewTextColor || "#6b7280"} onChange={e => setSiteSettings({...siteSettings, viewTextColor: e.target.value})} className="w-6 h-6 rounded border-none cursor-pointer" />
-                             <span className="text-[9px] font-mono text-gray-400">{siteSettings.viewTextColor || "#6b7280"}</span>
+                             <span className="text-[9px] font-mono text-gray-400 dark:text-gray-500">{siteSettings.viewTextColor || "#6b7280"}</span>
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="space-y-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                      <h5 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Buy/Purchase Button</h5>
+                    <div className="space-y-4 bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                      <h5 className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Buy/Purchase Button</h5>
                       <div>
-                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Button Text</label>
+                        <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Button Text</label>
                         <input 
                           type="text" 
                           value={siteSettings.buyText || "Buy"}
                           onChange={e => setSiteSettings({...siteSettings, buyText: e.target.value})}
-                          className="w-full bg-gray-50 border-none rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                          className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500 dark:text-white"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Background</label>
-                          <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-100">
+                          <label className="text-[8px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Background</label>
+                          <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-950 p-1.5 rounded-lg border border-gray-100 dark:border-gray-800">
                              <input type="color" value={siteSettings.buyColor || "#4f46e5"} onChange={e => setSiteSettings({...siteSettings, buyColor: e.target.value})} className="w-6 h-6 rounded border-none cursor-pointer" />
-                             <span className="text-[9px] font-mono text-gray-400">{siteSettings.buyColor || "#4f46e5"}</span>
+                             <span className="text-[9px] font-mono text-gray-400 dark:text-gray-500">{siteSettings.buyColor || "#4f46e5"}</span>
                           </div>
                         </div>
                         <div>
-                          <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Text Color</label>
-                          <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-100">
+                          <label className="text-[8px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Text Color</label>
+                          <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-950 p-1.5 rounded-lg border border-gray-100 dark:border-gray-800">
                              <input type="color" value={siteSettings.buyTextColor || "#ffffff"} onChange={e => setSiteSettings({...siteSettings, buyTextColor: e.target.value})} className="w-6 h-6 rounded border-none cursor-pointer" />
-                             <span className="text-[9px] font-mono text-gray-400">{siteSettings.buyTextColor || "#ffffff"}</span>
+                             <span className="text-[9px] font-mono text-gray-400 dark:text-gray-500">{siteSettings.buyTextColor || "#ffffff"}</span>
                           </div>
                         </div>
                       </div>
@@ -5109,11 +5517,11 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="md:col-span-2 pt-6 border-t border-gray-100">
+                <div className="md:col-span-2 pt-6 border-t border-gray-100 dark:border-gray-800">
                   <div className="flex justify-between items-center mb-6">
                     <div>
-                      <h4 className="font-bold text-gray-900 border-l-4 border-indigo-600 pl-3">Hero Slider Banners</h4>
-                      <p className="text-[10px] text-gray-400 mt-1 pl-3">Add multiple banners to create a sliding hero section.</p>
+                      <h4 className="font-bold text-gray-900 dark:text-white border-l-4 border-indigo-600 pl-3">Hero Slider Banners</h4>
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 pl-3">Add multiple banners to create a sliding hero section.</p>
                     </div>
                     <button 
                       type="button"
@@ -5131,7 +5539,7 @@ export default function AdminDashboard() {
                           heroBanners: [...(prev.heroBanners || []), newBanner]
                         }));
                       }}
-                      className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-all flex items-center gap-2"
+                      className="bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-all flex items-center gap-2"
                     >
                       <Plus className="w-3.5 h-3.5" /> Add New Slide
                     </button>
@@ -5139,7 +5547,7 @@ export default function AdminDashboard() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {(siteSettings.heroBanners || []).map((banner, index) => (
-                      <div key={banner.id} className="bg-gray-50 rounded-2xl p-6 border border-gray-200 space-y-4 relative group">
+                      <div key={banner.id} className="bg-gray-50 dark:bg-gray-900/50 rounded-2xl p-6 border border-gray-200 dark:border-gray-800 space-y-4 relative group">
                         <button 
                           type="button"
                           onClick={() => {
@@ -5148,18 +5556,18 @@ export default function AdminDashboard() {
                               heroBanners: prev.heroBanners.filter(b => b.id !== banner.id)
                             }));
                           }}
-                          className="absolute top-4 right-4 p-2 bg-white text-red-500 rounded-xl border border-red-50 opacity-0 group-hover:opacity-100 transition-all shadow-sm hover:bg-red-50"
+                          className="absolute top-4 right-4 p-2 bg-white dark:bg-gray-800 text-red-500 dark:text-red-400 rounded-xl border border-red-50 dark:border-red-900/30 opacity-0 group-hover:opacity-100 transition-all shadow-sm hover:bg-red-50 dark:hover:bg-red-900/50"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
 
                         <div className="flex gap-4 items-start">
-                          <div className="w-24 h-24 rounded-xl bg-white border border-gray-200 overflow-hidden flex-shrink-0">
+                          <div className="w-24 h-24 rounded-xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 overflow-hidden flex-shrink-0">
                             <img src={banner.imageUrl} className="w-full h-full object-cover" />
                           </div>
                           <div className="flex-grow space-y-3">
                             <div>
-                              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Slide Image URL</label>
+                              <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Slide Image URL</label>
                               <input 
                                 type="text"
                                 value={banner.imageUrl}
@@ -5168,11 +5576,11 @@ export default function AdminDashboard() {
                                   newBanners[index].imageUrl = e.target.value;
                                   setSiteSettings({...siteSettings, heroBanners: newBanners});
                                 }}
-                                className="w-full mt-1 bg-white border-none rounded-xl px-4 py-2 outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-mono"
+                                className="w-full mt-1 bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded-xl px-4 py-2 outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-mono dark:text-white"
                               />
                             </div>
                             <div>
-                               <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Target Link (Optional)</label>
+                               <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Target Link (Optional)</label>
                                <input 
                                  type="text"
                                  value={banner.link || ""}
@@ -5182,11 +5590,11 @@ export default function AdminDashboard() {
                                    setSiteSettings({...siteSettings, heroBanners: newBanners});
                                  }}
                                  placeholder="/"
-                                 className="w-full mt-1 bg-white border-none rounded-xl px-4 py-2 outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-mono"
+                                 className="w-full mt-1 bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded-xl px-4 py-2 outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-mono dark:text-white"
                                />
                              </div>
                              <div>
-                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Button Text</label>
+                                <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Button Text</label>
                                 <input 
                                   type="text"
                                   value={banner.buttonText || ""}
@@ -5196,7 +5604,7 @@ export default function AdminDashboard() {
                                     setSiteSettings({...siteSettings, heroBanners: newBanners});
                                   }}
                                   placeholder="Open"
-                                  className="w-full mt-1 bg-white border-none rounded-xl px-4 py-2 outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-bold"
+                                  className="w-full mt-1 bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded-xl px-4 py-2 outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-bold dark:text-white"
                                 />
                              </div>
                           </div>
@@ -5204,7 +5612,7 @@ export default function AdminDashboard() {
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
-                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Title Translation</label>
+                            <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Title Translation</label>
                             <input 
                               type="text"
                               value={banner.title || ""}
@@ -5213,11 +5621,11 @@ export default function AdminDashboard() {
                                 newBanners[index].title = e.target.value;
                                 setSiteSettings({...siteSettings, heroBanners: newBanners});
                               }}
-                              className="w-full mt-1 bg-white border-none rounded-xl px-4 py-2 outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-bold"
+                              className="w-full mt-1 bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded-xl px-4 py-2 outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-bold dark:text-white"
                             />
                           </div>
                           <div>
-                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Subtitle Translation</label>
+                            <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Subtitle Translation</label>
                             <input 
                               type="text"
                               value={banner.subtitle || ""}
@@ -5226,32 +5634,32 @@ export default function AdminDashboard() {
                                 newBanners[index].subtitle = e.target.value;
                                 setSiteSettings({...siteSettings, heroBanners: newBanners});
                               }}
-                              className="w-full mt-1 bg-white border-none rounded-xl px-4 py-2 outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-medium"
+                              className="w-full mt-1 bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded-xl px-4 py-2 outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-medium dark:text-white"
                             />
                           </div>
                         </div>
                       </div>
                     ))}
 
-                    {(!siteSettings.heroBanners || siteSettings.heroBanners.length === 0) && (
-                      <div className="md:col-span-2 py-12 bg-gray-50 border-2 border-dashed border-gray-200 rounded-[32px] text-center">
-                        <ImagePlus className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-                        <p className="text-gray-400 font-bold text-sm tracking-tight italic">No custom sliders added yet. Default hero will be used.</p>
+                    {(siteSettings.heroBanners || []).length === 0 && (
+                      <div className="md:col-span-2 py-12 bg-gray-50 dark:bg-gray-900/50 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-[32px] text-center">
+                        <ImagePlus className="w-12 h-12 text-gray-200 dark:text-gray-700 mx-auto mb-4" />
+                        <p className="text-gray-400 dark:text-gray-500 font-bold text-sm tracking-tight italic">No custom sliders added yet. Default hero will be used.</p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div className="md:col-span-2 pt-6 border-t border-gray-100">
+                <div className="md:col-span-2 pt-6 border-t border-gray-100 dark:border-gray-800">
                   <div className="flex items-center gap-3">
                     <input 
                       type="checkbox"
                       id="showHero"
                       checked={siteSettings.showHero !== false}
                       onChange={e => setSiteSettings({...siteSettings, showHero: e.target.checked})}
-                      className="w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      className="w-5 h-5 rounded border-gray-300 dark:border-gray-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer bg-white dark:bg-gray-950"
                     />
-                    <label htmlFor="showHero" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
+                    <label htmlFor="showHero" className="text-sm font-bold text-gray-700 dark:text-gray-300 cursor-pointer select-none">
                       Show Hero / Slider Section
                     </label>
                   </div>
@@ -5261,74 +5669,176 @@ export default function AdminDashboard() {
                       id="showTicker"
                       checked={siteSettings.showTicker !== false}
                       onChange={e => setSiteSettings({...siteSettings, showTicker: e.target.checked})}
-                      className="w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      className="w-5 h-5 rounded border-gray-300 dark:border-gray-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer bg-white dark:bg-gray-950"
                     />
-                    <label htmlFor="showTicker" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
+                    <label htmlFor="showTicker" className="text-sm font-bold text-gray-700 dark:text-gray-300 cursor-pointer select-none">
                       Show Most Sold Ticker (Slide)
                     </label>
                   </div>
+                  <div className="flex items-center gap-3">
+                    <input 
+                      type="checkbox"
+                      id="showThemeToggle"
+                      checked={siteSettings.showThemeToggle !== false}
+                      onChange={e => setSiteSettings({...siteSettings, showThemeToggle: e.target.checked})}
+                      className="w-5 h-5 rounded border-gray-300 dark:border-gray-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer bg-white dark:bg-gray-950"
+                    />
+                    <label htmlFor="showThemeToggle" className="text-sm font-bold text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+                      Show Day/Night Mode Button
+                    </label>
+                  </div>
+                  {siteSettings.showThemeToggle !== false && (
+                    <div className="mt-4 ml-8 p-6 bg-gray-50/50 dark:bg-gray-900/50 rounded-[30px] border border-gray-100 dark:border-gray-800 space-y-4">
+                      <h5 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                        Select Button Style
+                      </h5>
+                       <div className="grid grid-cols-2 sm:grid-cols-7 gap-3">
+                        {(['classic', 'minimal', 'ios', 'glass', 'creative', 'glow', 'landscape'] as const).map((style) => (
+                          <button
+                            key={style}
+                            type="button"
+                            onClick={() => setSiteSettings({...siteSettings, themeToggleStyle: style})}
+                            className={cn(
+                              "relative p-3 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 group",
+                              siteSettings.themeToggleStyle === style 
+                                ? "border-indigo-600 bg-white dark:bg-gray-800 shadow-xl shadow-indigo-500/10" 
+                                : "border-transparent bg-gray-100/50 dark:bg-gray-800/30 hover:bg-gray-100 dark:hover:bg-gray-800"
+                            )}
+                          >
+                            <div className={cn(
+                              "w-8 h-8 rounded-xl flex items-center justify-center shadow-sm transition-all",
+                              siteSettings.themeToggleStyle === style ? "bg-indigo-600 text-white scale-110" : "bg-white dark:bg-gray-750 text-gray-400 group-hover:scale-105"
+                            )}>
+                              {style === 'classic' && <Sun className="w-4 h-4" />}
+                              {style === 'minimal' && <Sparkles className="w-4 h-4" />}
+                              {style === 'ios' && <Moon className="w-4 h-4" />}
+                              {style === 'glass' && <Star className="w-4 h-4" />}
+                              {style === 'creative' && <CloudSun className="w-4 h-4" />}
+                              {style === 'glow' && <Zap className="w-4 h-4" />}
+                              {style === 'landscape' && <Mountain className="w-4 h-4" />}
+                            </div>
+                            <span className={cn(
+                              "text-[9px] font-black uppercase tracking-widest text-center truncate w-full",
+                              siteSettings.themeToggleStyle === style ? "text-indigo-600 dark:text-indigo-400" : "text-gray-500"
+                            )}>
+                              {style}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+                        <div className="space-y-4">
+                          <h5 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                             Toggle Position
+                          </h5>
+                          <div className="flex flex-wrap gap-2">
+                            {(['header-left', 'header-center', 'header-right', 'profile-page'] as const).map((pos) => (
+                              <button
+                                key={pos}
+                                type="button"
+                                onClick={() => setSiteSettings({...siteSettings, themeTogglePosition: pos})}
+                                className={cn(
+                                  "px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border",
+                                  siteSettings.themeTogglePosition === pos 
+                                    ? "bg-indigo-600 text-white border-indigo-600" 
+                                    : "bg-white dark:bg-gray-800 text-gray-500 border-gray-200 dark:border-gray-700 hover:border-indigo-300"
+                                )}
+                              >
+                                {pos.replace('header-', '').replace('-', ' ')}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <h5 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                             Button Size
+                          </h5>
+                          <div className="flex gap-2">
+                            {(['sm', 'md', 'lg'] as const).map((s) => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => setSiteSettings({...siteSettings, themeToggleSize: s})}
+                                className={cn(
+                                  "w-10 h-10 rounded-xl text-[10px] font-black uppercase transition-all border flex items-center justify-center",
+                                  siteSettings.themeToggleSize === s 
+                                    ? "bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-500/20" 
+                                    : "bg-white dark:bg-gray-800 text-gray-500 border-gray-200 dark:border-gray-700 hover:border-indigo-300"
+                                )}
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div className="md:col-span-2 pt-6 border-t border-gray-100">
-                  <h4 className="font-bold text-gray-900 border-l-4 border-indigo-600 pl-3 mb-4">Payment Methods Visibility</h4>
+                <div className="md:col-span-2 pt-6 border-t border-gray-100 dark:border-gray-800">
+                  <h4 className="font-bold text-gray-900 dark:text-white border-l-4 border-indigo-600 pl-3 mb-4 uppercase text-sm tracking-tighter">Payment Methods Visibility</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-2xl">
+                    <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
                       <input 
                         type="checkbox"
                         id="enableStripe"
                         checked={siteSettings.enableStripe !== false}
                         onChange={e => setSiteSettings({...siteSettings, enableStripe: e.target.checked})}
-                        className="w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        className="w-5 h-5 rounded border-gray-300 dark:border-gray-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer bg-white dark:bg-gray-950"
                       />
-                      <label htmlFor="enableStripe" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
+                      <label htmlFor="enableStripe" className="text-sm font-bold text-gray-700 dark:text-gray-300 cursor-pointer select-none">
                         Stripe
                       </label>
                     </div>
-                    <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-2xl">
+                    <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
                       <input 
                         type="checkbox"
                         id="enableLocal"
                         checked={siteSettings.enableLocal !== false}
                         onChange={e => setSiteSettings({...siteSettings, enableLocal: e.target.checked})}
-                        className="w-5 h-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500 cursor-pointer"
+                        className="w-5 h-5 rounded border-gray-300 dark:border-gray-700 text-pink-600 focus:ring-pink-500 cursor-pointer bg-white dark:bg-gray-950"
                       />
-                      <label htmlFor="enableLocal" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
+                      <label htmlFor="enableLocal" className="text-sm font-bold text-gray-700 dark:text-gray-300 cursor-pointer select-none">
                         Local (bKash)
                       </label>
                     </div>
-                    <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-2xl">
+                    <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
                       <input 
                         type="checkbox"
                         id="enableCOD"
                         checked={siteSettings.enableCOD !== false}
                         onChange={e => setSiteSettings({...siteSettings, enableCOD: e.target.checked})}
-                        className="w-5 h-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                        className="w-5 h-5 rounded border-gray-300 dark:border-gray-700 text-emerald-600 focus:ring-emerald-500 cursor-pointer bg-white dark:bg-gray-950"
                       />
-                      <label htmlFor="enableCOD" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
+                      <label htmlFor="enableCOD" className="text-sm font-bold text-gray-700 dark:text-gray-300 cursor-pointer select-none">
                         COD
                       </label>
                     </div>
-                    <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-2xl">
+                    <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
                       <input 
                         type="checkbox"
                         id="enableBinancePay"
                         checked={siteSettings.enableBinancePay || false}
                         onChange={e => setSiteSettings({...siteSettings, enableBinancePay: e.target.checked})}
-                        className="w-5 h-5 rounded border-gray-300 text-yellow-500 focus:ring-yellow-400 cursor-pointer"
+                        className="w-5 h-5 rounded border-gray-300 dark:border-gray-700 text-yellow-500 focus:ring-yellow-400 cursor-pointer bg-white dark:bg-gray-950"
                       />
-                      <label htmlFor="enableBinancePay" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
+                      <label htmlFor="enableBinancePay" className="text-sm font-bold text-gray-700 dark:text-gray-300 cursor-pointer select-none">
                         Binance Pay
                       </label>
                     </div>
-                    <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-2xl">
+                    <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
                       <input 
                         type="checkbox"
                         id="enablePayoneer"
                         checked={siteSettings.enablePayoneer || false}
                         onChange={e => setSiteSettings({...siteSettings, enablePayoneer: e.target.checked})}
-                        className="w-5 h-5 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500 cursor-pointer"
+                        className="w-5 h-5 rounded border-gray-300 dark:border-gray-700 text-cyan-600 focus:ring-cyan-500 cursor-pointer bg-white dark:bg-gray-950"
                       />
-                      <label htmlFor="enablePayoneer" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
+                      <label htmlFor="enablePayoneer" className="text-sm font-bold text-gray-700 dark:text-gray-300 cursor-pointer select-none">
                         Payoneer
                       </label>
                     </div>
@@ -5336,205 +5846,205 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-gray-100">
+                <div className="md:col-span-1 space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">bKash Number</label>
+                  <input 
+                    type="text"
+                    value={siteSettings.bkashNumber || ""}
+                    onChange={e => setSiteSettings({...siteSettings, bkashNumber: e.target.value})}
+                    className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono dark:text-white"
+                    placeholder="017xxxxxxxx"
+                  />
+                  <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.1em] mt-2 block">bKash Logo URL</label>
+                  <input 
+                    type="text"
+                    value={(siteSettings as any).bkashLogo || ""}
+                    onChange={e => setSiteSettings({...siteSettings, bkashLogo: e.target.value} as any)}
+                    className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-xs dark:text-white"
+                    placeholder="Logo URL"
+                  />
+                </div>
+                <div className="md:col-span-1 space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Nagad Number</label>
+                  <input 
+                    type="text"
+                    value={siteSettings.nagadNumber || ""}
+                    onChange={e => setSiteSettings({...siteSettings, nagadNumber: e.target.value})}
+                    className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono dark:text-white"
+                    placeholder="018xxxxxxxx"
+                  />
+                  <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.1em] mt-2 block">Nagad Logo URL</label>
+                  <input 
+                    type="text"
+                    value={(siteSettings as any).nagadLogo || ""}
+                    onChange={e => setSiteSettings({...siteSettings, nagadLogo: e.target.value} as any)}
+                    className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-xs dark:text-white"
+                    placeholder="Logo URL"
+                  />
+                </div>
+                <div className="md:col-span-1 space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Rocket Number</label>
+                  <input 
+                    type="text"
+                    value={siteSettings.rocketNumber || ""}
+                    onChange={e => setSiteSettings({...siteSettings, rocketNumber: e.target.value})}
+                    className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono dark:text-white"
+                    placeholder="019xxxxxxxx"
+                  />
+                  <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.1em] mt-2 block">Rocket Logo URL</label>
+                  <input 
+                    type="text"
+                    value={(siteSettings as any).rocketLogo || ""}
+                    onChange={e => setSiteSettings({...siteSettings, rocketLogo: e.target.value} as any)}
+                    className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-xs dark:text-white"
+                    placeholder="Logo URL"
+                  />
+                </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">bKash Number</label>
-                    <input 
-                      type="text"
-                      value={siteSettings.bkashNumber || ""}
-                      onChange={e => setSiteSettings({...siteSettings, bkashNumber: e.target.value})}
-                      className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                      placeholder="017xxxxxxxx"
-                    />
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.1em] mt-2 block">bKash Logo URL</label>
-                    <input 
-                      type="text"
-                      value={(siteSettings as any).bkashLogo || ""}
-                      onChange={e => setSiteSettings({...siteSettings, bkashLogo: e.target.value} as any)}
-                      className="w-full bg-gray-50 border-none rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
-                      placeholder="Logo URL"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Nagad Number</label>
-                    <input 
-                      type="text"
-                      value={siteSettings.nagadNumber || ""}
-                      onChange={e => setSiteSettings({...siteSettings, nagadNumber: e.target.value})}
-                      className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                      placeholder="018xxxxxxxx"
-                    />
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.1em] mt-2 block">Nagad Logo URL</label>
-                    <input 
-                      type="text"
-                      value={(siteSettings as any).nagadLogo || ""}
-                      onChange={e => setSiteSettings({...siteSettings, nagadLogo: e.target.value} as any)}
-                      className="w-full bg-gray-50 border-none rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
-                      placeholder="Logo URL"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Rocket Number</label>
-                    <input 
-                      type="text"
-                      value={siteSettings.rocketNumber || ""}
-                      onChange={e => setSiteSettings({...siteSettings, rocketNumber: e.target.value})}
-                      className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                      placeholder="019xxxxxxxx"
-                    />
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.1em] mt-2 block">Rocket Logo URL</label>
-                    <input 
-                      type="text"
-                      value={(siteSettings as any).rocketLogo || ""}
-                      onChange={e => setSiteSettings({...siteSettings, rocketLogo: e.target.value} as any)}
-                      className="w-full bg-gray-50 border-none rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
-                      placeholder="Logo URL"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Binance Pay ID</label>
+                    <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Binance Pay ID</label>
                     <input 
                       type="text"
                       value={siteSettings.binanceId || ""}
                       onChange={e => setSiteSettings({...siteSettings, binanceId: e.target.value})}
-                      className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                      className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono dark:text-white"
                       placeholder="Binance Pay ID"
                     />
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.1em] mt-2 block">Binance QR URL</label>
+                    <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.1em] mt-2 block">Binance QR URL</label>
                     <input 
                       type="text"
                       value={siteSettings.binanceQR || ""}
                       onChange={e => setSiteSettings({...siteSettings, binanceQR: e.target.value})}
-                      className="w-full bg-gray-50 border-none rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
+                      className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-xs dark:text-white"
                       placeholder="QR Image URL"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Payoneer Email</label>
+                    <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Payoneer Email</label>
                     <input 
                       type="text"
                       value={siteSettings.payoneerEmail || ""}
                       onChange={e => setSiteSettings({...siteSettings, payoneerEmail: e.target.value})}
-                      className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                      className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono dark:text-white"
                       placeholder="Payoneer Email"
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="md:col-span-2 space-y-4 pt-8 border-t border-gray-100">
-                <h4 className="font-bold text-gray-900 border-l-4 border-emerald-500 pl-3">Legal & Support Contact</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Privacy Policy URL</label>
-                    <input 
-                      type="text" 
-                      value={siteSettings.privacyUrl}
-                      onChange={e => setSiteSettings({...siteSettings, privacyUrl: e.target.value})}
-                      className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="/p/privacy-policy"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Terms of Service URL</label>
-                    <input 
-                      type="text" 
-                      value={siteSettings.termsUrl}
-                      onChange={e => setSiteSettings({...siteSettings, termsUrl: e.target.value})}
-                      className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="/p/terms-of-service"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Support Email</label>
-                    <input 
-                      type="email" 
-                      value={siteSettings.supportEmail}
-                      onChange={e => setSiteSettings({...siteSettings, supportEmail: e.target.value})}
-                      className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Support Phone</label>
-                    <input 
-                      type="text" 
-                      value={siteSettings.supportPhone}
-                      onChange={e => setSiteSettings({...siteSettings, supportPhone: e.target.value})}
-                      className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Support Address</label>
-                    <input 
-                      type="text" 
-                      value={siteSettings.supportAddress}
-                      onChange={e => setSiteSettings({...siteSettings, supportAddress: e.target.value})}
-                      className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
+                <div className="md:col-span-2 space-y-4 pt-8 border-t border-gray-100 dark:border-gray-800">
+                  <h4 className="font-bold text-gray-900 dark:text-white border-l-4 border-emerald-500 pl-3">Legal & Support Contact</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Privacy Policy URL</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.privacyUrl}
+                        onChange={e => setSiteSettings({...siteSettings, privacyUrl: e.target.value})}
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
+                        placeholder="/p/privacy-policy"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Terms of Service URL</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.termsUrl}
+                        onChange={e => setSiteSettings({...siteSettings, termsUrl: e.target.value})}
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
+                        placeholder="/p/terms-of-service"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Support Email</label>
+                      <input 
+                        type="email" 
+                        value={siteSettings.supportEmail}
+                        onChange={e => setSiteSettings({...siteSettings, supportEmail: e.target.value})}
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Support Phone</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.supportPhone}
+                        onChange={e => setSiteSettings({...siteSettings, supportPhone: e.target.value})}
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Support Address</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.supportAddress}
+                        onChange={e => setSiteSettings({...siteSettings, supportAddress: e.target.value})}
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-6 pt-8 border-t border-gray-100">
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-6 pt-8 border-t border-gray-100 dark:border-gray-800">
                 <div className="space-y-4">
-                  <h4 className="font-bold text-gray-900 border-l-4 border-indigo-600 pl-3">Stat 1</h4>
+                  <h4 className="font-bold text-gray-900 dark:text-white border-l-4 border-indigo-600 pl-3 uppercase text-xs tracking-widest">Stat 1</h4>
                   <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Label</label>
+                    <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Label</label>
                     <input 
                       type="text" 
                       value={siteSettings.stat1Label}
                       onChange={e => setSiteSettings({...siteSettings, stat1Label: e.target.value})}
-                      className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Value</label>
+                    <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Value</label>
                     <input 
                       type="text" 
                       value={siteSettings.stat1Value}
                       onChange={e => setSiteSettings({...siteSettings, stat1Value: e.target.value})}
-                      className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                     />
                   </div>
                 </div>
                 <div className="space-y-4">
-                  <h4 className="font-bold text-gray-900 border-l-4 border-purple-600 pl-3">Stat 2</h4>
+                  <h4 className="font-bold text-gray-900 dark:text-white border-l-4 border-purple-600 pl-3 uppercase text-xs tracking-widest">Stat 2</h4>
                   <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Label</label>
+                    <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Label</label>
                     <input 
                       type="text" 
                       value={siteSettings.stat2Label}
                       onChange={e => setSiteSettings({...siteSettings, stat2Label: e.target.value})}
-                      className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Value</label>
+                    <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Value</label>
                     <input 
                       type="text" 
                       value={siteSettings.stat2Value}
                       onChange={e => setSiteSettings({...siteSettings, stat2Value: e.target.value})}
-                      className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                     />
                   </div>
                 </div>
                 <div className="space-y-4">
-                  <h4 className="font-bold text-gray-900 border-l-4 border-pink-600 pl-3">Stat 3</h4>
+                  <h4 className="font-bold text-gray-900 dark:text-white border-l-4 border-pink-600 pl-3 uppercase text-xs tracking-widest">Stat 3</h4>
                   <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Label</label>
+                    <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Label</label>
                     <input 
                       type="text" 
                       value={siteSettings.stat3Label}
                       onChange={e => setSiteSettings({...siteSettings, stat3Label: e.target.value})}
-                      className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Value</label>
+                    <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Value</label>
                     <input 
                       type="text" 
                       value={siteSettings.stat3Value}
                       onChange={e => setSiteSettings({...siteSettings, stat3Value: e.target.value})}
-                      className="w-full mt-1 bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                     />
                   </div>
                 </div>
@@ -5543,7 +6053,7 @@ export default function AdminDashboard() {
               <div className="md:col-span-2 pt-4">
                 <button 
                   type="submit"
-                  className="bg-indigo-600 text-white px-10 py-5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-200 flex items-center gap-3 hover:-translate-y-1 active:translate-y-0 active:scale-95"
+                  className="bg-indigo-600 text-white px-10 py-5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-200 dark:shadow-none flex items-center gap-3 hover:-translate-y-1 active:translate-y-0 active:scale-95"
                 >
                   <Save className="w-5 h-5" />
                   Save Global Configuration
@@ -5551,7 +6061,7 @@ export default function AdminDashboard() {
               </div>
             </form>
           </section>
-        )}
+        ) : null}
       </div>
 
       {/* Modal - Order Details */}
@@ -5560,70 +6070,70 @@ export default function AdminDashboard() {
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
+            className="bg-white dark:bg-gray-900 rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex justify-between items-start">
               <div>
-                <h2 className="text-xl sm:text-2xl font-black text-gray-900 uppercase tracking-tighter">Order Details</h2>
-                <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-widest">Order ID: #{selectedOrder.id.slice(-8).toUpperCase()}</p>
-                <p className="text-[9px] font-medium text-gray-300 mt-0.5">FULL ID: {selectedOrder.id}</p>
+                <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Order Details</h2>
+                <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 mt-1 uppercase tracking-widest">Order ID: #{selectedOrder.id.slice(-8).toUpperCase()}</p>
+                <p className="text-[9px] font-medium text-gray-300 dark:text-gray-600 mt-0.5">FULL ID: {selectedOrder.id}</p>
               </div>
-              <button onClick={() => setSelectedOrderId(null)} className="text-gray-400 hover:text-gray-600 bg-gray-50 p-2 rounded-xl transition-all">
+              <button onClick={() => setSelectedOrderId(null)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 bg-gray-50 dark:bg-gray-800 p-2 rounded-xl transition-all">
                 <Trash2 className="w-5 h-5 sm:w-6 sm:h-6 transform rotate-45" />
               </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                <div className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Customer</div>
-                <div className="font-bold text-gray-900 text-xs sm:text-sm leading-tight">{selectedOrder.customerName || "Anonymous User"}</div>
-                <div className="text-[10px] sm:text-[11px] text-gray-500 mt-1">{selectedOrder.customerEmail || selectedOrder.userEmail || "No email available"}</div>
+              <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
+                <div className="text-[9px] sm:text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Customer</div>
+                <div className="font-bold text-gray-900 dark:text-gray-100 text-xs sm:text-sm leading-tight">{selectedOrder.customerName || "Anonymous User"}</div>
+                <div className="text-[10px] sm:text-[11px] text-gray-500 dark:text-gray-400 mt-1">{selectedOrder.customerEmail || selectedOrder.userEmail || "No email available"}</div>
                 {selectedOrder.customerPhone && (
-                  <div className="text-[10px] sm:text-[11px] text-emerald-600 font-black mt-2 flex items-center gap-1.5">
+                  <div className="text-[10px] sm:text-[11px] text-emerald-600 dark:text-emerald-400 font-black mt-2 flex items-center gap-1.5">
                     <Phone className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                     {selectedOrder.customerPhone}
                   </div>
                 )}
                 {selectedOrder.deliveryAddress && (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    <div className="text-[8px] sm:text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Delivery Address</div>
-                    <div className="text-[10px] sm:text-[11px] text-gray-700 leading-relaxed font-medium bg-white p-2 rounded-lg border border-gray-50">
+                  <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                    <div className="text-[8px] sm:text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Delivery Address</div>
+                    <div className="text-[10px] sm:text-[11px] text-gray-700 dark:text-gray-300 leading-relaxed font-medium bg-white dark:bg-gray-950 p-2 rounded-lg border border-gray-50 dark:border-gray-800">
                       {selectedOrder.deliveryAddress}
                     </div>
                   </div>
                 )}
               </div>
-              <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 text-right">
-                <div className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-200 pb-2">Financial Summary</div>
+              <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 text-right">
+                <div className="text-[9px] sm:text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 border-b border-gray-200 dark:border-gray-700 pb-2">Financial Summary</div>
                 
                 <div className="space-y-2 mt-2">
                   <div className="flex justify-between items-baseline">
-                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Order Subtotal</span>
-                    <span className="font-mono font-bold text-gray-600 text-xs">
+                    <span className="text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Order Subtotal</span>
+                    <span className="font-mono font-bold text-gray-600 dark:text-gray-400 text-xs">
                       ৳{(selectedOrder.grossAmount || selectedOrder.amount + (selectedOrder.discountAmount || 0)).toLocaleString()}
                     </span>
                   </div>
                   
                   {selectedOrder.couponCode && (
-                    <div className="flex justify-between items-baseline text-emerald-600">
+                    <div className="flex justify-between items-baseline text-emerald-600 dark:text-emerald-400">
                       <div className="flex flex-col items-start">
                         <span className="text-[9px] font-black uppercase tracking-widest">Coupon Discount</span>
                         <div className="flex items-center gap-1">
                           <Ticket className="w-2 h-2" />
-                          <span className="text-[8px] font-medium bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 uppercase">CODE: {selectedOrder.couponCode}</span>
+                          <span className="text-[8px] font-medium bg-emerald-50 dark:bg-emerald-900/20 px-1.5 py-0.5 rounded border border-emerald-100 dark:border-emerald-800 uppercase">CODE: {selectedOrder.couponCode}</span>
                         </div>
                       </div>
                       <span className="font-mono font-black text-xs">-৳{(selectedOrder.discountAmount || 0).toLocaleString()}</span>
                     </div>
                   )}
 
-                  <div className="flex justify-between items-baseline pt-2 border-t border-gray-200 border-dashed">
-                    <span className="text-[10px] font-black text-gray-900 uppercase tracking-widest">Net Payment</span>
+                  <div className="flex justify-between items-baseline pt-2 border-t border-gray-200 dark:border-gray-700 border-dashed">
+                    <span className="text-[10px] font-black text-gray-900 dark:text-gray-100 uppercase tracking-widest">Net Payment</span>
                     <div className="text-right">
-                      <div className="font-black text-indigo-600 text-base sm:text-xl">
+                      <div className="font-black text-indigo-600 dark:text-indigo-400 text-base sm:text-xl">
                         ৳{(selectedOrder.netAmount || selectedOrder.amount).toLocaleString()}
                       </div>
-                      <div className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">
+                      <div className="text-[8px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
                         {selectedOrder.paymentStatus === 'paid' ? 'Total Paid' : 'Payable Amount'}
                       </div>
                     </div>
@@ -5632,8 +6142,8 @@ export default function AdminDashboard() {
                   <div className="flex items-center justify-end gap-2 mt-4">
                     <span className={cn(
                       "px-2 sm:px-3 py-1.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm",
-                      selectedOrder.status === "completed" ? "bg-emerald-100 text-emerald-700" : 
-                      selectedOrder.status === "pending" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600"
+                      selectedOrder.status === "completed" ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" : 
+                      selectedOrder.status === "pending" ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400" : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
                     )}>
                       {selectedOrder.status}
                     </span>
@@ -5641,7 +6151,7 @@ export default function AdminDashboard() {
                   {selectedOrder.status === "pending" && isActuallyAdmin && (
                     <button 
                       onClick={() => handleConfirmOrder(selectedOrder.id)}
-                      className="w-full mt-4 bg-indigo-600 text-white py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-2xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95"
+                      className="w-full mt-4 bg-indigo-600 text-white py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-2xl shadow-indigo-200 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-95"
                     >
                       Confirm Order
                     </button>
@@ -5651,44 +6161,44 @@ export default function AdminDashboard() {
             </div>
 
             <div className="grid grid-cols-2 gap-4 mt-6">
-              <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 space-y-1">
-                <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Payment Method</div>
-                <div className="font-bold text-pink-600 uppercase text-xs">
+              <div className="bg-gray-50/50 dark:bg-gray-800/20 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 space-y-1">
+                <div className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Payment Method</div>
+                <div className="font-bold text-pink-600 dark:text-pink-400 uppercase text-xs">
                   {selectedOrder.paymentMethod === "cod" ? "Cash on Delivery" : 
                    selectedOrder.paymentMethod === "binance" ? "Binance Pay" :
                    selectedOrder.paymentMethod === "payoneer" ? "Payoneer" :
                    selectedOrder.paymentMethod || "N/A"}
                 </div>
               </div>
-              <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 space-y-1">
-                <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Payment Phone</div>
-                <div className="font-bold text-emerald-600 text-xs">{selectedOrder.paymentPhone || "N/A"}</div>
+              <div className="bg-gray-50/50 dark:bg-gray-800/20 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 space-y-1">
+                <div className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Payment Phone</div>
+                <div className="font-bold text-emerald-600 dark:text-emerald-400 text-xs">{selectedOrder.paymentPhone || "N/A"}</div>
               </div>
               {selectedOrder.amountUSD && (
-                <div className="bg-yellow-50/50 p-4 rounded-2xl border border-yellow-100 space-y-1 col-span-2">
-                  <div className="text-[9px] font-black text-yellow-600 uppercase tracking-widest flex items-center gap-1">
+                <div className="bg-yellow-50/50 dark:bg-yellow-900/10 p-4 rounded-2xl border border-yellow-100 dark:border-yellow-900/20 space-y-1 col-span-2">
+                  <div className="text-[9px] font-black text-yellow-600 dark:text-yellow-400 uppercase tracking-widest flex items-center gap-1">
                     <DollarSign className="w-3 h-3" />
                     USD Amount Details
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-yellow-900">${selectedOrder.amountUSD.toFixed(2)} USD</span>
-                    <span className="text-[9px] font-black text-yellow-400 uppercase tracking-tighter">Rate: ৳1 = ${selectedOrder.usdRate?.toFixed(4)}</span>
+                    <span className="text-xs font-bold text-yellow-900 dark:text-yellow-200">${selectedOrder.amountUSD.toFixed(2)} USD</span>
+                    <span className="text-[9px] font-black text-yellow-400 dark:text-yellow-600 uppercase tracking-tighter">Rate: ৳1 = ${selectedOrder.usdRate?.toFixed(4)}</span>
                   </div>
                 </div>
               )}
-              <div className="bg-emerald-50/30 p-4 rounded-2xl border border-emerald-100 space-y-1 col-span-2">
-                <div className="text-[9px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1">
+              <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-900/20 space-y-1 col-span-2">
+                <div className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3" />
                   Transaction ID / Payment Proof
                 </div>
-                <div className="font-mono font-bold text-gray-900 text-sm break-all">{selectedOrder.transactionId || "N/A"}</div>
+                <div className="font-mono font-bold text-gray-900 dark:text-gray-100 text-sm break-all">{selectedOrder.transactionId || "N/A"}</div>
               </div>
             </div>
 
-            <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 space-y-4">
+            <div className="bg-gray-50 dark:bg-gray-950 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 space-y-4">
               <div className="flex justify-between items-center">
-                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Order Items & Assets</div>
-                <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest bg-white px-2 py-0.5 rounded-lg border border-gray-100 shadow-sm">
+                <div className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Order Items & Assets</div>
+                <div className="text-[10px] font-black text-indigo-400 dark:text-indigo-400 uppercase tracking-widest bg-white dark:bg-gray-900 px-2 py-0.5 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm">
                   {selectedOrder.items?.length || selectedOrder.productIds?.length || 1} { (selectedOrder.items?.length || 1) === 1 ? 'Item' : 'Items' }
                 </div>
               </div>
@@ -5696,26 +6206,26 @@ export default function AdminDashboard() {
                 {(selectedOrder.items || [{ id: selectedOrder.productIds?.[0], name: selectedOrder.productName, price: selectedOrder.amount + (selectedOrder.discountAmount || 0) }]).map((item: any, i: number) => {
                   const itemId = item.id || `legacy-${i}`;
                   return (
-                    <div key={i} className="bg-white p-4 rounded-xl border border-gray-200 space-y-4 shadow-sm hover:border-indigo-100 transition-colors">
+                    <div key={i} className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 space-y-4 shadow-sm hover:border-indigo-100 dark:hover:border-indigo-900 transition-colors">
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-3">
                           <div className={cn(
                             "w-10 h-10 rounded-xl flex items-center justify-center transition-colors",
-                            "bg-indigo-50 text-indigo-600"
+                            "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400"
                           )}>
                             <Package className="w-5 h-5" />
                           </div>
                           <div>
-                            <span className="font-black text-xs text-gray-900 block">{item.name || "Product Name"}</span>
+                            <span className="font-black text-xs text-gray-900 dark:text-gray-100 block">{item.name || "Product Name"}</span>
                             <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">SKU: {itemId.slice(-8).toUpperCase()}</span>
+                              <span className="text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-tighter">SKU: {itemId.slice(-8).toUpperCase()}</span>
                               {item.size && (
-                                <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 uppercase tracking-tighter">
+                                <span className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded border border-indigo-100 dark:border-indigo-800 uppercase tracking-tighter">
                                   Size: {item.size}
                                 </span>
                               )}
                               {item.quantity > 1 && (
-                                <span className="text-[9px] font-black text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 uppercase tracking-tighter">
+                                <span className="text-[9px] font-black text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded border border-amber-100 dark:border-amber-800 uppercase tracking-tighter">
                                   Qty: {item.quantity}
                                 </span>
                               )}
@@ -5723,16 +6233,16 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <span className="font-mono font-black text-sm text-gray-900 leading-none block">৳{(Number(item.price || 0) * (item.quantity || 1)).toLocaleString()}</span>
+                          <span className="font-mono font-black text-sm text-gray-900 dark:text-gray-100 leading-none block">৳{(Number(item.price || 0) * (item.quantity || 1)).toLocaleString()}</span>
                           <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">
                             {item.quantity > 1 ? `৳${Number(item.price || 0).toLocaleString()} × ${item.quantity}` : 'Unit Price'}
                           </span>
                         </div>
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-50">
+                      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-50 dark:border-gray-800">
                         <div className="space-y-1">
-                          <label className="text-[9px] font-black text-gray-400 uppercase tracking-tighter pl-1">Login ID / User</label>
+                          <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-tighter pl-1">Login ID / User</label>
                           <input 
                             type="text"
                             value={editingCredentials[itemId]?.username || selectedOrder.credentials?.[itemId]?.username || ""}
@@ -5741,11 +6251,11 @@ export default function AdminDashboard() {
                               [itemId]: { ...(prev[itemId] || selectedOrder.credentials?.[itemId] || {}), username: e.target.value }
                             }))}
                             placeholder="username"
-                            className="w-full bg-gray-50 border-none rounded-xl p-2.5 text-[11px] font-bold focus:ring-1 focus:ring-indigo-200 outline-none"
+                            className="w-full bg-gray-50 dark:bg-gray-900 border-none rounded-xl p-2.5 text-[11px] font-bold focus:ring-1 focus:ring-indigo-200 outline-none dark:text-white"
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[9px] font-black text-gray-400 uppercase tracking-tighter pl-1">Password</label>
+                          <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-tighter pl-1">Password</label>
                           <input 
                             type="text"
                             value={editingCredentials[itemId]?.password || selectedOrder.credentials?.[itemId]?.password || ""}
@@ -5754,7 +6264,7 @@ export default function AdminDashboard() {
                               [itemId]: { ...(prev[itemId] || selectedOrder.credentials?.[itemId] || {}), password: e.target.value }
                             }))}
                             placeholder="password"
-                            className="w-full bg-gray-50 border-none rounded-xl p-2.5 text-[11px] font-bold focus:ring-1 focus:ring-indigo-200 outline-none"
+                            className="w-full bg-gray-50 dark:bg-gray-900 border-none rounded-xl p-2.5 text-[11px] font-bold focus:ring-1 focus:ring-indigo-200 outline-none dark:text-white"
                           />
                         </div>
                       </div>
@@ -5763,39 +6273,39 @@ export default function AdminDashboard() {
                 })}
               </div>
 
-              <div className="space-y-2 pt-4 border-t border-gray-100">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 text-left block">Admin Note / Special Instructions</label>
+              <div className="space-y-2 pt-4 border-t border-gray-100 dark:border-gray-800">
+                <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1 text-left block">Admin Note / Special Instructions</label>
                 <textarea 
                   value={editingNote}
                   onChange={(e) => setEditingNote(e.target.value)}
                   placeholder="Paste login details, account info, or special instructions for the buyer here..."
-                  className="w-full bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 text-[12px] font-medium focus:ring-2 focus:ring-indigo-500 outline-none min-h-[100px] resize-none"
+                  className="w-full bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/20 rounded-2xl p-4 text-[12px] font-medium focus:ring-2 focus:ring-indigo-500 outline-none min-h-[100px] resize-none dark:text-gray-200"
                 />
               </div>
 
               {selectedOrder.status === "completed" && isActuallyAdmin && (
                 <button 
                   onClick={handleUpdateOrderCredentials}
-                  className="w-full py-4 bg-white text-indigo-600 border border-indigo-100 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-sm active:scale-95"
+                  className="w-full py-4 bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all shadow-sm active:scale-95"
                 >
                   Update Order Details
                 </button>
               )}
             </div>
 
-            <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 flex items-center justify-between">
+            <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/20 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Calendar className="w-4 h-4 text-indigo-400" />
-                <div className="flex flex-col">
+                <div className="flex flex-col text-left">
                   <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Order Placed</span>
-                  <span className="text-xs font-bold text-indigo-900">
+                  <span className="text-xs font-bold text-indigo-900 dark:text-indigo-100">
                     {selectedOrder.createdAt?.toDate().toLocaleString() || "Syncing..."}
                   </span>
                 </div>
               </div>
               <div className="text-right">
                 <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest block">Gateway</span>
-                <span className="text-xs font-bold text-indigo-900 capitalize">{selectedOrder.gateway || "Stripe"}</span>
+                <span className="text-xs font-bold text-indigo-900 dark:text-indigo-100 capitalize">{selectedOrder.gateway || "Stripe"}</span>
               </div>
             </div>
 
@@ -5821,15 +6331,15 @@ export default function AdminDashboard() {
                 className={cn(
                   "flex-grow py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border",
                   isActuallyAdmin 
-                    ? "bg-red-50 text-red-600 border-red-100 hover:bg-red-100" 
-                    : "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
+                    ? "bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 border-red-100 dark:border-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/20" 
+                    : "bg-gray-50 dark:bg-gray-900/50 text-gray-300 dark:text-gray-700 border-gray-100 dark:border-gray-800 cursor-not-allowed"
                 )}
               >
                 Delete Record
               </button>
               <button 
                 onClick={() => setSelectedOrderId(null)}
-                className="px-8 py-4 bg-gray-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-800 transition-all shadow-xl shadow-gray-200"
+                className="px-8 py-4 bg-gray-900 dark:bg-gray-800 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-800 dark:hover:bg-gray-700 transition-all shadow-xl shadow-gray-200 dark:shadow-none"
               >
                 Close View
               </button>
@@ -5844,37 +6354,37 @@ export default function AdminDashboard() {
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-6"
+            className="bg-white dark:bg-gray-900 rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-6"
           >
-            <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tighter">Edit Category</h2>
+            <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Edit Category</h2>
             <form onSubmit={handleUpdateCategory} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Category Name</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Category Name</label>
                 <input 
                   type="text" required value={editingCategory.name}
                   onChange={e => setEditingCategory({...editingCategory, name: e.target.value})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Description (Optional)</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Description (Optional)</label>
                 <textarea 
                   rows={3}
                   value={editingCategory.description || ""}
                   onChange={e => setEditingCategory({...editingCategory, description: e.target.value})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                 />
               </div>
               <div className="flex gap-4 pt-4">
                 <button 
                   type="button" onClick={() => setEditingCategory(null)}
-                  className="px-10 py-4 bg-gray-100 text-gray-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all active:scale-95"
+                  className="px-10 py-4 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 dark:hover:bg-gray-700 transition-all active:scale-95"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
-                  className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 active:scale-95"
+                  className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 dark:shadow-none active:scale-95"
                 >
                   Update Category
                 </button>
@@ -5890,39 +6400,39 @@ export default function AdminDashboard() {
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-6"
+            className="bg-white dark:bg-gray-900 rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-6"
           >
-            <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tighter">Add New Category</h2>
+            <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Add New Category</h2>
             <form onSubmit={handleAddCategory} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Category Name</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Category Name</label>
                 <input 
                   type="text" required value={newCategory.name}
                   onChange={e => setNewCategory({...newCategory, name: e.target.value})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                   placeholder="e.g. Graphic Assets"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Description (Optional)</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Description (Optional)</label>
                 <textarea 
                   rows={3}
                   value={newCategory.description}
                   onChange={e => setNewCategory({...newCategory, description: e.target.value})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                   placeholder="What's this category for?"
                 />
               </div>
               <div className="flex gap-4 pt-4">
                 <button 
                   type="button" onClick={() => setIsAddingCategory(false)}
-                  className="px-10 py-4 bg-gray-100 text-gray-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all active:scale-95"
+                  className="px-10 py-4 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 dark:hover:bg-gray-700 transition-all active:scale-95"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
-                  className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 active:scale-95"
+                  className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 dark:shadow-none active:scale-95"
                 >
                   Create Category
                 </button>
@@ -5936,37 +6446,37 @@ export default function AdminDashboard() {
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-3xl p-8 max-w-xl w-full shadow-2xl space-y-6"
+            className="bg-white dark:bg-gray-900 rounded-3xl p-8 max-w-xl w-full shadow-2xl space-y-6"
           >
             <div className="flex justify-between items-start">
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">{selectedTicket.subject}</h2>
-                <p className="text-sm text-gray-500">From: {selectedTicket.name} ({selectedTicket.email})</p>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{selectedTicket.subject}</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">From: {selectedTicket.name} ({selectedTicket.email})</p>
               </div>
-              <button onClick={() => setSelectedTicket(null)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setSelectedTicket(null)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 bg-gray-50 dark:bg-gray-800 p-2 rounded-xl">
                 <Trash2 className="w-6 h-6 transform rotate-45" />
               </button>
             </div>
             
-            <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 min-h-[200px]">
-              <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{selectedTicket.message}</p>
+            <div className="bg-gray-50 dark:bg-gray-800/50 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 min-h-[200px]">
+              <p className="text-gray-700 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">{selectedTicket.message}</p>
             </div>
 
-            <div className="flex gap-4 pt-4">
-              <button 
-                type="button" onClick={() => setSelectedTicket(null)}
-                className="px-10 py-4 bg-gray-100 text-gray-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all active:scale-95"
-              >
-                Close
-              </button>
-              <a 
-                href={`mailto:${selectedTicket.email}?subject=Re: ${selectedTicket.subject}`}
-                className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all text-center flex items-center justify-center gap-2 active:scale-95 shadow-xl shadow-indigo-100"
-              >
-                <Mail className="w-5 h-5" />
-                Reply via Email
-              </a>
-            </div>
+              <div className="flex gap-4 pt-4">
+                <button 
+                  type="button" onClick={() => setSelectedTicket(null)}
+                  className="px-10 py-4 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 dark:hover:bg-gray-700 transition-all active:scale-95"
+                >
+                  Close
+                </button>
+                <a 
+                  href={`mailto:${selectedTicket.email}?subject=Re: ${selectedTicket.subject}`}
+                  className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all text-center flex items-center justify-center gap-2 active:scale-95 shadow-xl shadow-indigo-100 dark:shadow-none"
+                >
+                  <Mail className="w-5 h-5" />
+                  Reply via Email
+                </a>
+              </div>
           </motion.div>
         </div>
       )}
@@ -5977,46 +6487,46 @@ export default function AdminDashboard() {
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
+            className="bg-white dark:bg-gray-900 rounded-3xl p-8 max-w-2xl w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
           >
-            <h2 className="text-2xl font-bold text-gray-900">Edit Page</h2>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Edit Page</h2>
             <form onSubmit={handleUpdatePage} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Page Title</label>
+                  <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Page Title</label>
                   <input 
                     type="text" required value={editingPage.title}
                     onChange={e => setEditingPage({...editingPage, title: e.target.value})}
-                    className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Slug</label>
+                  <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Slug</label>
                   <input 
                     type="text" required value={editingPage.slug}
                     onChange={e => setEditingPage({...editingPage, slug: e.target.value})}
-                    className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                   />
                 </div>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Content (HTML/Markdown)</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Content (HTML/Markdown)</label>
                 <textarea 
                   rows={10} required value={editingPage.content}
                   onChange={e => setEditingPage({...editingPage, content: e.target.value})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm dark:text-white"
                 />
               </div>
               <div className="flex gap-4 pt-6">
                 <button 
                   type="button" onClick={() => setEditingPage(null)}
-                  className="px-10 py-4 bg-gray-100 text-gray-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all active:scale-95"
+                  className="px-10 py-4 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 dark:hover:bg-gray-700 transition-all active:scale-95"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
-                  className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 active:scale-95 hover:-translate-y-0.5"
+                  className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 dark:shadow-none active:scale-95 hover:-translate-y-0.5"
                 >
                   Update Custom Page
                 </button>
@@ -6032,46 +6542,46 @@ export default function AdminDashboard() {
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
+            className="bg-white dark:bg-gray-900 rounded-3xl p-8 max-w-2xl w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
           >
-            <h2 className="text-2xl font-bold text-gray-900">Create New Page</h2>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Create New Page</h2>
             <form onSubmit={handleAddPage} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Page Title</label>
+                  <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Page Title</label>
                   <input 
                     name="title" type="text" required
-                    className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                     placeholder="e.g. Privacy Policy"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Slug</label>
+                  <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Slug</label>
                   <input 
                     name="slug" type="text" required
-                    className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                     placeholder="e.g. privacy-policy"
                   />
                 </div>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Content (Markdown)</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Content (Markdown)</label>
                 <textarea 
                   name="content" rows={10} required
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm dark:text-white"
                   placeholder="Enter page content here..."
                 />
               </div>
               <div className="flex gap-4 pt-6">
                 <button 
                   type="button" onClick={() => setIsAddingPage(false)}
-                  className="px-10 py-4 bg-gray-100 text-gray-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all active:scale-95"
+                  className="px-10 py-4 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 dark:hover:bg-gray-700 transition-all active:scale-95"
                 >
                   Discard
                 </button>
                 <button 
                   type="submit" 
-                  className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 active:scale-95 hover:-translate-y-0.5"
+                  className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 dark:shadow-none active:scale-95 hover:-translate-y-0.5"
                 >
                   Publish Page
                 </button>
@@ -6087,28 +6597,28 @@ export default function AdminDashboard() {
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
+            className="bg-white dark:bg-gray-900 rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
           >
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Edit Product</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Edit Product</h2>
             <form onSubmit={handleUpdateProduct} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="md:col-span-2 space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Product Name</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Product Name</label>
                 <input 
                   type="text" required value={editingProduct.name}
                   onChange={e => setEditingProduct({...editingProduct, name: e.target.value})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Price (Taka)</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Price (Taka)</label>
                 <input 
                   type="number" required value={editingProduct.price}
                   onChange={e => setEditingProduct({...editingProduct, price: Number(e.target.value)})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Category</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Category</label>
                 <select 
                   value={editingProduct.category}
                   onChange={e => {
@@ -6118,7 +6628,7 @@ export default function AdminDashboard() {
                     }
                     setEditingProduct({...editingProduct, category: e.target.value});
                   }}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                 >
                   <option value="">Select Category</option>
                   <option value="Software">Software</option>
@@ -6134,11 +6644,11 @@ export default function AdminDashboard() {
                 </select>
               </div>
 
-              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50/50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700">
                 <div className="md:col-span-2 flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <Database className="w-4 h-4 text-indigo-600" />
-                    <span className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Size Settings</span>
+                    <Database className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <span className="text-[10px] font-black text-indigo-900 dark:text-indigo-100 uppercase tracking-widest">Size Settings</span>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input 
@@ -6147,105 +6657,105 @@ export default function AdminDashboard() {
                       checked={editingProduct.enableSizes}
                       onChange={e => setEditingProduct({...editingProduct, enableSizes: e.target.checked})}
                     />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-                    <span className="ml-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">Enable Sizes</span>
+                    <div className="w-9 h-5 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                    <span className="ml-2 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Enable Sizes</span>
                   </label>
                 </div>
                 
                 {editingProduct.enableSizes && (
                   <div className="md:col-span-2 space-y-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Available Sizes</label>
+                    <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Available Sizes</label>
                     <input 
                       type="text" 
                       value={editingProduct.availableSizes}
                       onChange={e => setEditingProduct({...editingProduct, availableSizes: e.target.value})}
-                      className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      className="w-full bg-white dark:bg-gray-900 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-white"
                       placeholder="e.g. S, M, L, XL, XXL (Comma separated)"
                     />
-                    <p className="text-[8px] text-gray-400 font-bold uppercase tracking-tight pl-1 italic">Enter sizes separated by commas</p>
+                    <p className="text-[8px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-tight pl-1 italic">Enter sizes separated by commas</p>
                   </div>
                 )}
               </div>
 
               {editingProduct.category === "Subscription" && (
                 <>
-                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100">
+                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50/30 dark:bg-indigo-900/10 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/20">
                     <div className="md:col-span-2 flex items-center gap-2 mb-2">
-                      <Clock className="w-4 h-4 text-indigo-600" />
-                      <span className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Subscription Settings</span>
+                      <Clock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                      <span className="text-[10px] font-black text-indigo-900 dark:text-indigo-100 uppercase tracking-widest">Subscription Settings</span>
                     </div>
                     
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Monthly Label</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Monthly Label</label>
                       <input 
                         type="text" value={editingProduct.subscriptionMonthlyText || ""}
                         onChange={e => setEditingProduct({...editingProduct, subscriptionMonthlyText: e.target.value})}
-                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        className="w-full bg-white dark:bg-gray-900 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-white"
                         placeholder="e.g. Monthly Plan"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Monthly Subtext</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Monthly Subtext</label>
                       <input 
                         type="text" value={editingProduct.subscriptionMonthlySubtext || ""}
                         onChange={e => setEditingProduct({...editingProduct, subscriptionMonthlySubtext: e.target.value})}
-                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        className="w-full bg-white dark:bg-gray-900 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-white"
                         placeholder="e.g. Access for 30 days"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Monthly Price</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Monthly Price</label>
                       <input 
                         type="number" value={editingProduct.subscriptionMonthlyPrice || ""}
                         onChange={e => setEditingProduct({...editingProduct, subscriptionMonthlyPrice: Number(e.target.value)})}
-                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold"
+                        className="w-full bg-white dark:bg-gray-900 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold dark:text-white"
                       />
                     </div>
-                    <div className="border-t border-indigo-100 md:col-span-2 my-2"></div>
+                    <div className="border-t border-indigo-100 dark:border-indigo-900/20 md:col-span-2 my-2"></div>
                     
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Yearly Label</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Yearly Label</label>
                       <input 
                         type="text" value={editingProduct.subscriptionYearlyText || ""}
                         onChange={e => setEditingProduct({...editingProduct, subscriptionYearlyText: e.target.value})}
-                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        className="w-full bg-white dark:bg-gray-900 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-white"
                         placeholder="e.g. Annual Savings"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Yearly Subtext</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Yearly Subtext</label>
                       <input 
                         type="text" value={editingProduct.subscriptionYearlySubtext || ""}
                         onChange={e => setEditingProduct({...editingProduct, subscriptionYearlySubtext: e.target.value})}
-                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        className="w-full bg-white dark:bg-gray-900 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-white"
                         placeholder="e.g. Best value for pros"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Yearly Price</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Yearly Price</label>
                       <input 
                         type="number" value={editingProduct.subscriptionYearlyPrice || ""}
                         onChange={e => setEditingProduct({...editingProduct, subscriptionYearlyPrice: Number(e.target.value)})}
-                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold"
+                        className="w-full bg-white dark:bg-gray-900 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold dark:text-white"
                       />
                     </div>
-                    <div className="border-t border-indigo-100 md:col-span-2 my-2"></div>
+                    <div className="border-t border-indigo-100 dark:border-indigo-900/20 md:col-span-2 my-2"></div>
 
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Lifetime Label</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Lifetime Label</label>
                       <input 
                         type="text" value={editingProduct.subscriptionLifetimeText || ""}
                         onChange={e => setEditingProduct({...editingProduct, subscriptionLifetimeText: e.target.value})}
-                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        className="w-full bg-white dark:bg-gray-900 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-white"
                         placeholder="e.g. Forever Deal"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Lifetime Subtext</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Lifetime Subtext</label>
                       <input 
                         type="text" value={editingProduct.subscriptionLifetimeSubtext || ""}
                         onChange={e => setEditingProduct({...editingProduct, subscriptionLifetimeSubtext: e.target.value})}
-                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        className="w-full bg-white dark:bg-gray-900 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-white"
                         placeholder="e.g. Own it for life"
                       />
                     </div>
@@ -6253,21 +6763,21 @@ export default function AdminDashboard() {
                 </>
               )}
               <div className="md:col-span-2 space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Description</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Description</label>
                 <textarea 
                   rows={3}
                   value={editingProduct.description ?? ""}
                   onChange={e => setEditingProduct({...editingProduct, description: e.target.value})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                 />
               </div>
               <div className="md:col-span-2 space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Main Image URL</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Main Image URL</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" value={editingProduct.imageUrl}
                     onChange={e => setEditingProduct({...editingProduct, imageUrl: e.target.value})}
-                    className="flex-grow bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="flex-grow bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                   />
                   <div className="relative">
                     <input 
@@ -6276,7 +6786,7 @@ export default function AdminDashboard() {
                       onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], "main", "edit")}
                       className="absolute inset-0 opacity-0 cursor-pointer"
                     />
-                    <button type="button" disabled={uploading} className="h-full px-4 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center gap-2 hover:bg-indigo-100 transition-all disabled:opacity-50">
+                    <button type="button" disabled={uploading} className="h-full px-4 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center gap-2 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-all disabled:opacity-50">
                       {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                       <span className="text-xs font-bold uppercase tracking-widest hidden sm:inline">{uploading ? "Uploading" : "Upload"}</span>
                     </button>
@@ -6284,22 +6794,22 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <div className="md:col-span-2 space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">YouTube Video URL</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">YouTube Video URL</label>
                 <input 
                   type="text" 
                   value={editingProduct.videoUrl || ""}
                   onChange={e => setEditingProduct({...editingProduct, videoUrl: e.target.value})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                   placeholder="https://www.youtube.com/watch?v=..."
                 />
               </div>
               <div className="md:col-span-1 space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Discount Price</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Discount Price</label>
                 <input 
                   type="number" 
                   value={editingProduct.discountPrice || 0}
                   onChange={e => setEditingProduct({...editingProduct, discountPrice: Number(e.target.value)})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                   placeholder="0.00"
                 />
               </div>
@@ -6311,17 +6821,17 @@ export default function AdminDashboard() {
                   className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
                   id="edit-discount-enabled"
                 />
-                <label htmlFor="edit-discount-enabled" className="text-xs font-bold text-gray-400 uppercase tracking-widest cursor-pointer">Enable Discount</label>
+                <label htmlFor="edit-discount-enabled" className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest cursor-pointer">Enable Discount</label>
               </div>
               <div className="md:col-span-2 space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Additional Images (comma separated)</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Additional Images (comma separated)</label>
                 <div className="flex gap-2">
                   <textarea 
                     rows={2}
                     value={editingProduct.additionalImageUrls || ""}
                     onChange={e => setEditingProduct({...editingProduct, additionalImageUrls: e.target.value})}
                     placeholder="url1, url2, url3..."
-                    className="flex-grow bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-xs"
+                    className="flex-grow bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-xs dark:text-white"
                   />
                   <div className="relative flex-shrink-0">
                     <input 
@@ -6330,30 +6840,30 @@ export default function AdminDashboard() {
                       onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], "additional", "edit")}
                       className="absolute inset-0 opacity-0 cursor-pointer"
                     />
-                    <button type="button" disabled={uploading} className="h-full px-4 bg-pink-50 text-pink-600 rounded-2xl flex items-center justify-center hover:bg-pink-100 transition-all disabled:opacity-50">
+                    <button type="button" disabled={uploading} className="h-full px-4 bg-pink-50 dark:bg-pink-900/20 text-pink-600 dark:text-pink-400 rounded-2xl flex items-center justify-center hover:bg-pink-100 dark:hover:bg-pink-900/30 transition-all disabled:opacity-50">
                       {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ImagePlus className="w-5 h-5" />}
                     </button>
                   </div>
                 </div>
               </div>
               <div className="md:col-span-2 space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Download URL</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Download URL</label>
                 <input 
                   type="text" value={editingProduct.fileUrl}
                   onChange={e => setEditingProduct({...editingProduct, fileUrl: e.target.value})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                 />
               </div>
               <div className="md:col-span-2 flex gap-4 pt-8">
                 <button 
                   type="button" onClick={() => setEditingProduct(null)}
-                  className="px-10 py-4 bg-gray-100 text-gray-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all active:scale-95"
+                  className="px-10 py-4 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 dark:hover:bg-gray-700 transition-all active:scale-95"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
-                  className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-200 active:scale-95 hover:-translate-y-0.5"
+                  className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-200 dark:shadow-none active:scale-95 hover:-translate-y-0.5"
                 >
                   Apply Changes
                 </button>
@@ -6369,29 +6879,29 @@ export default function AdminDashboard() {
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
+            className="bg-white dark:bg-gray-900 rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
           >
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Add Digital Product</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Add Digital Product</h2>
             <form onSubmit={handleAddProduct} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="md:col-span-2 space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Product Name</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Product Name</label>
                 <input 
                   type="text" required value={newProduct.name}
                   onChange={e => setNewProduct({...newProduct, name: e.target.value})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                   placeholder="e.g. Modern CRM Dashboard"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Price (Taka)</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Price (Taka)</label>
                 <input 
                   type="number" required value={newProduct.price}
                   onChange={e => setNewProduct({...newProduct, price: Number(e.target.value)})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Category</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Category</label>
                 <select 
                   value={newProduct.category}
                   onChange={e => {
@@ -6401,7 +6911,7 @@ export default function AdminDashboard() {
                     }
                     setNewProduct({...newProduct, category: e.target.value});
                   }}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                 >
                   <option value="">Select Category</option>
                   <option value="Software">Software</option>
@@ -6413,15 +6923,15 @@ export default function AdminDashboard() {
                     <option key={c.id} value={c.name}>{c.name}</option>
                   ))}
                   <option value="Subscription">Subscription</option>
-                  <option value="ADD_NEW" className="text-indigo-600 font-bold">+ Add New Category</option>
+                  <option value="ADD_NEW" className="text-indigo-600 dark:text-indigo-400 font-bold">+ Add New Category</option>
                 </select>
               </div>
 
-              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50/50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
                 <div className="md:col-span-2 flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <Database className="w-4 h-4 text-indigo-600" />
-                    <span className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Size Settings</span>
+                    <Database className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <span className="text-[10px] font-black text-indigo-900 dark:text-indigo-100 uppercase tracking-widest">Size Settings</span>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input 
@@ -6430,105 +6940,105 @@ export default function AdminDashboard() {
                       checked={newProduct.enableSizes}
                       onChange={e => setNewProduct({...newProduct, enableSizes: e.target.checked})}
                     />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-                    <span className="ml-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">Enable Sizes</span>
+                    <div className="w-9 h-5 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                    <span className="ml-2 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Enable Sizes</span>
                   </label>
                 </div>
                 
                 {newProduct.enableSizes && (
                   <div className="md:col-span-2 space-y-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Available Sizes</label>
+                    <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Available Sizes</label>
                     <input 
                       type="text" 
                       value={newProduct.availableSizes}
                       onChange={e => setNewProduct({...newProduct, availableSizes: e.target.value})}
-                      className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      className="w-full bg-white dark:bg-gray-950 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-white"
                       placeholder="e.g. S, M, L, XL, XXL (Comma separated)"
                     />
-                    <p className="text-[8px] text-gray-400 font-bold uppercase tracking-tight pl-1 italic">Enter sizes separated by commas</p>
+                    <p className="text-[8px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-tight pl-1 italic">Enter sizes separated by commas</p>
                   </div>
                 )}
               </div>
 
               {newProduct.category === "Subscription" && (
                 <>
-                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100">
+                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50/30 dark:bg-indigo-950/20 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900">
                     <div className="md:col-span-2 flex items-center gap-2 mb-2">
-                      <Clock className="w-4 h-4 text-indigo-600" />
-                      <span className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Subscription Settings</span>
+                      <Clock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                      <span className="text-[10px] font-black text-indigo-900 dark:text-indigo-100 uppercase tracking-widest">Subscription Settings</span>
                     </div>
                     
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Monthly Label</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Monthly Label</label>
                       <input 
                         type="text" value={newProduct.subscriptionMonthlyText}
                         onChange={e => setNewProduct({...newProduct, subscriptionMonthlyText: e.target.value})}
-                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        className="w-full bg-white dark:bg-gray-950 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-white"
                         placeholder="e.g. Monthly Plan"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Monthly Subtext</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Monthly Subtext</label>
                       <input 
                         type="text" value={newProduct.subscriptionMonthlySubtext}
                         onChange={e => setNewProduct({...newProduct, subscriptionMonthlySubtext: e.target.value})}
-                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        className="w-full bg-white dark:bg-gray-950 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-white"
                         placeholder="e.g. Access for 30 days"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Monthly Price</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Monthly Price</label>
                       <input 
                         type="number" value={newProduct.subscriptionMonthlyPrice || ""}
                         onChange={e => setNewProduct({...newProduct, subscriptionMonthlyPrice: Number(e.target.value)})}
-                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold"
+                        className="w-full bg-white dark:bg-gray-950 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold dark:text-white"
                       />
                     </div>
-                    <div className="border-t border-indigo-100 md:col-span-2 my-2"></div>
+                    <div className="border-t border-indigo-100 dark:border-indigo-900 md:col-span-2 my-2"></div>
                     
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Yearly Label</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Yearly Label</label>
                       <input 
                         type="text" value={newProduct.subscriptionYearlyText}
                         onChange={e => setNewProduct({...newProduct, subscriptionYearlyText: e.target.value})}
-                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        className="w-full bg-white dark:bg-gray-950 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-white"
                         placeholder="e.g. Annual Savings"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Yearly Subtext</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Yearly Subtext</label>
                       <input 
                         type="text" value={newProduct.subscriptionYearlySubtext}
                         onChange={e => setNewProduct({...newProduct, subscriptionYearlySubtext: e.target.value})}
-                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        className="w-full bg-white dark:bg-gray-950 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-white"
                         placeholder="e.g. Best value for pros"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Yearly Price</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Yearly Price</label>
                       <input 
                         type="number" value={newProduct.subscriptionYearlyPrice || ""}
                         onChange={e => setNewProduct({...newProduct, subscriptionYearlyPrice: Number(e.target.value)})}
-                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold"
+                        className="w-full bg-white dark:bg-gray-950 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold dark:text-white"
                       />
                     </div>
-                    <div className="border-t border-indigo-100 md:col-span-2 my-2"></div>
+                    <div className="border-t border-indigo-100 dark:border-indigo-900 md:col-span-2 my-2"></div>
 
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Lifetime Label</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Lifetime Label</label>
                       <input 
                         type="text" value={newProduct.subscriptionLifetimeText}
                         onChange={e => setNewProduct({...newProduct, subscriptionLifetimeText: e.target.value})}
-                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        className="w-full bg-white dark:bg-gray-950 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-white"
                         placeholder="e.g. Forever Deal"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Lifetime Subtext</label>
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Lifetime Subtext</label>
                       <input 
                         type="text" value={newProduct.subscriptionLifetimeSubtext}
                         onChange={e => setNewProduct({...newProduct, subscriptionLifetimeSubtext: e.target.value})}
-                        className="w-full bg-white border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        className="w-full bg-white dark:bg-gray-950 border-none rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-white"
                         placeholder="e.g. Own it for life"
                       />
                     </div>
@@ -6536,12 +7046,12 @@ export default function AdminDashboard() {
                 </>
               )}
               <div className="md:col-span-2 space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Main Image URL</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Main Image URL</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" value={newProduct.imageUrl}
                     onChange={e => setNewProduct({...newProduct, imageUrl: e.target.value})}
-                    className="flex-grow bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="flex-grow bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                     placeholder="https://images.unsplash.com/..."
                   />
                   <div className="relative">
@@ -6551,7 +7061,7 @@ export default function AdminDashboard() {
                       onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], "main", "new")}
                       className="absolute inset-0 opacity-0 cursor-pointer"
                     />
-                    <button type="button" disabled={uploading} className="h-full px-4 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center gap-2 hover:bg-indigo-100 transition-all disabled:opacity-50">
+                    <button type="button" disabled={uploading} className="h-full px-4 bg-indigo-50 dark:bg-indigo-900/10 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center gap-2 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-all disabled:opacity-50">
                       {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                       <span className="text-xs font-bold uppercase tracking-widest hidden sm:inline">{uploading ? "Uploading" : "Upload"}</span>
                     </button>
@@ -6559,22 +7069,22 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <div className="md:col-span-2 space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">YouTube Video URL</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">YouTube Video URL</label>
                 <input 
                   type="text" 
                   value={newProduct.videoUrl || ""}
                   onChange={e => setNewProduct({...newProduct, videoUrl: e.target.value})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                   placeholder="https://www.youtube.com/watch?v=..."
                 />
               </div>
               <div className="md:col-span-1 space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Discount Price</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Discount Price</label>
                 <input 
                   type="number" 
                   value={newProduct.discountPrice || 0}
                   onChange={e => setNewProduct({...newProduct, discountPrice: Number(e.target.value)})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                   placeholder="0.00"
                 />
               </div>
@@ -6583,20 +7093,20 @@ export default function AdminDashboard() {
                   type="checkbox" 
                   checked={newProduct.discountEnabled || false}
                   onChange={e => setNewProduct({...newProduct, discountEnabled: e.target.checked})}
-                  className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
+                  className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500 bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700"
                   id="new-discount-enabled"
                 />
-                <label htmlFor="new-discount-enabled" className="text-xs font-bold text-gray-400 uppercase tracking-widest cursor-pointer">Enable Discount</label>
+                <label htmlFor="new-discount-enabled" className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest cursor-pointer">Enable Discount</label>
               </div>
               <div className="md:col-span-2 space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Additional Images (comma separated)</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Additional Images (comma separated)</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
                     value={newProduct.additionalImageUrls}
                     onChange={e => setNewProduct({...newProduct, additionalImageUrls: e.target.value})}
                     placeholder="url1, url2, url3..."
-                    className="flex-grow bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="flex-grow bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white font-mono text-xs"
                   />
                   <div className="relative flex-shrink-0">
                     <input 
@@ -6605,31 +7115,31 @@ export default function AdminDashboard() {
                       onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], "additional", "new")}
                       className="absolute inset-0 opacity-0 cursor-pointer"
                     />
-                    <button type="button" disabled={uploading} className="h-full px-4 bg-pink-50 text-pink-600 rounded-2xl flex items-center justify-center hover:bg-pink-100 transition-all disabled:opacity-50">
+                    <button type="button" disabled={uploading} className="h-full px-4 bg-pink-50 dark:bg-pink-900/10 text-pink-600 dark:text-pink-400 rounded-2xl flex items-center justify-center hover:bg-pink-100 dark:hover:bg-pink-900/30 transition-all disabled:opacity-50">
                       {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ImagePlus className="w-5 h-5" />}
                     </button>
                   </div>
                 </div>
               </div>
               <div className="md:col-span-2 space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Download URL (Private)</label>
+                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Download URL (Private)</label>
                 <input 
                   type="text" value={newProduct.fileUrl}
                   onChange={e => setNewProduct({...newProduct, fileUrl: e.target.value})}
-                  className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                   placeholder="Link to secure file"
                 />
               </div>
               <div className="md:col-span-2 flex gap-4 pt-8">
                 <button 
                   type="button" onClick={() => setIsAdding(false)}
-                  className="px-10 py-4 bg-gray-100 text-gray-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all active:scale-95"
+                  className="px-10 py-4 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 dark:hover:bg-gray-700 transition-all active:scale-95"
                 >
                   Discard
                 </button>
                 <button 
                   type="submit" 
-                  className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-200 active:scale-95 hover:-translate-y-0.5"
+                  className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-200 dark:shadow-none active:scale-95 hover:-translate-y-0.5"
                 >
                   Save & Publish Product
                 </button>
@@ -6644,97 +7154,97 @@ export default function AdminDashboard() {
           <motion.div 
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white w-full max-w-md rounded-[32px] overflow-hidden shadow-2xl"
+            className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[32px] overflow-hidden shadow-2xl"
           >
-             <div className="p-8 border-b border-gray-50">
-               <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">Create Discount Coupon</h3>
-               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Set up a new discount code for your store</p>
+             <div className="p-8 border-b border-gray-50 dark:border-gray-800">
+               <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Create Discount Coupon</h3>
+               <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Set up a new discount code for your store</p>
              </div>
              
              <form onSubmit={handleAddCoupon} className="p-8 space-y-6">
                 <div className="space-y-4">
                   <div>
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Coupon Code</label>
+                    <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 block ml-1">Coupon Code</label>
                     <input 
                       type="text" 
                       required
                       placeholder="E.G. SAVE20"
                       value={newCoupon.code}
                       onChange={e => setNewCoupon({...newCoupon, code: e.target.value})}
-                      className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none dark:text-white"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Discount Type</label>
+                      <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 block ml-1">Discount Type</label>
                       <select 
                         value={newCoupon.type}
                         onChange={e => setNewCoupon({...newCoupon, type: e.target.value as any})}
-                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                        className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none dark:text-white"
                       >
                         <option value="percentage">Percentage (%)</option>
                         <option value="fixed">Fixed Amount (৳)</option>
                       </select>
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Value</label>
+                      <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 block ml-1">Value</label>
                       <input 
                         type="number" 
                         required
                         value={newCoupon.value}
                         onChange={e => setNewCoupon({...newCoupon, value: Number(e.target.value)})}
-                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                        className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono dark:text-white"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Assignee Bonus (%)</label>
+                      <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 block ml-1">Assignee Bonus (%)</label>
                       <input 
                         type="number" 
                         placeholder="Commission %"
                         value={newCoupon.bonusPercentage || 0}
                         onChange={e => setNewCoupon({...newCoupon, bonusPercentage: Number(e.target.value)})}
-                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                        className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono dark:text-white"
                       />
-                      <p className="text-[8px] text-gray-400 mt-1 ml-1 uppercase font-bold tracking-tight">Bonus from Net Sale.</p>
+                      <p className="text-[8px] text-gray-400 dark:text-gray-500 mt-1 ml-1 uppercase font-bold tracking-tight">Bonus from Net Sale.</p>
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Usage Limit</label>
+                      <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 block ml-1">Usage Limit</label>
                       <input 
                         type="number" 
                         placeholder="0 = Unlimited"
                         value={newCoupon.usageLimit || 0}
                         onChange={e => setNewCoupon({...newCoupon, usageLimit: Number(e.target.value)})}
-                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                        className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono dark:text-white"
                       />
-                      <p className="text-[8px] text-gray-400 mt-1 ml-1 uppercase font-bold tracking-tight">Max uses.</p>
+                      <p className="text-[8px] text-gray-400 dark:text-gray-500 mt-1 ml-1 uppercase font-bold tracking-tight">Max uses.</p>
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Expiry Date</label>
+                    <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 block ml-1">Expiry Date</label>
                     <input 
                       type="date" 
                       required
                       value={newCoupon.expiryDate}
                       onChange={e => setNewCoupon({...newCoupon, expiryDate: e.target.value})}
-                      className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none dark:text-white"
                     />
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Assign to Email (Optional)</label>
+                    <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 block ml-1">Assign to Email (Optional)</label>
                     <input 
                       type="email" 
                       placeholder="user@example.com"
                       value={newCoupon.assignedEmail}
                       onChange={e => setNewCoupon({...newCoupon, assignedEmail: e.target.value})}
-                      className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none dark:text-white"
                     />
-                    <p className="text-[8px] text-gray-400 mt-1 ml-1 uppercase font-bold tracking-tight">Only this user will be able to see and use this coupon.</p>
+                    <p className="text-[8px] text-gray-400 dark:text-gray-500 mt-1 ml-1 uppercase font-bold tracking-tight">Only this user will be able to see and use this coupon.</p>
                   </div>
                 </div>
 
@@ -6744,22 +7254,22 @@ export default function AdminDashboard() {
                     id="isCouponActiveNew"
                     checked={newCoupon.isActive}
                     onChange={e => setNewCoupon({...newCoupon, isActive: e.target.checked})}
-                    className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    className="w-4 h-4 rounded border-gray-300 dark:border-gray-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer bg-white dark:bg-gray-950"
                   />
-                  <label htmlFor="isCouponActiveNew" className="text-[10px] font-bold text-gray-600 uppercase tracking-widest cursor-pointer">Coupon is Active</label>
+                  <label htmlFor="isCouponActiveNew" className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-widest cursor-pointer">Coupon is Active</label>
                 </div>
 
                 <div className="flex gap-3 pt-4">
                   <button 
                     type="button"
                     onClick={() => setIsAddingCoupon(false)}
-                    className="flex-1 py-4 text-xs font-black text-gray-400 uppercase tracking-widest hover:bg-gray-50 rounded-2xl transition-all"
+                    className="flex-1 py-4 text-xs font-black text-gray-400 dark:text-gray-600 uppercase tracking-widest hover:bg-gray-50 dark:hover:bg-gray-800 rounded-2xl transition-all"
                   >
                     Cancel
                   </button>
                   <button 
                     type="submit"
-                    className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
+                    className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-95"
                   >
                     Save Coupon
                   </button>
@@ -6774,93 +7284,93 @@ export default function AdminDashboard() {
           <motion.div 
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white w-full max-w-md rounded-[32px] overflow-hidden shadow-2xl"
+            className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[32px] overflow-hidden shadow-2xl"
           >
-             <div className="p-8 border-b border-gray-50">
-               <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">Edit Discount Coupon</h3>
-               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Modify existing coupon details</p>
+             <div className="p-8 border-b border-gray-50 dark:border-gray-800">
+               <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Edit Discount Coupon</h3>
+               <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Modify existing coupon details</p>
              </div>
              
              <form onSubmit={handleUpdateCoupon} className="p-8 space-y-6">
                 <div className="space-y-4">
                   <div>
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Coupon Code</label>
+                    <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 block ml-1">Coupon Code</label>
                     <input 
                       type="text" 
                       required
                       placeholder="E.G. SAVE20"
                       value={editingCoupon.code}
                       onChange={e => setEditingCoupon({...editingCoupon, code: e.target.value})}
-                      className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none dark:text-white"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Discount Type</label>
+                      <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 block ml-1">Discount Type</label>
                       <select 
                         value={editingCoupon.type}
                         onChange={e => setEditingCoupon({...editingCoupon, type: e.target.value as any})}
-                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                        className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none dark:text-white"
                       >
                         <option value="percentage">Percentage (%)</option>
                         <option value="fixed">Fixed Amount (৳)</option>
                       </select>
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Value</label>
+                      <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 block ml-1">Value</label>
                       <input 
                         type="number" 
                         required
                         value={editingCoupon.value}
                         onChange={e => setEditingCoupon({...editingCoupon, value: Number(e.target.value)})}
-                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                        className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono dark:text-white"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Assignee Bonus (%)</label>
+                      <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 block ml-1">Assignee Bonus (%)</label>
                       <input 
                         type="number" 
                         placeholder="Commission %"
                         value={editingCoupon.bonusPercentage || 0}
                         onChange={e => setEditingCoupon({...editingCoupon, bonusPercentage: Number(e.target.value)})}
-                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                        className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono dark:text-white"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Usage Limit</label>
+                      <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 block ml-1">Usage Limit</label>
                       <input 
                         type="number" 
                         placeholder="0 = Unlimited"
                         value={editingCoupon.usageLimit || 0}
                         onChange={e => setEditingCoupon({...editingCoupon, usageLimit: Number(e.target.value)})}
-                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                        className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none font-mono dark:text-white"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Expiry Date</label>
+                    <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 block ml-1">Expiry Date</label>
                     <input 
                       type="date" 
                       required
                       value={editingCoupon.expiryDate}
                       onChange={e => setEditingCoupon({...editingCoupon, expiryDate: e.target.value})}
-                      className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none dark:text-white"
                     />
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Assign to Email (Optional)</label>
+                    <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5 block ml-1">Assign to Email (Optional)</label>
                     <input 
                       type="email" 
                       placeholder="user@example.com"
                       value={editingCoupon.assignedEmail || ""}
                       onChange={e => setEditingCoupon({...editingCoupon, assignedEmail: e.target.value})}
-                      className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none dark:text-white"
                     />
                   </div>
 
@@ -6870,9 +7380,9 @@ export default function AdminDashboard() {
                       id="isCouponActiveEdit"
                       checked={editingCoupon.isActive}
                       onChange={e => setEditingCoupon({...editingCoupon, isActive: e.target.checked})}
-                      className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      className="w-4 h-4 rounded border-gray-300 dark:border-gray-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer bg-white dark:bg-gray-950"
                     />
-                    <label htmlFor="isCouponActiveEdit" className="text-[10px] font-bold text-gray-600 uppercase tracking-widest cursor-pointer">Coupon is Active</label>
+                    <label htmlFor="isCouponActiveEdit" className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-widest cursor-pointer">Coupon is Active</label>
                   </div>
                 </div>
 
@@ -6880,13 +7390,13 @@ export default function AdminDashboard() {
                   <button 
                     type="button"
                     onClick={() => setEditingCoupon(null)}
-                    className="flex-1 py-4 text-xs font-black text-gray-400 uppercase tracking-widest hover:bg-gray-50 rounded-2xl transition-all"
+                    className="flex-1 py-4 text-xs font-black text-gray-400 dark:text-gray-600 uppercase tracking-widest hover:bg-gray-50 dark:hover:bg-gray-800 rounded-2xl transition-all"
                   >
                     Cancel
                   </button>
                   <button 
                     type="submit"
-                    className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
+                    className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-95"
                   >
                     Update Coupon
                   </button>
@@ -6894,6 +7404,16 @@ export default function AdminDashboard() {
              </form>
           </motion.div>
         </div>
+      )}
+        </div>
+      </div>
+      
+      {/* Mobile Sidebar Overlay */}
+      {siteSettings.adminLayout === "modern" && isMobileSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[45] lg:hidden transition-all duration-300"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
       )}
     </div>
   );

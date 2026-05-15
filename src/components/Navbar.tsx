@@ -6,6 +6,7 @@ import { ShoppingCart, User as UserIcon, LogOut, LayoutDashboard, Search, Trash2
 import { cn } from "../lib/utils";
 import { useSettings } from "../lib/SettingsContext";
 import { useCart } from "../lib/CartContext";
+import ThemeToggle from "./ThemeToggle";
 
 interface NavbarProps {
   user: User | null;
@@ -37,9 +38,9 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
 
   return (
     <>
-      <nav className="bg-white border-b border-gray-100 sticky top-0 z-50 w-full overflow-hidden">
+      <nav className="bg-white dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800 sticky top-0 z-50 w-full overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 sm:h-20 items-center gap-2 sm:gap-4">
+            <div className="flex justify-between h-16 sm:h-20 items-center gap-2 sm:gap-4 relative">
             <div className="flex items-center gap-2 sm:gap-6 shrink-0 min-w-0">
               <Link 
                 to="/" 
@@ -59,23 +60,36 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
                 <span className="truncate max-w-[150px] sm:max-w-none">{settings.siteName}</span>
               </Link>
               
+              {settings.showThemeToggle && settings.themeTogglePosition === 'header-left' && (
+                <ThemeToggle className="ml-2 hidden sm:flex" />
+              )}
+
               <form onSubmit={handleSearch} className="hidden md:flex relative">
                 <input 
                   type="text" 
                   placeholder="Search premium assets..." 
                   value={navSearch}
                   onChange={(e) => setNavSearch(e.target.value)}
-                  className="pl-10 pr-8 py-2.5 bg-gray-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 w-64 lg:w-96 transition-all font-medium"
+                  className="pl-10 pr-8 py-2.5 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 w-64 lg:w-96 transition-all font-medium dark:text-gray-100 dark:placeholder:text-gray-500"
                 />
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               </form>
             </div>
 
+            {settings.showThemeToggle && settings.themeTogglePosition === 'header-center' && (
+              <div className="absolute left-1/2 -translate-x-1/2 hidden lg:block">
+                <ThemeToggle />
+              </div>
+            )}
+
             <div className="flex items-center gap-0.5 sm:gap-4 shrink-0 min-w-0">
+              {settings.showThemeToggle && (settings.themeTogglePosition === 'header-right' || !settings.themeTogglePosition) && (
+                <ThemeToggle className="mr-0.5" />
+              )}
               {isAdmin && (
                 <Link 
                   to="/admin" 
-                  className="flex flex-col sm:flex-row items-center gap-0.5 px-1 sm:px-3 py-1.5 rounded-xl text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-transparent active:scale-95 shrink-0"
+                  className="flex flex-col sm:flex-row items-center gap-0.5 px-1 sm:px-3 py-1.5 rounded-xl text-gray-600 dark:text-gray-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all border border-transparent active:scale-95 shrink-0"
                   id="admin-link"
                 >
                   <LayoutDashboard className="w-4 h-4 text-indigo-500" />
@@ -85,9 +99,9 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
 
               {user ? (
                 <div className="flex items-center gap-0.5 sm:gap-6 shrink-0">
-                  <Link 
+                   <Link 
                     to="/my-products" 
-                    className="hidden lg:flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-600 hover:text-indigo-600 transition-colors"
+                    className="hidden lg:flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                   >
                     <ShoppingBag className="w-4 h-4" />
                     <span>My Assets</span>
@@ -98,10 +112,10 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
                       to="/profile"
                       className="flex items-center gap-2 group shrink-0"
                     >
-                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center group-hover:bg-indigo-600 group-hover:border-indigo-600 transition-all">
-                        <UserIcon className="w-4 h-4 text-indigo-600 group-hover:text-white transition-colors" />
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-900/40 flex items-center justify-center group-hover:bg-indigo-600 group-hover:border-indigo-600 transition-all">
+                        <UserIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400 group-hover:text-white dark:group-hover:text-white transition-colors" />
                       </div>
-                      <span className="text-sm font-bold text-gray-700 hidden xl:inline group-hover:text-indigo-600 transition-colors truncate max-w-[80px]">
+                      <span className="text-sm font-bold text-gray-700 dark:text-gray-300 hidden xl:inline group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate max-w-[80px]">
                         {user.displayName || user.email?.split('@')[0]}
                       </span>
                     </Link>
@@ -125,7 +139,7 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
               
               <button 
                 onClick={() => setIsCartOpen(true)}
-                className="relative p-2 sm:p-3 text-gray-700 hover:bg-gray-50 rounded-xl sm:rounded-2xl transition-all border border-transparent active:scale-95 shrink-0"
+                className="relative p-2 sm:p-3 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 rounded-xl sm:rounded-2xl transition-all border border-transparent active:scale-95 shrink-0"
               >
                 <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6" />
                 {totalItems > 0 && (
@@ -145,7 +159,7 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="md:hidden bg-white border-t border-gray-100 overflow-hidden"
+              className="md:hidden bg-white dark:bg-gray-950 border-t border-gray-100 dark:border-gray-800 overflow-hidden"
             >
               <div className="px-4 py-4">
                 <form onSubmit={handleSearch} className="relative">
@@ -154,7 +168,7 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
                     placeholder="Search premium digital assets..." 
                     value={navSearch}
                     onChange={(e) => setNavSearch(e.target.value)}
-                    className="w-full pl-11 pr-10 py-3.5 bg-gray-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 font-bold tracking-tight"
+                    className="w-full pl-11 pr-10 py-3.5 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 font-bold tracking-tight dark:text-gray-100 dark:placeholder:text-gray-500"
                     autoFocus
                   />
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -189,15 +203,15 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed top-0 right-0 bottom-0 w-full max-w-md bg-white z-[70] shadow-2xl flex flex-col"
+              className="fixed top-0 right-0 bottom-0 w-full max-w-md bg-white dark:bg-gray-950 z-[70] shadow-2xl flex flex-col"
             >
-              <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+              <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="p-1.5 bg-indigo-50 rounded-lg">
-                      <ShoppingCart className="w-4 h-4 text-indigo-600" />
+                    <div className="p-1.5 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
+                      <ShoppingCart className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                     </div>
-                    <h2 className="text-lg font-black text-gray-900 uppercase tracking-tight">Your Cart</h2>
-                    <span className="px-2 py-0.5 bg-gray-100 rounded-full text-[8px] font-black text-gray-500 uppercase tracking-[0.2em]">{totalItems}</span>
+                    <h2 className="text-lg font-black text-gray-900 dark:text-gray-100 uppercase tracking-tight">Your Cart</h2>
+                    <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-900 rounded-full text-[8px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-[0.2em]">{totalItems}</span>
                   </div>
                   <button 
                     onClick={() => setIsCartOpen(false)}
@@ -210,12 +224,12 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
               <div className="flex-grow overflow-y-auto p-4 sm:p-5 space-y-4 sm:space-y-5">
                 {items.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center space-y-3">
-                    <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gray-50 rounded-full flex items-center justify-center">
-                      <ShoppingBag className="w-6 h-6 sm:w-8 sm:h-8 text-gray-200" />
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gray-50 dark:bg-gray-900 rounded-full flex items-center justify-center">
+                      <ShoppingBag className="w-6 h-6 sm:w-8 sm:h-8 text-gray-200 dark:text-gray-800" />
                     </div>
                     <div className="space-y-1">
-                      <p className="font-black text-gray-900 text-sm uppercase tracking-tight">Your cart is empty</p>
-                      <p className="text-xs text-gray-400 font-medium">Add some premium assets to get started.</p>
+                      <p className="font-black text-gray-900 dark:text-gray-100 text-sm uppercase tracking-tight">Your cart is empty</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 font-medium">Add some premium assets to get started.</p>
                     </div>
                     <button 
                       onClick={() => setIsCartOpen(false)}
@@ -227,12 +241,12 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
                 ) : (
                   items.map(item => (
                     <div key={item.id} className="flex gap-3.5 group">
-                      <div className="w-14 h-14 rounded-xl bg-gray-50 overflow-hidden border border-gray-100 shrink-0">
+                      <div className="w-14 h-14 rounded-xl bg-gray-50 dark:bg-gray-900 overflow-hidden border border-gray-100 dark:border-gray-800 shrink-0">
                         <img src={item.imageUrl || "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=200&q=80"} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
                       </div>
                       <div className="flex-grow space-y-0.5">
                         <div className="flex justify-between items-start">
-                          <h3 className="font-black text-gray-900 text-[11px] sm:text-xs uppercase tracking-tight line-clamp-1">{item.name}</h3>
+                          <h3 className="font-black text-gray-900 dark:text-gray-100 text-[11px] sm:text-xs uppercase tracking-tight line-clamp-1">{item.name}</h3>
                           <button 
                             onClick={() => removeFromCart(item.id)}
                             className="p-1 text-gray-300 hover:text-red-500 transition-colors"
@@ -240,16 +254,16 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                        <p className="text-[9px] text-gray-400 font-black uppercase tracking-wider">{item.category}</p>
+                        <p className="text-[9px] text-gray-400 dark:text-gray-500 font-black uppercase tracking-wider">{item.category}</p>
                         {item.planName && (
-                          <span className="text-[8px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded-md font-black uppercase tracking-widest">
+                          <span className="text-[8px] bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded-md font-black uppercase tracking-widest">
                             {item.planName}
                           </span>
                         )}
                         <div className="flex items-center justify-between pt-2">
-                          <div className="text-indigo-600 font-black text-xs sm:text-sm">৳{item.price.toLocaleString()}</div>
+                          <div className="text-indigo-600 dark:text-indigo-400 font-black text-xs sm:text-sm">৳{item.price.toLocaleString()}</div>
                           
-                          <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-0.5 border border-gray-100">
+                          <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900 rounded-lg p-0.5 border border-gray-100 dark:border-gray-800">
                             <button 
                               onClick={() => updateQuantity(item.id, item.quantity - 1)}
                               className="p-1 hover:bg-white hover:shadow-sm rounded-md text-gray-400 hover:text-indigo-600 transition-all"
@@ -272,17 +286,17 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
               </div>
 
               {items.length > 0 && (
-                <div className="p-5 sm:p-6 border-t border-gray-100 bg-white space-y-4 sm:space-y-5">
+                <div className="p-5 sm:p-6 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-950 space-y-4 sm:space-y-5">
                   <div className="space-y-2">
                     <div className="flex justify-between items-center text-[10px] sm:text-xs">
-                      <span className="text-gray-400 font-black uppercase tracking-widest">Subtotal</span>
-                      <span className="text-gray-900 font-black">৳{totalPrice.toLocaleString()}</span>
+                      <span className="text-gray-400 dark:text-gray-500 font-black uppercase tracking-widest">Subtotal</span>
+                      <span className="text-gray-900 dark:text-gray-100 font-black tracking-tight">৳{totalPrice.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between items-center text-sm sm:text-base">
-                      <span className="text-gray-900 font-black uppercase tracking-tighter">Total Due</span>
+                      <span className="text-gray-900 dark:text-gray-100 font-black uppercase tracking-tighter">Total Due</span>
                       <div className="flex items-baseline gap-0.5">
-                        <span className="text-[10px] font-medium text-gray-400">৳</span>
-                        <span className="text-indigo-600 font-black text-xl sm:text-2xl tracking-tighter">
+                        <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">৳</span>
+                        <span className="text-indigo-600 dark:text-indigo-400 font-black text-xl sm:text-2xl tracking-tighter">
                           {totalPrice.toLocaleString()}
                         </span>
                       </div>
@@ -308,12 +322,12 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
       </AnimatePresence>
 
       {/* Mobile Bottom Navigation */}
-      <div className="sm:hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[94%] max-w-sm bg-white/95 backdrop-blur-2xl border border-indigo-100/30 rounded-[32px] shadow-[0_25px_60px_rgba(79,70,229,0.2)] flex items-center justify-around p-3 z-50">
+      <div className="sm:hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[94%] max-w-sm bg-white/95 dark:bg-gray-900/95 backdrop-blur-2xl border border-indigo-100/30 dark:border-indigo-900/10 rounded-[32px] shadow-[0_25px_60px_rgba(79,70,229,0.2)] dark:shadow-[0_25px_60px_rgba(0,0,0,0.4)] flex items-center justify-around p-3 z-50">
         <Link 
           to="/" 
           className={cn(
             "flex flex-col items-center gap-1.5 px-4 py-2 rounded-2xl transition-all duration-300",
-            location.pathname === "/" ? "text-indigo-600 bg-indigo-50/50 shadow-inner" : "text-gray-400 hover:text-indigo-400"
+            location.pathname === "/" ? "text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20 shadow-inner" : "text-gray-400 hover:text-indigo-400"
           )}
         >
           <Grid className="w-5 h-5 sm:w-5 sm:h-5" />
@@ -323,7 +337,7 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
           onClick={() => setIsSearchOpen(!isSearchOpen)}
           className={cn(
             "flex flex-col items-center gap-1.5 px-4 py-2 rounded-2xl transition-all duration-300",
-            isSearchOpen ? "text-indigo-600 bg-indigo-50/50 shadow-inner" : "text-gray-400 hover:text-indigo-400"
+            isSearchOpen ? "text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20 shadow-inner" : "text-gray-400 hover:text-indigo-400"
           )}
         >
           <Search className="w-5 h-5 sm:w-5 sm:h-5" />
@@ -333,7 +347,7 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
           to="/my-products" 
           className={cn(
             "flex flex-col items-center gap-1.5 px-4 py-2 rounded-2xl transition-all duration-300",
-            location.pathname === "/my-products" ? "text-indigo-600 bg-indigo-50/50 shadow-inner" : "text-gray-400 hover:text-indigo-400"
+            location.pathname === "/my-products" ? "text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20 shadow-inner" : "text-gray-400 hover:text-indigo-400"
           )}
         >
           <ShoppingBag className="w-5 h-5 sm:w-5 sm:h-5" />
@@ -343,7 +357,7 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
           to="/profile" 
           className={cn(
             "flex flex-col items-center gap-1.5 px-4 py-2 rounded-2xl transition-all duration-300",
-            location.pathname === "/profile" ? "text-indigo-600 bg-indigo-50/50 shadow-inner" : "text-gray-400 hover:text-indigo-400"
+            location.pathname === "/profile" ? "text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20 shadow-inner" : "text-gray-400 hover:text-indigo-400"
           )}
         >
           <UserIcon className="w-5 h-5 sm:w-5 sm:h-5" />
