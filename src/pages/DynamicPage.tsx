@@ -29,16 +29,16 @@ export default function DynamicPage() {
   }, [slug]);
 
   if (loading) return (
-    <div className="py-20 text-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+    <div className="py-20 text-center min-h-[60vh] flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 dark:border-indigo-400 mx-auto"></div>
     </div>
   );
 
   if (!page) return (
-    <div className="py-20 text-center space-y-4">
-      <h1 className="text-4xl font-bold text-gray-900">Page Not Found</h1>
-      <p className="text-gray-500">The page you are looking for does not exist.</p>
-      <Link to="/" className="inline-block bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold">
+    <div className="py-20 text-center space-y-4 min-h-[60vh] flex flex-col items-center justify-center">
+      <h1 className="text-4xl font-bold text-gray-900 dark:text-white transition-colors">Page Not Found</h1>
+      <p className="text-gray-500 dark:text-gray-400">The page you are looking for does not exist.</p>
+      <Link to="/" className="inline-block bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-indigo-700 transition-all">
         Back to Home
       </Link>
     </div>
@@ -48,22 +48,22 @@ export default function DynamicPage() {
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="max-w-4xl mx-auto space-y-12 pb-20"
+      className="max-w-4xl mx-auto space-y-8 sm:space-y-12 pb-20 px-4 sm:px-0"
     >
-      <Link to="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-indigo-600 transition-colors group">
+      <Link to="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors group">
         <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
         Back to Home
       </Link>
 
       <div className="space-y-4">
-        <h1 className="text-5xl font-black text-gray-900 leading-tight">{page.title}</h1>
-        <div className="flex items-center gap-2 text-gray-400 text-sm font-medium">
+        <h1 className="text-3xl sm:text-5xl font-black text-gray-900 dark:text-white leading-tight uppercase tracking-tighter transition-colors">{page.title}</h1>
+        <div className="flex items-center gap-2 text-gray-400 dark:text-gray-500 text-sm font-medium transition-colors">
           <Clock className="w-4 h-4" />
           Last updated: {page.updatedAt?.toDate().toLocaleDateString() || "Recently"}
         </div>
       </div>
 
-      <div className="prose prose-indigo max-w-none bg-gray-50 p-8 md:p-12 rounded-[2rem] border border-gray-100">
+      <div className="prose prose-indigo dark:prose-invert max-w-none bg-gray-50 dark:bg-gray-900/50 p-6 sm:p-12 rounded-[2rem] border border-gray-100 dark:border-gray-800 transition-colors">
         <Markdown>{page.content}</Markdown>
       </div>
     </motion.div>
