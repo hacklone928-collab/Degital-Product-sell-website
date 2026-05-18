@@ -173,5 +173,30 @@ service cloud.firestore {
       allow create, update: if true; // Allow guests and users to track presence
       allow delete: if true; // Sessions are short-lived
     }
+
+    // Chat System
+    match /chat_sessions/{sessionId} {
+      allow create: if true; 
+      allow read, list: if isModerator() || 
+                        (resource.data.userId == request.auth.uid) || 
+                        (sessionId == request.auth.uid);
+      allow update: if isModerator() || 
+                      (resource == null) || 
+                      (resource.data.userId == request.auth.uid) ||
+                      (resource.data.userId == null); // Allow guest updates
+      allow delete: if isAdmin();
+    }
+
+    match /chat_messages/{messageId} {
+      allow create: if true; 
+      allow read, list: if isModerator() || 
+                         (request.auth != null && (resource.data.sessionId == request.auth.uid || resource.data.senderId == request.auth.uid)) ||
+                         (resource.data.sessionId != null); // Allow access based on sessionId visibility
+      
+      allow update: if isModerator() || 
+                      (request.auth != null && resource.data.senderId == request.auth.uid) ||
+                      (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])); // Allow anyone in the chat to react
+      allow delete: if isModerator();
+    }
   }
 }

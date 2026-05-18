@@ -10,6 +10,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../lib/utils";
 import { useCart } from "../lib/CartContext";
 import { useSettings } from "../lib/SettingsContext";
+import { BD_DIVISIONS, BD_DISTRICTS, BD_UPAZILAS } from "../lib/bd-data";
+import { getCoordsForLocation } from "../lib/geo-utils";
 
 enum OperationType {
   CREATE = 'create',
@@ -125,6 +127,11 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
     email: user?.email || "",
     phone: "",
     address: "",
+    division: "",
+    district: "",
+    upazila: "",
+    union: "",
+    village: "",
   });
 
   useEffect(() => {
@@ -139,7 +146,12 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
               name: data.name || user.displayName || prev.name,
               email: user.email || prev.email,
               phone: data.phoneNumber || prev.phone,
-              address: data.address || prev.address
+              address: data.address || prev.address,
+              division: data.division || prev.division,
+              district: data.district || prev.district,
+              upazila: data.upazila || prev.upazila,
+              union: data.union || prev.union,
+              village: data.village || prev.village
             }));
           } else {
             setCustomerInfo(prev => ({
@@ -379,8 +391,12 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
             </div>
             <div className="col-span-2">
               <div className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Delivery Address</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed font-medium bg-gray-50 dark:bg-gray-950 p-3 rounded-xl border border-gray-100 dark:border-gray-800">
-                {customerInfo.address || "No address provided"}
+              <div className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed font-medium bg-gray-50 dark:bg-gray-950 p-3 rounded-xl border border-gray-100 dark:border-gray-800 space-y-1">
+                {customerInfo.village && <p><span className="font-bold">Village:</span> {customerInfo.village}</p>}
+                {customerInfo.union && <p><span className="font-bold">Union:</span> {customerInfo.union}</p>}
+                <p><span className="font-bold">Area:</span> {customerInfo.upazila}, {customerInfo.district}</p>
+                <p><span className="font-bold">Division:</span> {customerInfo.division}</p>
+                {customerInfo.address && <p className="mt-2 text-[10px] italic border-t border-gray-200 dark:border-gray-800 pt-1 text-gray-500">{customerInfo.address}</p>}
               </div>
             </div>
           </div>
@@ -635,14 +651,72 @@ return (
                 />
               </div>
             </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Division</label>
+                <select 
+                  value={customerInfo.division}
+                  onChange={(e) => setCustomerInfo({...customerInfo, division: e.target.value, district: "", upazila: ""})}
+                  className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100"
+                >
+                  <option value="">Select Division</option>
+                  {BD_DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">District</label>
+                <select 
+                  value={customerInfo.district}
+                  disabled={!customerInfo.division}
+                  onChange={(e) => setCustomerInfo({...customerInfo, district: e.target.value, upazila: ""})}
+                  className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100 disabled:opacity-50"
+                >
+                  <option value="">Select District</option>
+                  {customerInfo.division && BD_DISTRICTS[customerInfo.division]?.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Upazila</label>
+                <select 
+                  value={customerInfo.upazila}
+                  disabled={!customerInfo.district}
+                  onChange={(e) => setCustomerInfo({...customerInfo, upazila: e.target.value})}
+                  className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100 disabled:opacity-50"
+                >
+                  <option value="">Select Upazila</option>
+                  {customerInfo.district && (BD_UPAZILAS[customerInfo.district] || []).map(u => <option key={u} value={u}>{u}</option>)}
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Union / Area</label>
+                <input 
+                  type="text" 
+                  value={customerInfo.union}
+                  onChange={(e) => setCustomerInfo({...customerInfo, union: e.target.value})}
+                  className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100"
+                  placeholder="Your Union"
+                />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Village / Local Area</label>
+                <input 
+                  type="text" 
+                  value={customerInfo.village}
+                  onChange={(e) => setCustomerInfo({...customerInfo, village: e.target.value})}
+                  className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100"
+                  placeholder="Village name, House No, Road No"
+                />
+              </div>
+            </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Delivery Address / Notes</label>
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Additional Notes</label>
               <textarea 
                 rows={2}
                 value={customerInfo.address}
                 onChange={(e) => setCustomerInfo({...customerInfo, address: e.target.value})}
                 className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium resize-none dark:text-gray-100"
-                placeholder="Village, Post Office, Upazila, District (Required for physical items)"
+                placeholder="Any special instructions for delivery"
               />
             </div>
           </div>
@@ -824,14 +898,16 @@ return (
   );
 }
 
-function CODForm({ products, userId, customerInfo, subtotal, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, subtotal: number, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
+function CODForm({ products, userId, customerInfo, subtotal, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; division: string; district: string; upazila: string; union: string; village: string; }, subtotal: number, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
   const navigate = useNavigate();
+  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerInfo.name || !customerInfo.address || !customerInfo.phone) {
-      alert("Please enter your name, phone number and delivery address.");
+    setError(null);
+    if (!customerInfo.name || !customerInfo.phone || !customerInfo.division || !customerInfo.district) {
+      setError("Please enter your name, phone number, and complete the address selection.");
       return;
     }
     setIsLoading(true);
@@ -845,6 +921,8 @@ function CODForm({ products, userId, customerInfo, subtotal, amount, appliedCoup
         quantity: p.quantity
       }));
 
+      const locationCoords = getCoordsForLocation(customerInfo.district, customerInfo.division);
+
       const orderRef = await addDoc(collection(db, "orders"), {
         userId,
         productIds: products.map(p => p.id),
@@ -854,6 +932,13 @@ function CODForm({ products, userId, customerInfo, subtotal, amount, appliedCoup
         customerName: customerInfo.name,
         customerPhone: customerInfo.phone,
         deliveryAddress: customerInfo.address,
+        division: customerInfo.division,
+        district: customerInfo.district,
+        upazila: customerInfo.upazila,
+        union: customerInfo.union,
+        village: customerInfo.village,
+        lat: locationCoords.lat,
+        lng: locationCoords.lng,
         paymentMethod: "cod",
         status: "pending",
         amount: subtotal,
@@ -869,7 +954,7 @@ function CODForm({ products, userId, customerInfo, subtotal, amount, appliedCoup
       onSuccess?.(orderRef.id);
     } catch (error) {
       console.error("COD Error:", error);
-      alert("Failed to place order. " + (error instanceof Error ? error.message : ""));
+      setError("Failed to place order. " + (error instanceof Error ? error.message : ""));
     } finally {
       setIsLoading(false);
     }
@@ -888,6 +973,12 @@ function CODForm({ products, userId, customerInfo, subtotal, amount, appliedCoup
           You will pay with cash when your product is delivered. Please ensure the delivery address provided above is accurate.
         </p>
       </div>
+      {error && (
+        <div className="p-3 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold border border-red-100 dark:border-red-900/30 flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse shrink-0"></div>
+          {error}
+        </div>
+      )}
       <button
         type="button"
         onClick={handleSubmit}
@@ -900,7 +991,7 @@ function CODForm({ products, userId, customerInfo, subtotal, amount, appliedCoup
   );
 }
 
-function StripeForm({ products, userId, customerInfo, subtotal, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, subtotal: number, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
+function StripeForm({ products, userId, customerInfo, subtotal, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; division: string; district: string; upazila: string; union: string; village: string; }, subtotal: number, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
   const productIds = products.map(p => p.id);
   const stripe = useStripe();
   const elements = useElements();
@@ -912,8 +1003,8 @@ function StripeForm({ products, userId, customerInfo, subtotal, amount, appliedC
     e.preventDefault();
     if (!stripe || !elements) return;
 
-    if (!customerInfo.name || !customerInfo.address || !customerInfo.phone) {
-      setMessage("Please enter your name, phone number and delivery address.");
+    if (!customerInfo.name || !customerInfo.phone || !customerInfo.division || !customerInfo.district) {
+      setMessage("Please enter your name, phone number and complete your address.");
       return;
     }
 
@@ -939,6 +1030,8 @@ function StripeForm({ products, userId, customerInfo, subtotal, amount, appliedC
           quantity: p.quantity
         }));
 
+        const locationCoords = getCoordsForLocation(customerInfo.district, customerInfo.division);
+
         const orderRef = await addDoc(collection(db, "orders"), {
           userId,
           productIds,
@@ -948,6 +1041,13 @@ function StripeForm({ products, userId, customerInfo, subtotal, amount, appliedC
           customerName: customerInfo.name,
           customerPhone: customerInfo.phone,
           deliveryAddress: customerInfo.address,
+          division: customerInfo.division,
+          district: customerInfo.district,
+          upazila: customerInfo.upazila,
+          union: customerInfo.union,
+          village: customerInfo.village,
+          lat: locationCoords.lat,
+          lng: locationCoords.lng,
           status: "completed",
           amount: subtotal,
           grossAmount: subtotal,
@@ -988,7 +1088,7 @@ function StripeForm({ products, userId, customerInfo, subtotal, amount, appliedC
   );
 }
 
-function BinanceForm({ products, userId, customerInfo, subtotal, amount, amountUSD, usdRate, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, subtotal: number, amount: number, amountUSD: number, usdRate: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
+function BinanceForm({ products, userId, customerInfo, subtotal, amount, amountUSD, usdRate, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; division: string; district: string; upazila: string; union: string; village: string; }, subtotal: number, amount: number, amountUSD: number, usdRate: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
   const { settings } = useSettings();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -1003,8 +1103,8 @@ function BinanceForm({ products, userId, customerInfo, subtotal, amount, amountU
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerInfo.name || !customerInfo.address || !customerInfo.phone) {
-      setError("Please fill your Full Name, Phone Number, and Address in the section above first.");
+    if (!customerInfo.name || !customerInfo.phone || !customerInfo.division || !customerInfo.district) {
+      setError("Please fill your Full Name, Phone Number, and Complete Address in the section above first.");
       return;
     }
     if (!transactionId) {
@@ -1022,6 +1122,8 @@ function BinanceForm({ products, userId, customerInfo, subtotal, amount, amountU
         quantity: p.quantity
       }));
 
+      const locationCoords = getCoordsForLocation(customerInfo.district, customerInfo.division);
+
       const orderRef = await addDoc(collection(db, "orders"), {
         userId,
         productIds: products.map(p => p.id),
@@ -1031,6 +1133,13 @@ function BinanceForm({ products, userId, customerInfo, subtotal, amount, amountU
         customerName: customerInfo.name,
         customerPhone: customerInfo.phone,
         deliveryAddress: customerInfo.address,
+        division: customerInfo.division,
+        district: customerInfo.district,
+        upazila: customerInfo.upazila,
+        union: customerInfo.union,
+        village: customerInfo.village,
+        lat: locationCoords.lat,
+        lng: locationCoords.lng,
         transactionId: transactionId,
         paymentMethod: "binance",
         status: "pending",
@@ -1145,7 +1254,7 @@ function BinanceForm({ products, userId, customerInfo, subtotal, amount, amountU
   );
 }
 
-function PayoneerForm({ products, userId, customerInfo, subtotal, amount, amountUSD, usdRate, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, subtotal: number, amount: number, amountUSD: number, usdRate: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
+function PayoneerForm({ products, userId, customerInfo, subtotal, amount, amountUSD, usdRate, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; division: string; district: string; upazila: string; union: string; village: string; }, subtotal: number, amount: number, amountUSD: number, usdRate: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
   const { settings } = useSettings();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -1160,8 +1269,8 @@ function PayoneerForm({ products, userId, customerInfo, subtotal, amount, amount
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerInfo.name || !customerInfo.address || !customerInfo.phone) {
-      setError("Please fill your Full Name, Phone Number, and Address in the section above first.");
+    if (!customerInfo.name || !customerInfo.phone || !customerInfo.division || !customerInfo.district) {
+      setError("Please fill your Full Name, Phone Number, and Complete Address in the section above first.");
       return;
     }
     if (!transactionId) {
@@ -1179,6 +1288,8 @@ function PayoneerForm({ products, userId, customerInfo, subtotal, amount, amount
         quantity: p.quantity
       }));
 
+      const locationCoords = getCoordsForLocation(customerInfo.district, customerInfo.division);
+
       const orderRef = await addDoc(collection(db, "orders"), {
         userId,
         productIds: products.map(p => p.id),
@@ -1188,6 +1299,13 @@ function PayoneerForm({ products, userId, customerInfo, subtotal, amount, amount
         customerName: customerInfo.name,
         customerPhone: customerInfo.phone,
         deliveryAddress: customerInfo.address,
+        division: customerInfo.division,
+        district: customerInfo.district,
+        upazila: customerInfo.upazila,
+        union: customerInfo.union,
+        village: customerInfo.village,
+        lat: locationCoords.lat,
+        lng: locationCoords.lng,
         transactionId: transactionId,
         paymentMethod: "payoneer",
         status: "pending",
@@ -1293,7 +1411,7 @@ function PayoneerForm({ products, userId, customerInfo, subtotal, amount, amount
   );
 }
 
-function LocalForm({ products, userId, customerInfo, subtotal, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; }, subtotal: number, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
+function LocalForm({ products, userId, customerInfo, subtotal, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; division: string; district: string; upazila: string; union: string; village: string; }, subtotal: number, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
   const { settings } = useSettings();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -1318,8 +1436,8 @@ function LocalForm({ products, userId, customerInfo, subtotal, amount, appliedCo
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!customerInfo.name || !customerInfo.address || !customerInfo.phone) {
-      setError("Please fill your Full Name, Phone Number, and Address in the section above first.");
+    if (!customerInfo.name || !customerInfo.phone || !customerInfo.division || !customerInfo.district) {
+      setError("Please fill your Full Name, Phone Number, and Complete Address in the section above first.");
       return;
     }
     if (!phone || !transactionId) {
@@ -1337,6 +1455,8 @@ function LocalForm({ products, userId, customerInfo, subtotal, amount, appliedCo
         quantity: p.quantity
       }));
 
+      const locationCoords = getCoordsForLocation(customerInfo.district, customerInfo.division);
+
       const orderRef = await addDoc(collection(db, "orders"), {
         userId,
         productIds: products.map(p => p.id),
@@ -1347,6 +1467,13 @@ function LocalForm({ products, userId, customerInfo, subtotal, amount, appliedCo
         customerPhone: customerInfo.phone, // Phone from basic data
         paymentPhone: phone, // Phone from payment details
         deliveryAddress: customerInfo.address,
+        division: customerInfo.division,
+        district: customerInfo.district,
+        upazila: customerInfo.upazila,
+        union: customerInfo.union,
+        village: customerInfo.village,
+        lat: locationCoords.lat,
+        lng: locationCoords.lng,
         transactionId: transactionId,
         paymentMethod: selectedMethod,
         status: "pending", // Set to pending for manual confirmation

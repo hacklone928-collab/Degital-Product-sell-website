@@ -2,5 +2,5 @@
   "name": "Remix: DigiVault: Premium Digital Marketplace",
   "description": "A high-performance marketplace for premium digital assets, software, and plugins with secure expiring download links.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

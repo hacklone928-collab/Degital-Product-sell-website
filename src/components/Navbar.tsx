@@ -215,7 +215,7 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
                   </div>
                   <button 
                     onClick={() => setIsCartOpen(false)}
-                    className="p-1.5 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-900"
+                    className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-900 rounded-full transition-colors text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -266,14 +266,14 @@ export default function Navbar({ user, isAdmin }: NavbarProps) {
                           <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900 rounded-lg p-0.5 border border-gray-100 dark:border-gray-800">
                             <button 
                               onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                              className="p-1 hover:bg-white hover:shadow-sm rounded-md text-gray-400 hover:text-indigo-600 transition-all"
+                              className="p-1 hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm dark:hover:shadow-none rounded-md text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all"
                             >
                               <Minus className="w-3 h-3" />
                             </button>
-                            <span className="text-[10px] font-black text-gray-900 min-w-[14px] text-center">{item.quantity}</span>
+                            <span className="text-[10px] font-black text-gray-900 dark:text-gray-100 min-w-[14px] text-center">{item.quantity}</span>
                             <button 
                               onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                              className="p-1 hover:bg-white hover:shadow-sm rounded-md text-gray-400 hover:text-indigo-600 transition-all"
+                              className="p-1 hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm dark:hover:shadow-none rounded-md text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all"
                             >
                               <Plus className="w-3 h-3" />
                             </button>

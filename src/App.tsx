@@ -26,6 +26,7 @@ import Navbar from "./components/Navbar";
 import ThemeToggle from "./components/ThemeToggle";
 import { cn } from "./lib/utils";
 import ScrollToTop from "./components/ScrollToTop";
+import FloatingChat from "./components/FloatingChat";
 
 import { SettingsProvider, useSettings } from "./lib/SettingsContext";
 import { CartProvider } from "./lib/CartContext";
@@ -369,6 +370,7 @@ function AppContent() {
               </Routes>
             </div>
             <Footer />
+            <FloatingChat />
           </motion.div>
         )}
       </AnimatePresence>

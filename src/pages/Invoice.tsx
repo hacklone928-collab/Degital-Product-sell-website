@@ -158,9 +158,13 @@ export default function Invoice() {
                   {order.deliveryAddress && (
                     <div className="mt-4 pt-4 border-t border-gray-50 dark:border-gray-800">
                       <h5 className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Delivery Address</h5>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed max-w-[280px]">
-                        {order.deliveryAddress}
-                      </p>
+                      <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400 leading-relaxed max-w-[280px]">
+                        {order.village && <p><span className="font-bold text-gray-900 dark:text-gray-200">Village:</span> {order.village}</p>}
+                        {order.union && <p><span className="font-bold text-gray-900 dark:text-gray-200">Union:</span> {order.union}</p>}
+                        <p><span className="font-bold text-gray-900 dark:text-gray-200">Area:</span> {order.upazila}, {order.district}</p>
+                        <p><span className="font-bold text-gray-900 dark:text-gray-200">Division:</span> {order.division}</p>
+                        {order.deliveryAddress !== "N/A" && <p className="mt-2 text-xs italic">{order.deliveryAddress}</p>}
+                      </div>
                     </div>
                   )}
                 </div>

@@ -56,6 +56,13 @@
         "paymentIntentId": { "type": "string" },
         "downloadToken": { "type": "string" },
         "licenseKey": { "type": "string" },
+        "division": { "type": "string" },
+        "district": { "type": "string" },
+        "upazila": { "type": "string" },
+        "union": { "type": "string" },
+        "village": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "productId", "status", "amount", "netAmount"]
@@ -95,6 +102,18 @@
         "cartTextColor": { "type": "string" },
         "viewTextColor": { "type": "string" },
         "buyTextColor": { "type": "string" },
+        "chatAiEnabled": { "type": "boolean" },
+        "chatAiSystemPrompt": { "type": "string", "description": "Custom system instructions for the AI Support bot" },
+        "chatWelcomeMessage": { "type": "string" },
+        "chatHeaderTitle": { "type": "string", "description": "Title text at the top of the chat box" },
+        "chatHeaderSubtitle": { "type": "string", "description": "Subtitle text at the top of the chat box" },
+        "chatStartTitle": { "type": "string", "description": "Title shown before chat starts" },
+        "chatStartSubtitle": { "type": "string", "description": "Subtitle shown before chat starts" },
+        "chatStartButtonText": { "type": "string", "description": "Text for the start chat button" },
+        "chatPoweredByText": { "type": "string", "description": "Branding text at the bottom of the chat box" },
+        "chatInputPlaceholder": { "type": "string", "description": "Placeholder text for the chat input field" },
+        "refundPolicy": { "type": "string" },
+        "paymentMethods": { "type": "string" },
         "showThemeToggle": { "type": "boolean", "description": "Whether to show the Night Mode toggle button to users" }
       },
       "required": ["siteName"]
@@ -194,9 +213,72 @@
         "path": { "type": "string" }
       },
       "required": ["lastSeen", "path"]
+    },
+    "ChatSession": {
+      "title": "Chat Session",
+      "description": "A conversation between a user/guest and support",
+      "type": "object",
+      "properties": {
+        "userId": { "type": ["string", "null"] },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "solved", "blocked"] },
+        "isPinned": { "type": "boolean" },
+        "isArchived": { "type": "boolean" },
+        "lastMessage": { "type": "string" },
+        "lastTimestamp": { "type": "string", "format": "date-time" },
+        "aiEnabled": { "type": "boolean" },
+        "adminId": { "type": ["string", "null"] },
+        "unreadCount": { "type": "number" },
+        "typingStatus": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userName", "status", "createdAt"]
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "Individual message in a chat session",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderType": { "type": "string", "enum": ["user", "admin", "ai"] },
+        "text": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "isDeleted": { "type": "boolean" },
+        "reactions": { "type": "object", "description": "Map of emoji to count or userIds" },
+        "productCard": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "price": { "type": "number" },
+            "imageUrl": { "type": "string" }
+          }
+        },
+        "replyTo": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "text": { "type": "string" },
+            "senderType": { "type": "string" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "seen": { "type": "boolean" }
+      },
+      "required": ["sessionId", "senderId", "senderType", "createdAt"]
     }
   },
   "firestore": {
+    "/chat_sessions/{sessionId}": {
+      "schema": "ChatSession",
+      "description": "Chat conversations"
+    },
+    "/chat_messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Messages within chat sessions"
+    },
     "/active_sessions/{sessionId}": {
       "schema": "ActiveSession",
       "description": "Real-time user presence tracking"

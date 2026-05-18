@@ -2,11 +2,13 @@ import React, { useState, useEffect } from "react";
 import { db, storage, auth } from "../lib/firebase";
 import { collection, addDoc, getDocs, deleteDoc, doc, setDoc, getDoc, serverTimestamp, updateDoc, query, where, increment, onSnapshot, orderBy, limit, collectionGroup } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { Plus, Package, Users, DollarSign, Trash2, Edit, Star, Database, Settings as SettingsIcon, Save, ShoppingBag, Clock, CheckCircle, Copy, Link as LinkIcon, Inbox, Mail, Search, ShieldCheck, TrendingUp, Calendar, Eye, EyeOff, ExternalLink, ImagePlus, Upload, Loader2, Phone, Ticket, Facebook, Twitter, Instagram, Youtube, Linkedin, Github, Share2, Send, Music, Pin, ChevronLeft, ChevronRight, Ban, UserX, FileText, MessageSquare, Menu, X, Moon, Sun, Sparkles, CloudSun, Zap, Mountain } from "lucide-react";
+import { Plus, Package, Users, DollarSign, Trash2, Edit, Star, Database, Settings as SettingsIcon, Save, ShoppingBag, Clock, CheckCircle, Copy, Link as LinkIcon, Inbox, Mail, Search, ShieldCheck, TrendingUp, Calendar, Eye, EyeOff, ExternalLink, ImagePlus, Upload, Loader2, Phone, Ticket, Facebook, Twitter, Instagram, Youtube, Linkedin, Github, Share2, Send, Music, Pin, MapPin, ChevronLeft, ChevronRight, Ban, UserX, FileText, MessageSquare, Menu, X, Moon, Sun, Sparkles, CloudSun, Zap, Mountain, MessageCircle, Bot } from "lucide-react";
 import { motion } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "../lib/utils";
 import ThemeToggle from "../components/ThemeToggle";
+import OrderMap from "../components/OrderMap";
+import AdminChatPanel from "../components/AdminChatPanel";
 import { useSettings } from "../lib/SettingsContext";
 import { useTheme } from "../lib/ThemeContext";
 import { 
@@ -72,7 +74,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const { settings: initialGlobalSettings } = useSettings();
   const { theme } = useTheme();
-  const [activeTab, setActiveTab] = useState<"products" | "settings" | "orders" | "pages" | "tickets" | "categories" | "coupons" | "withdrawals" | "users" | "analytics" | "logs" | "reviews">("analytics");
+  const [activeTab, setActiveTab] = useState<"products" | "settings" | "orders" | "pages" | "tickets" | "categories" | "coupons" | "withdrawals" | "users" | "analytics" | "logs" | "reviews" | "order-map" | "live-chat">("analytics");
   const [revenueTimeframe, setRevenueTimeframe] = useState<"daily" | "weekly" | "monthly">("daily");
   const [datePreset, setDatePreset] = useState<"today" | "yesterday" | "last7" | "last30" | "thisMonth" | "thisYear" | "custom">("thisMonth");
   const [selectedCalendarMonth, setSelectedCalendarMonth] = useState(new Date());
@@ -238,6 +240,18 @@ export default function AdminDashboard() {
       loadingSubtitle: "Syncing Workspace",
       loadingStyle: "modern",
       adminLayout: "classic",
+      chatAiEnabled: true,
+      chatAiSystemPrompt: "You are a professional customer support assistant.",
+      chatWelcomeMessage: "Hello! How can we help you today?",
+      chatHeaderTitle: "Smart AI Support",
+      chatHeaderSubtitle: "Online",
+      chatStartTitle: "Start a Conversation",
+      chatStartSubtitle: "Our AI and human experts are ready to help you with anything.",
+      chatStartButtonText: "Start Chat Now",
+      chatPoweredByText: "Powered by Gemini AI",
+      chatInputPlaceholder: "Ask the AI or Support...",
+      refundPolicy: "Standard 7-day refund policy applies to digital items if not downloaded.",
+      paymentMethods: "We accept Stripe, Bkash, Nagad, and Rocket.",
       showThemeToggle: true,
       themeToggleStyle: "classic" as "classic" | "minimal" | "ios" | "glass" | "creative" | "glow" | "landscape",
       themeTogglePosition: "header-right" as "header-left" | "header-center" | "header-right" | "profile-page",
@@ -320,6 +334,8 @@ export default function AdminDashboard() {
 
   const tabs = [
     { id: "analytics", label: "Analytics", icon: TrendingUp },
+    { id: "live-chat", label: "Live Support", icon: MessageCircle },
+    { id: "order-map", label: "Order Map", icon: MapPin },
     { id: "products", label: "Inventory", icon: Package },
     { id: "orders", label: "Sales", icon: ShoppingBag },
     { id: "users", label: "User Management", icon: Users },
@@ -337,6 +353,8 @@ export default function AdminDashboard() {
     // Default fallback roles if not set in database
     const defaults: Record<string, string[]> = {
       analytics: ["super_admin", "admin", "moderator"],
+      "live-chat": ["super_admin", "admin", "moderator"],
+      "order-map": ["super_admin", "admin", "moderator"],
       products: ["super_admin", "admin", "moderator"],
       orders: ["super_admin", "admin", "moderator"],
       users: ["super_admin", "admin"],
@@ -2353,7 +2371,15 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {activeTab === "analytics" ? (
+        {activeTab === "order-map" ? (
+          <section className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+             <OrderMap />
+          </section>
+        ) : activeTab === "live-chat" ? (
+          <section className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+             <AdminChatPanel />
+          </section>
+        ) : activeTab === "analytics" ? (
           <section className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
             {/* Professional Analytics Header */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-white dark:bg-gray-950 p-6 sm:p-10 rounded-3xl sm:rounded-[40px] border border-gray-100 dark:border-gray-800 shadow-sm relative overflow-hidden">
@@ -3853,10 +3879,10 @@ export default function AdminDashboard() {
                               <div className="flex flex-col">
                                 <div className="flex items-center gap-2">
                                   <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 truncate">{o.customerEmail || o.email}</span>
-                                  {o.deliveryAddress && (
-                                    <span className="flex items-center gap-0.5 text-[8px] font-black bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 px-1 rounded uppercase tracking-tighter">
-                                      <ShoppingBag className="w-2 h-2" />
-                                      Details
+                                  {o.district && (
+                                    <span className="flex items-center gap-1 text-[8px] font-black bg-indigo-50 dark:bg-indigo-900/10 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded uppercase tracking-tighter border border-indigo-100/50 dark:border-indigo-800/30">
+                                      <MapPin className="w-2.5 h-2.5" />
+                                      {o.upazila}, {o.district}
                                     </span>
                                   )}
                                 </div>
@@ -4874,6 +4900,152 @@ export default function AdminDashboard() {
                       />
                       <div className="w-11 h-6 bg-gray-200 dark:bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                     </label>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isSuperAdmin && (
+              <div className="space-y-6 mb-8">
+                <div className="flex items-center gap-4 bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/20 p-6 rounded-[2rem]">
+                  <div className="w-12 h-12 rounded-2xl bg-white dark:bg-gray-800 shadow-sm flex items-center justify-center text-orange-600 dark:text-orange-400">
+                    <Sparkles className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-orange-900 dark:text-orange-100 uppercase tracking-tighter">AI & Live Chat Engine</h4>
+                    <p className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-widest mt-0.5">Configure the Smart AI support system</p>
+                  </div>
+                </div>
+
+                <div className="bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded-[2.5rem] p-8 shadow-sm space-y-6">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600">
+                        <Bot className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-black dark:text-white uppercase tracking-tight italic">Global AI Enable</p>
+                        <p className="text-[10px] text-gray-500 font-medium">Turn Gemini AI support on/off for all new conversations</p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        className="sr-only peer"
+                        checked={siteSettings.chatAiEnabled}
+                        onChange={(e) => setSiteSettings((prev: any) => ({ ...prev, chatAiEnabled: e.target.checked }))}
+                      />
+                      <div className="w-11 h-6 bg-gray-200 dark:bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Chat Welcome Message</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.chatWelcomeMessage}
+                        onChange={e => setSiteSettings((prev: any) => ({...prev, chatWelcomeMessage: e.target.value}))}
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Chat Header Title</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.chatHeaderTitle || "Smart AI Support"}
+                        onChange={e => setSiteSettings((prev: any) => ({...prev, chatHeaderTitle: e.target.value}))}
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-orange-500"
+                        placeholder="e.g. Help Center"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Chat Header Subtitle (Status)</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.chatHeaderSubtitle || "Online"}
+                        onChange={e => setSiteSettings((prev: any) => ({...prev, chatHeaderSubtitle: e.target.value}))}
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-orange-500"
+                        placeholder="e.g. We are online"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Chat Intro Title</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.chatStartTitle || "Start a Conversation"}
+                        onChange={e => setSiteSettings((prev: any) => ({...prev, chatStartTitle: e.target.value}))}
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Chat Intro Subtitle</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.chatStartSubtitle || "Our AI and human experts are ready to help you with anything."}
+                        onChange={e => setSiteSettings((prev: any) => ({...prev, chatStartSubtitle: e.target.value}))}
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Chat Start Button Text</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.chatStartButtonText || "Start Chat Now"}
+                        onChange={e => setSiteSettings((prev: any) => ({...prev, chatStartButtonText: e.target.value}))}
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Chat Powered By (Branding)</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.chatPoweredByText || "Powered by Gemini AI"}
+                        onChange={e => setSiteSettings((prev: any) => ({...prev, chatPoweredByText: e.target.value}))}
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-orange-500"
+                        placeholder="e.g. Powered by Our Support Team"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Chat Input Placeholder</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.chatInputPlaceholder || "Ask the AI or Support..."}
+                        onChange={e => setSiteSettings((prev: any) => ({...prev, chatInputPlaceholder: e.target.value}))}
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-orange-500"
+                        placeholder="e.g. Ask us anything..."
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Refund Policy (for AI Context)</label>
+                      <textarea 
+                        rows={2}
+                        value={siteSettings.refundPolicy}
+                        onChange={e => setSiteSettings((prev: any) => ({...prev, refundPolicy: e.target.value}))}
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-orange-500 resize-none font-medium"
+                      />
+                    </div>
+                    <div className="md:col-span-2 space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Custom AI Instructions (System Prompt)</label>
+                      <textarea 
+                        rows={3}
+                        value={siteSettings.chatAiSystemPrompt}
+                        onChange={e => setSiteSettings((prev: any) => ({...prev, chatAiSystemPrompt: e.target.value}))}
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-orange-500 resize-none font-medium"
+                        placeholder="e.g. Always be humorous, tell them about our flash sale, etc."
+                      />
+                    </div>
+                    <div className="md:col-span-2 space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Payment Methods (for AI Context)</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.paymentMethods}
+                        onChange={e => setSiteSettings((prev: any) => ({...prev, paymentMethods: e.target.value}))}
+                        className="w-full bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -6097,8 +6269,16 @@ export default function AdminDashboard() {
                 {selectedOrder.deliveryAddress && (
                   <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
                     <div className="text-[8px] sm:text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Delivery Address</div>
-                    <div className="text-[10px] sm:text-[11px] text-gray-700 dark:text-gray-300 leading-relaxed font-medium bg-white dark:bg-gray-950 p-2 rounded-lg border border-gray-50 dark:border-gray-800">
-                      {selectedOrder.deliveryAddress}
+                    <div className="text-[10px] sm:text-[11px] text-gray-700 dark:text-gray-300 leading-relaxed font-medium bg-white dark:bg-gray-950 p-3 rounded-xl border border-gray-50 dark:border-gray-800 space-y-1">
+                      {selectedOrder.village && <p><span className="font-bold text-gray-900 dark:text-gray-100">Village:</span> {selectedOrder.village}</p>}
+                      {selectedOrder.union && <p><span className="font-bold text-gray-900 dark:text-gray-100">Union:</span> {selectedOrder.union}</p>}
+                      <p><span className="font-bold text-gray-900 dark:text-gray-100">Area:</span> {selectedOrder.upazila}, {selectedOrder.district}</p>
+                      <p><span className="font-bold text-gray-900 dark:text-gray-100">Division:</span> {selectedOrder.division}</p>
+                      {selectedOrder.deliveryAddress !== "N/A" && (
+                        <p className="mt-2 text-[9px] italic border-t border-gray-100 dark:border-gray-800 pt-1">
+                          {selectedOrder.deliveryAddress}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
