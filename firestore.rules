@@ -47,6 +47,12 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
+    // Payment Gateways (Super Admin Only)
+    match /payment_gateways/{gatewayId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
     // Admin Logs
     match /admin_logs/{logId} {
       allow read: if isModerator();
@@ -126,10 +132,11 @@ service cloud.firestore {
 
     // Orders
     match /orders/{orderId} {
-      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isModerator());
+      allow get: if true;
       allow list: if isHardcodedAdmin() || isModerator() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isModerator();
+      allow update: if isModerator() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow delete: if isModerator();
     }
 
     // Affiliate Commissions

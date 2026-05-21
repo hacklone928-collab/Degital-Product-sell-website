@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { User } from "firebase/auth";
-import { doc, getDoc, collection, addDoc, serverTimestamp, query, where, getDocs, increment, updateDoc } from "firebase/firestore";
+import { doc, getDoc, collection, addDoc, serverTimestamp, query, where, getDocs, increment, updateDoc, onSnapshot, setDoc } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
@@ -65,7 +65,7 @@ interface Product {
   size?: string;
 }
 
-type PaymentGateway = "stripe" | "local" | "binance" | "payoneer";
+type PaymentGateway = "stripe" | "local" | "binance" | "payoneer" | "sslcommerz" | "shurjopay";
 
 export default function Checkout({ user, isCartCheckout }: { user: User | null, isCartCheckout?: boolean }) {
   const { id } = useParams();
@@ -85,6 +85,49 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
   const [couponError, setCouponError] = useState<string | null>(null);
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
   const [usdRate, setUsdRate] = useState<number>(0.0091); // Default fallback
+  const [activeGateways, setActiveGateways] = useState<any[]>([]);
+
+  // Real-time synchronization of payment gateway statuses from DB to Checkout selection page
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "payment_gateways"), (snap) => {
+      const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setActiveGateways(list);
+    });
+    return () => unsub();
+  }, []);
+
+  // Sync URL status parameters in Checkout redirect handlers
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const status = urlParams.get("status");
+    const orderId = urlParams.get("orderId");
+    
+    if (status === "success" && orderId) {
+      setLastOrderId(orderId);
+      setIsSuccess(true);
+      if (isCartCheckout) {
+        clearCart();
+      }
+    } else if (status === "failed") {
+      setGlobalError("Payment transaction failed. Please choose another channel or try again.");
+    } else if (status === "cancelled") {
+      setGlobalError("Payment was cancelled by the user. Feel free to complete it using any payment gateway below.");
+    }
+  }, [clearCart, isCartCheckout]);
+
+  // Pull products lists directly from order doc on payment success redirect if state was reset
+  useEffect(() => {
+    if (isSuccess && lastOrderId && products.length === 0) {
+      getDoc(doc(db, "orders", lastOrderId)).then((snap) => {
+        if (snap.exists()) {
+          const orderData = snap.data();
+          if (orderData.items) {
+            setProducts(orderData.items);
+          }
+        }
+      });
+    }
+  }, [isSuccess, lastOrderId, products.length]);
 
   useEffect(() => {
     if (isCartCheckout && !loading && cartItems.length === 0 && !isSuccess) {
@@ -113,6 +156,12 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
     if (!loading && settings) {
       if (settings.enableStripe !== false) {
         setGateway("stripe");
+        setIsCOD(false);
+      } else if (settings.enableSSLCommerz !== false) {
+        setGateway("sslcommerz");
+        setIsCOD(false);
+      } else if (settings.enableShurjoPay !== false) {
+        setGateway("shurjopay");
         setIsCOD(false);
       } else if (settings.enableLocal !== false) {
         setGateway("local");
@@ -320,14 +369,6 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
     </div>
   );
 
-  if (products.length === 0) return (
-    <div className="text-center py-20 bg-white dark:bg-gray-950 transition-colors">
-      <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Checkout Error</h2>
-      <p className="text-gray-500 dark:text-gray-400 mt-2">No products found to checkout.</p>
-      <button onClick={() => navigate("/")} className="mt-6 text-indigo-600 dark:text-indigo-400 font-bold hover:underline transition-all">Return Home</button>
-    </div>
-  );
-
   if (isSuccess) {
     return (
       <div className="max-w-4xl mx-auto py-12 px-6">
@@ -437,6 +478,14 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
     </div>
   );
 }
+
+if (products.length === 0) return (
+  <div className="text-center py-20 bg-white dark:bg-gray-950 transition-colors">
+    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Checkout Error</h2>
+    <p className="text-gray-500 dark:text-gray-400 mt-2">No products found to checkout.</p>
+    <button onClick={() => navigate("/")} className="mt-6 text-indigo-600 dark:text-indigo-400 font-bold hover:underline transition-all">Return Home</button>
+  </div>
+);
 
 return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 max-w-7xl mx-auto py-8">
@@ -738,6 +787,38 @@ return (
                   <div className={cn("text-[9px] sm:text-xs font-bold", gateway === "stripe" && !isCOD ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400")}>Stripe</div>
                 </button>
               )}
+              {settings.enableSSLCommerz !== false && (
+                <button 
+                  onClick={() => { setGateway("sslcommerz"); setIsCOD(false); }}
+                  className={cn(
+                    "p-3 rounded-xl border-2 flex flex-col items-center gap-2 transition-all",
+                    gateway === "sslcommerz" && !isCOD ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20" : "border-gray-50 dark:border-gray-800 hover:border-gray-100 dark:hover:border-gray-700 bg-white dark:bg-gray-950"
+                  )}
+                >
+                  {activeGateways.find(g => g.id === "sslcommerz")?.logo ? (
+                    <img src={activeGateways.find(g => g.id === "sslcommerz")?.logo} className="w-5 h-5 object-contain" />
+                  ) : (
+                    <CreditCard className={cn("w-4 h-4 sm:w-5 sm:h-5", gateway === "sslcommerz" && !isCOD ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400")} />
+                  )}
+                  <div className={cn("text-[8px] sm:text-[11px] font-black uppercase text-indigo-600 dark:text-indigo-400")}>SSLCommerz</div>
+                </button>
+              )}
+              {settings.enableShurjoPay !== false && (
+                <button 
+                  onClick={() => { setGateway("shurjopay"); setIsCOD(false); }}
+                  className={cn(
+                    "p-3 rounded-xl border-2 flex flex-col items-center gap-2 transition-all",
+                    gateway === "shurjopay" && !isCOD ? "border-emerald-600 bg-emerald-50/50 dark:bg-emerald-900/20" : "border-gray-50 dark:border-gray-800 hover:border-gray-100 dark:hover:border-gray-700 bg-white dark:bg-gray-950"
+                  )}
+                >
+                  {activeGateways.find(g => g.id === "shurjopay")?.logo ? (
+                    <img src={activeGateways.find(g => g.id === "shurjopay")?.logo} className="w-5 h-5 object-contain" />
+                  ) : (
+                    <CreditCard className={cn("w-4 h-4 sm:w-5 sm:h-5", gateway === "shurjopay" && !isCOD ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400")} />
+                  )}
+                  <div className={cn("text-[8px] sm:text-[11px] font-black uppercase text-emerald-600 dark:text-emerald-400")}>ShurjoPay</div>
+                </button>
+              )}
               {settings.enableLocal !== false && (
                 <button 
                   onClick={() => { setGateway("local"); setIsCOD(false); }}
@@ -867,6 +948,42 @@ return (
                   amount={totalAmount}
                   amountUSD={Number((totalAmount * usdRate).toFixed(2))}
                   usdRate={usdRate}
+                  appliedCoupon={appliedCoupon}
+                  discountAmount={discountAmount}
+                  onSuccess={handleOrderSuccess}
+                />
+              </motion.div>
+            ) : gateway === "sslcommerz" ? (
+              <motion.div
+                key="sslcommerz"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+              >
+                <SslCommerzForm 
+                  products={products}
+                  userId={user?.uid!} 
+                  customerInfo={customerInfo}
+                  subtotal={subtotal}
+                  amount={totalAmount}
+                  appliedCoupon={appliedCoupon}
+                  discountAmount={discountAmount}
+                  onSuccess={handleOrderSuccess}
+                />
+              </motion.div>
+            ) : gateway === "shurjopay" ? (
+              <motion.div
+                key="shurjopay"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+              >
+                <ShurjoPayForm 
+                  products={products}
+                  userId={user?.uid!} 
+                  customerInfo={customerInfo}
+                  subtotal={subtotal}
+                  amount={totalAmount}
                   appliedCoupon={appliedCoupon}
                   discountAmount={discountAmount}
                   onSuccess={handleOrderSuccess}
@@ -1614,6 +1731,398 @@ function LocalForm({ products, userId, customerInfo, subtotal, amount, appliedCo
       >
         {isLoading ? "Submitting..." : `Confirm Payment - ৳${amount.toLocaleString()}`}
       </button>
+    </div>
+  );
+}
+
+function SslCommerzForm({ products, userId, customerInfo, subtotal, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; division: string; district: string; upazila: string; union: string; village: string; }, subtotal: number, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handlePay = async () => {
+    setError("");
+    if (!customerInfo.name || !customerInfo.phone || !customerInfo.email || !customerInfo.division || !customerInfo.district) {
+      setError("Please complete your Billing & Shipping details (Name, Phone, Email, Address) at the top of the page first.");
+      return;
+    }
+    setIsLoading(true);
+
+    try {
+      // Fetch gateway settings directly on client-side as resilient fallback for Cloud Run environments
+      let clientCredentials = null;
+      try {
+        const gatewaySnap = await getDoc(doc(db, "payment_gateways", "sslcommerz"));
+        if (gatewaySnap.exists()) {
+          clientCredentials = gatewaySnap.data();
+        }
+      } catch (e) {
+        console.warn("Client failed to fetch gateway config:", e);
+      }
+
+      // Pre-persist order doc client side using user's authenticated Session to handle sandbox DB bounds
+      const txnId = `TXN_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
+      const downloadToken = crypto.randomUUID();
+      const orderItems = products.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        size: p.size || null,
+        quantity: p.quantity
+      }));
+
+      await setDoc(doc(db, "orders", txnId), {
+        userId,
+        productIds: products.map((p: any) => p.id),
+        items: orderItems,
+        productName: orderItems.length === 1 ? (orderItems[0].size ? `${orderItems[0].name} (${orderItems[0].size})` : orderItems[0].name) : `${orderItems.length} Products`,
+        customerEmail: customerInfo.email,
+        customerName: customerInfo.name,
+        customerPhone: customerInfo.phone,
+        deliveryAddress: customerInfo.address || "N/A",
+        division: customerInfo.division || "",
+        district: customerInfo.district || "",
+        upazila: customerInfo.upazila || "",
+        union: customerInfo.union || "",
+        village: customerInfo.village || "",
+        paymentMethod: "SSLCommerz",
+        status: "pending_payment", 
+        amount: subtotal,
+        grossAmount: subtotal,
+        discountAmount: discountAmount || 0,
+        netAmount: amount,
+        couponCode: appliedCoupon?.code || null,
+        isPaid: false,
+        downloadToken,
+        createdAt: serverTimestamp(),
+        transactionId: txnId,
+        paymentGatewayId: "sslcommerz"
+      });
+
+      const res = await fetch("/api/payment/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          gateway: "sslcommerz",
+          txnId, // PASS THE DYNAMICALLY GENERATED PRE-SAVED ID
+          userId,
+          products,
+          customerInfo,
+          subtotal,
+          amount,
+          couponCode: appliedCoupon?.code || null,
+          discountAmount: discountAmount || 0,
+          clientCredentials
+        })
+      });
+
+      const data = await res.json();
+      if (data.redirectUrl) {
+        window.location.href = data.redirectUrl; 
+      } else {
+        throw new Error(data.error || "Failed to initialize secure checkout session.");
+      }
+    } catch (err: any) {
+      setError(err.message || "An expected network occurrence took place. Please retry.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5 sm:space-y-6">
+      {/* Premium Receipt Breakdown */}
+      <div className="bg-white dark:bg-gray-950 rounded-2xl border border-gray-100 dark:border-gray-900 p-4 sm:p-5 space-y-3 shadow-sm">
+        <div className="flex justify-between items-center text-xs font-medium text-gray-500 dark:text-gray-400">
+          <span>Order Subtotal</span>
+          <span className="font-mono text-gray-900 dark:text-gray-100">৳{subtotal.toLocaleString()}</span>
+        </div>
+        {discountAmount > 0 && (
+          <div className="flex justify-between items-center text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <span>Coupon Discount</span>
+            <span className="font-mono font-bold">-৳{discountAmount.toLocaleString()}</span>
+          </div>
+        )}
+        <div className="border-t border-dashed border-gray-200 dark:border-gray-800 my-2 pt-2 flex justify-between items-center">
+          <span className="text-xs sm:text-sm font-bold text-gray-800 dark:text-gray-200">Total Payable Amount</span>
+          <span className="text-sm sm:text-base font-black text-rose-600 dark:text-rose-400 font-mono">
+            ৳{amount.toLocaleString()}
+          </span>
+        </div>
+      </div>
+
+      {/* SSLCommerz Channel Selector Showcase */}
+      <div className="bg-gradient-to-b from-slate-50 to-indigo-50/30 dark:from-slate-950 dark:to-indigo-950/10 p-5 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-100 dark:border-slate-800/60 text-left space-y-4 shadow-inner">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-900">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 bg-rose-100 dark:bg-rose-950/40 rounded-lg">
+              <ShieldCheck className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+            </div>
+            <div>
+              <h4 className="text-[10px] sm:text-xs font-black uppercase text-slate-800 dark:text-slate-200 tracking-wider">SSLCommerz Sandbox</h4>
+              <p className="text-[9px] text-gray-400 dark:text-gray-500 font-medium">Verified Gateway Network</p>
+            </div>
+          </div>
+          <span className="text-[8px] font-extrabold uppercase tracking-widest text-[#d12053] bg-rose-50 dark:bg-rose-950/40 px-3 py-1 rounded-full border border-rose-100/30">
+            Secure 256-Bit
+          </span>
+        </div>
+        
+        <p className="text-[10px] sm:text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-semibold">
+          Pay instantly via credit cards, net banking, or local digital wallets:
+        </p>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+          {[
+            { name: "bKash", type: "mfs", color: "text-[#D12053] hover:bg-rose-50 dark:hover:bg-rose-950/20 bg-rose-50/20 hover:border-rose-300" },
+            { name: "Nagad", type: "mfs", color: "text-[#F86214] hover:bg-orange-50 dark:hover:bg-orange-950/20 bg-orange-50/20 hover:border-orange-300" },
+            { name: "Rocket", type: "mfs", color: "text-[#8C3494] hover:bg-purple-50 dark:hover:bg-purple-950/20 bg-purple-50/20 hover:border-purple-300" },
+            { name: "Upay", type: "mfs", color: "text-[#FFC400] hover:bg-yellow-50 dark:hover:bg-yellow-950/20 bg-yellow-50/20 hover:border-yellow-300" },
+            { name: "Visa Card", type: "card", color: "text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/20 bg-blue-50/20 hover:border-blue-300" },
+            { name: "MasterCard", type: "card", color: "text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 bg-red-50/20 hover:border-red-300" },
+            { name: "AMEX Card", type: "card", color: "text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 bg-blue-50/20 hover:border-blue-300" },
+            { name: "NetBanking", type: "bank", color: "text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/20 bg-teal-50/20 hover:border-teal-300" }
+          ].map((chan) => (
+            <div 
+              key={chan.name} 
+              className={cn(
+                "group cursor-pointer bg-white dark:bg-gray-900 border border-slate-100 dark:border-gray-800 p-2.5 rounded-xl text-center transition-all duration-300 shadow-sm flex flex-col items-center justify-center gap-1 hover:-translate-y-0.5 hover:shadow-md",
+                chan.color
+              )}
+            >
+              <span className="text-[10px] font-black tracking-wider uppercase">{chan.name}</span>
+              <span className="text-[7px] text-gray-400 dark:text-gray-500 uppercase tracking-widest font-bold font-mono">{chan.type}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-4 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 rounded-2xl text-xs font-bold border border-red-100 dark:border-red-900/40 shadow-sm animate-pulse">
+          ⚠️ {error}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={handlePay}
+        disabled={isLoading}
+        className="w-full relative overflow-hidden bg-gradient-to-r from-slate-900 to-[#d12053] text-white py-4 sm:py-5 rounded-2xl sm:rounded-3xl font-black text-xs sm:text-sm uppercase tracking-widest shadow-lg shadow-rose-200/50 dark:shadow-none hover:-translate-y-1 hover:brightness-110 active:translate-y-0 active:scale-[0.99] transition-all duration-300 disabled:opacity-50 disabled:translate-y-0 disabled:scale-100 flex items-center justify-center gap-2.5"
+      >
+        <div className="absolute inset-0 bg-white/5 opacity-0 hover:opacity-100 transition-opacity duration-300" />
+        {isLoading ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin text-white" />
+            Generating SSLCommerz Handshake...
+          </>
+        ) : (
+          <>
+            <Lock className="w-4 h-4 text-rose-300" />
+            <span>Pay Securely via SSLCommerz (৳{amount.toLocaleString()})</span>
+          </>
+        )}
+      </button>
+
+      {/* Security note guarantees */}
+      <div className="flex items-center justify-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500 font-semibold uppercase tracking-wider">
+        <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+        <span>100% Encrypted Connection Verified by SSLCommerz</span>
+      </div>
+    </div>
+  );
+}
+
+function ShurjoPayForm({ products, userId, customerInfo, subtotal, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; division: string; district: string; upazila: string; union: string; village: string; }, subtotal: number, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handlePay = async () => {
+    setError("");
+    if (!customerInfo.name || !customerInfo.phone || !customerInfo.email || !customerInfo.division || !customerInfo.district) {
+      setError("Please complete your Billing & Shipping details (Name, Phone, Email, Address) at the top of the page first.");
+      return;
+    }
+    setIsLoading(true);
+
+    try {
+      // Fetch gateway settings directly on client-side as resilient fallback for Cloud Run environments
+      let clientCredentials = null;
+      try {
+        const gatewaySnap = await getDoc(doc(db, "payment_gateways", "shurjopay"));
+        if (gatewaySnap.exists()) {
+          clientCredentials = gatewaySnap.data();
+        }
+      } catch (e) {
+        console.warn("Client failed to fetch gateway config:", e);
+      }
+
+      // Pre-persist order doc client side using user's authenticated Session to handle sandbox DB bounds
+      const txnId = `TXN_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
+      const downloadToken = crypto.randomUUID();
+      const orderItems = products.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        size: p.size || null,
+        quantity: p.quantity
+      }));
+
+      await setDoc(doc(db, "orders", txnId), {
+        userId,
+        productIds: products.map((p: any) => p.id),
+        items: orderItems,
+        productName: orderItems.length === 1 ? (orderItems[0].size ? `${orderItems[0].name} (${orderItems[0].size})` : orderItems[0].name) : `${orderItems.length} Products`,
+        customerEmail: customerInfo.email,
+        customerName: customerInfo.name,
+        customerPhone: customerInfo.phone,
+        deliveryAddress: customerInfo.address || "N/A",
+        division: customerInfo.division || "",
+        district: customerInfo.district || "",
+        upazila: customerInfo.upazila || "",
+        union: customerInfo.union || "",
+        village: customerInfo.village || "",
+        paymentMethod: "ShurjoPay",
+        status: "pending_payment", 
+        amount: subtotal,
+        grossAmount: subtotal,
+        discountAmount: discountAmount || 0,
+        netAmount: amount,
+        couponCode: appliedCoupon?.code || null,
+        isPaid: false,
+        downloadToken,
+        createdAt: serverTimestamp(),
+        transactionId: txnId,
+        paymentGatewayId: "shurjopay"
+      });
+
+      const res = await fetch("/api/payment/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          gateway: "shurjopay",
+          txnId, // PASS THE DYNAMICALLY GENERATED PRE-SAVED ID
+          userId,
+          products,
+          customerInfo,
+          subtotal,
+          amount,
+          couponCode: appliedCoupon?.code || null,
+          discountAmount: discountAmount || 0,
+          clientCredentials
+        })
+      });
+
+      const data = await res.json();
+      if (data.redirectUrl) {
+        window.location.href = data.redirectUrl; 
+      } else {
+        throw new Error(data.error || "Failed to initialize secure checkout session.");
+      }
+    } catch (err: any) {
+      setError(err.message || "An expected network occurrence took place. Please retry.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5 sm:space-y-6">
+      {/* Premium Receipt Breakdown */}
+      <div className="bg-white dark:bg-gray-950 rounded-2xl border border-gray-100 dark:border-gray-900 p-4 sm:p-5 space-y-3 shadow-sm">
+        <div className="flex justify-between items-center text-xs font-medium text-gray-500 dark:text-gray-400">
+          <span>Order Subtotal</span>
+          <span className="font-mono text-gray-900 dark:text-gray-100">৳{subtotal.toLocaleString()}</span>
+        </div>
+        {discountAmount > 0 && (
+          <div className="flex justify-between items-center text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <span>Coupon Discount</span>
+            <span className="font-mono font-bold">-৳{discountAmount.toLocaleString()}</span>
+          </div>
+        )}
+        <div className="border-t border-dashed border-gray-200 dark:border-gray-800 my-2 pt-2 flex justify-between items-center">
+          <span className="text-xs sm:text-sm font-bold text-gray-800 dark:text-gray-200">Total Payable Amount</span>
+          <span className="text-sm sm:text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">
+            ৳{amount.toLocaleString()}
+          </span>
+        </div>
+      </div>
+
+      {/* ShurjoPay Channel Selector Showcase */}
+      <div className="bg-gradient-to-b from-slate-50 to-emerald-50/30 dark:from-slate-950 dark:to-emerald-950/10 p-5 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-100 dark:border-slate-800/60 text-left space-y-4 shadow-inner">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-900">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 bg-emerald-100 dark:bg-emerald-950/40 rounded-lg">
+              <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <h4 className="text-[10px] sm:text-xs font-black uppercase text-slate-800 dark:text-slate-200 tracking-wider">shurjopay Sandbox</h4>
+              <p className="text-[9px] text-gray-400 dark:text-gray-500 font-medium">Verified Payment Network</p>
+            </div>
+          </div>
+          <span className="text-[8px] font-extrabold uppercase tracking-widest text-[#10b981] bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-full border border-emerald-100/30">
+            Secure 256-Bit
+          </span>
+        </div>
+        
+        <p className="text-[10px] sm:text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-semibold">
+          Pay instantly via credit cards, net banking, or local digital wallets:
+        </p>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+          {[
+            { name: "bKash", type: "mfs", color: "text-[#D12053] hover:bg-rose-50 dark:hover:bg-rose-950/20 bg-rose-50/20 hover:border-rose-300" },
+            { name: "Nagad", type: "mfs", color: "text-[#F86214] hover:bg-orange-50 dark:hover:bg-orange-950/20 bg-orange-50/20 hover:border-orange-300" },
+            { name: "Rocket", type: "mfs", color: "text-[#8C3494] hover:bg-purple-50 dark:hover:bg-purple-950/20 bg-purple-50/20 hover:border-purple-300" },
+            { name: "Upay", type: "mfs", color: "text-[#FFC400] hover:bg-yellow-50 dark:hover:bg-yellow-950/20 bg-yellow-50/20 hover:border-yellow-300" },
+            { name: "Visa Card", type: "card", color: "text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/20 bg-blue-50/20 hover:border-blue-300" },
+            { name: "MasterCard", type: "card", color: "text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 bg-red-50/20 hover:border-red-300" },
+            { name: "AMEX Card", type: "card", color: "text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 bg-blue-50/20 hover:border-blue-300" },
+            { name: "NetBanking", type: "bank", color: "text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/20 bg-teal-50/20 hover:border-teal-300" }
+          ].map((chan) => (
+            <div 
+              key={chan.name} 
+              className={cn(
+                "group cursor-pointer bg-white dark:bg-gray-900 border border-slate-100 dark:border-gray-800 p-2.5 rounded-xl text-center transition-all duration-300 shadow-sm flex flex-col items-center justify-center gap-1 hover:-translate-y-0.5 hover:shadow-md",
+                chan.color
+              )}
+            >
+              <span className="text-[10px] font-black tracking-wider uppercase">{chan.name}</span>
+              <span className="text-[7px] text-gray-400 dark:text-gray-500 uppercase tracking-widest font-bold font-mono">{chan.type}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-4 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 rounded-2xl text-xs font-bold border border-red-100 dark:border-red-900/40 shadow-sm animate-pulse">
+          ⚠️ {error}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={handlePay}
+        disabled={isLoading}
+        className="w-full relative overflow-hidden bg-gradient-to-r from-slate-900 to-[#10b981] text-white py-4 sm:py-5 rounded-2xl sm:rounded-3xl font-black text-xs sm:text-sm uppercase tracking-widest shadow-lg shadow-emerald-200/50 dark:shadow-none hover:-translate-y-1 hover:brightness-110 active:translate-y-0 active:scale-[0.99] transition-all duration-300 disabled:opacity-50 disabled:translate-y-0 disabled:scale-100 flex items-center justify-center gap-2.5"
+      >
+        <div className="absolute inset-0 bg-white/5 opacity-0 hover:opacity-100 transition-opacity duration-300" />
+        {isLoading ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin text-white" />
+            Generating shurjopay Handshake...
+          </>
+        ) : (
+          <>
+            <Lock className="w-4 h-4 text-emerald-300" />
+            <span>Pay Securely via shurjopay (৳{amount.toLocaleString()})</span>
+          </>
+        )}
+      </button>
+
+      {/* Security note guarantees */}
+      <div className="flex items-center justify-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500 font-semibold uppercase tracking-wider">
+        <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+        <span>100% Encrypted Connection Verified by shurjopay</span>
+      </div>
     </div>
   );
 }

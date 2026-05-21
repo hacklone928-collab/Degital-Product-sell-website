@@ -154,6 +154,14 @@ export default function MyProducts() {
                           <span className="flex items-center gap-1 text-[9px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded-full uppercase tracking-widest">
                             <CheckCircle2 className="w-3 h-3" /> Completed
                           </span>
+                        ) : order.status === "returned" ? (
+                          <span className="flex items-center gap-1 text-[9px] font-black text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 px-2 py-1 rounded-full uppercase tracking-widest">
+                            <Clock className="w-3 h-3 text-rose-500" /> Returned
+                          </span>
+                        ) : order.status === "cancelled" ? (
+                          <span className="flex items-center gap-1 text-[9px] font-black text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 px-2 py-1 rounded-full uppercase tracking-widest">
+                            <Clock className="w-3 h-3 text-rose-500" /> Cancelled
+                          </span>
                         ) : (
                           <span className="flex items-center gap-1 text-[9px] font-black text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-2 py-1 rounded-full uppercase tracking-widest animate-pulse">
                             <Clock className="w-3 h-3" /> Pending Approval
@@ -239,9 +247,15 @@ export default function MyProducts() {
 
                 {order.status !== "completed" && (
                   <div className="pt-4 border-t border-gray-50 dark:border-gray-800">
-                    <p className="text-[11px] text-amber-600 dark:text-amber-500 font-bold leading-snug flex items-center gap-2">
-                       <Clock className="w-4 h-4" /> Admin is verifying your payment. Download links will appear here once confirmed.
-                    </p>
+                    {order.status === "returned" || order.status === "cancelled" ? (
+                      <p className="text-[11px] text-rose-600 dark:text-rose-500 font-bold leading-snug flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-rose-500" /> This order was returned/cancelled. Access to file downloads and credentials has been revoked.
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-amber-600 dark:text-amber-500 font-bold leading-snug flex items-center gap-2">
+                        <Clock className="w-4 h-4" /> Admin is verifying your payment. Download links will appear here once confirmed.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

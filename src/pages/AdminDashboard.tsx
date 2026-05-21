@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { db, storage, auth } from "../lib/firebase";
 import { collection, addDoc, getDocs, deleteDoc, doc, setDoc, getDoc, serverTimestamp, updateDoc, query, where, increment, onSnapshot, orderBy, limit, collectionGroup } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { Plus, Package, Users, DollarSign, Trash2, Edit, Star, Database, Settings as SettingsIcon, Save, ShoppingBag, Clock, CheckCircle, Copy, Link as LinkIcon, Inbox, Mail, Search, ShieldCheck, TrendingUp, Calendar, Eye, EyeOff, ExternalLink, ImagePlus, Upload, Loader2, Phone, Ticket, Facebook, Twitter, Instagram, Youtube, Linkedin, Github, Share2, Send, Music, Pin, MapPin, ChevronLeft, ChevronRight, Ban, UserX, FileText, MessageSquare, Menu, X, Moon, Sun, Sparkles, CloudSun, Zap, Mountain, MessageCircle, Bot } from "lucide-react";
+import { Plus, Package, Users, DollarSign, Trash2, Edit, Star, Database, Settings as SettingsIcon, Save, ShoppingBag, Clock, CheckCircle, Copy, Link as LinkIcon, Inbox, Mail, Search, ShieldCheck, TrendingUp, Calendar, Eye, EyeOff, ExternalLink, ImagePlus, Upload, Loader2, Phone, Ticket, Facebook, Twitter, Instagram, Youtube, Linkedin, Github, Share2, Send, Music, Pin, MapPin, ChevronLeft, ChevronRight, Ban, UserX, FileText, MessageSquare, Menu, X, Moon, Sun, Sparkles, CloudSun, Zap, Mountain, MessageCircle, Bot, RotateCcw, CreditCard } from "lucide-react";
 import { motion } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "../lib/utils";
@@ -94,6 +94,102 @@ export default function AdminDashboard() {
   const [pages, setPages] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
   const [coupons, setCoupons] = useState<any[]>([]);
+
+  // Payment gateways states & uploads
+  const [paymentGateways, setPaymentGateways] = useState<any[]>([]);
+  const [uploadingSslLogo, setUploadingSslLogo] = useState(false);
+  const [uploadingShurjoLogo, setUploadingShurjoLogo] = useState(false);
+  
+  const [sslSettings, setSslSettings] = useState({
+    gateway_name: "SSLCommerz",
+    is_active: false,
+    sandbox_mode: true,
+    store_id: "",
+    store_password: "",
+    success_url: window.location.origin + "/api/payment/sslcommerz/success",
+    failed_url: window.location.origin + "/api/payment/sslcommerz/failed",
+    cancel_url: window.location.origin + "/api/payment/sslcommerz/cancel",
+    ipn_url: window.location.origin + "/api/payment/sslcommerz/ipn",
+    logo: ""
+  });
+
+  const [shurjoSettings, setShurjoSettings] = useState({
+    gateway_name: "ShurjoPay",
+    is_active: false,
+    sandbox_mode: true,
+    store_id: "", // Username
+    store_password: "", // Password/Secret Key
+    prefix: "", // Prefix
+    success_url: window.location.origin + "/api/payment/shurjopay/success",
+    failed_url: window.location.origin + "/api/payment/shurjopay/failed",
+    cancel_url: window.location.origin + "/api/payment/shurjopay/cancel",
+    ipn_url: window.location.origin + "/api/payment/shurjopay/ipn",
+    logo: ""
+  });
+
+  const handleSslLogoUpload = async (file: File) => {
+    if (!file) return;
+    setUploadingSslLogo(true);
+    try {
+      const storageRef = ref(storage, `gateways/sslcommerz_${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+      setSslSettings(prev => ({ ...prev, logo: downloadURL }));
+      alert("SSLCommerz logo uploaded successfully!");
+    } catch (e) {
+      console.error(e);
+      alert("Failed to upload logo.");
+    } finally {
+      setUploadingSslLogo(false);
+    }
+  };
+
+  const handleShurjoLogoUpload = async (file: File) => {
+    if (!file) return;
+    setUploadingShurjoLogo(true);
+    try {
+      const storageRef = ref(storage, `gateways/shuryopay_${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+      setShurjoSettings(prev => ({ ...prev, logo: downloadURL }));
+      alert("ShurjoPay logo uploaded successfully!");
+    } catch (e) {
+      console.error(e);
+      alert("Failed to upload logo.");
+    } finally {
+      setUploadingShurjoLogo(false);
+    }
+  };
+
+  const handleSaveSslSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const { success_url, failed_url, cancel_url, ipn_url, ...settingsToSave } = sslSettings as any;
+      await setDoc(doc(db, "payment_gateways", "sslcommerz"), {
+        ...settingsToSave,
+        updatedAt: serverTimestamp()
+      });
+      await logAdminAction('update_sslcommerz_settings', { timestamp: new Date().toISOString() });
+      alert("SSLCommerz settings saved successfully!");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, "payment_gateways/sslcommerz");
+    }
+  };
+
+  const handleSaveShurjoSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const { success_url, failed_url, cancel_url, ipn_url, ...settingsToSave } = shurjoSettings as any;
+      await setDoc(doc(db, "payment_gateways", "shurjopay"), {
+        ...settingsToSave,
+        updatedAt: serverTimestamp()
+      });
+      await logAdminAction('update_shurjopay_settings', { timestamp: new Date().toISOString() });
+      alert("ShurjoPay settings saved successfully!");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, "payment_gateways/shurjopay");
+    }
+  };
   const [reviews, setReviews] = useState<any[]>([]);
   const [activeSessions, setActiveSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -216,6 +312,8 @@ export default function AdminDashboard() {
       enableStripe: true,
       enableLocal: true,
       enableCOD: true,
+      enableSSLCommerz: true,
+      enableShurjoPay: true,
       hiddenCategories: [] as string[],
       cartText: "Cart",
       viewText: "View",
@@ -346,6 +444,7 @@ export default function AdminDashboard() {
     { id: "reviews", label: "Reviews", icon: MessageSquare },
     { id: "logs", label: "Activity Logs", icon: Clock },
     { id: "pages", label: "CMS Pages", icon: Database },
+    { id: "payment-gateways", label: "Payment Gateways", icon: CreditCard },
     { id: "settings", label: "Site Logic", icon: SettingsIcon },
   ] as const;
 
@@ -365,6 +464,7 @@ export default function AdminDashboard() {
       reviews: ["super_admin", "admin", "moderator"],
       logs: ["super_admin"],
       pages: ["super_admin"],
+      "payment-gateways": ["super_admin"],
       settings: ["super_admin"],
     };
     return siteSettings.tabPermissions?.[tabId] || defaults[tabId] || ["super_admin"];
@@ -1250,6 +1350,22 @@ export default function AdminDashboard() {
       }
     }, (error) => handleFirestoreError(error, OperationType.GET, "settings/site"));
 
+    // Add payment gateways snapshot
+    const unsubGateways = onSnapshot(collection(db, "payment_gateways"), (snap) => {
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setPaymentGateways(list);
+      
+      const ssl = list.find(g => g.id === "sslcommerz");
+      if (ssl) {
+        setSslSettings(prev => ({ ...prev, ...ssl }));
+      }
+      
+      const shurjo = list.find(g => g.id === "shurjopay");
+      if (shurjo) {
+        setShurjoSettings(prev => ({ ...prev, ...shurjo }));
+      }
+    }, (error) => handleFirestoreError(error, OperationType.LIST, "payment_gateways"));
+
     return () => {
       unsubProducts();
       unsubCoupons();
@@ -1257,6 +1373,7 @@ export default function AdminDashboard() {
       unsubCategories();
       unsubPages();
       unsubSettings();
+      unsubGateways();
       unsubOrders?.();
       unsubTickets?.();
       unsubWithdrawals?.();
@@ -1696,6 +1813,62 @@ export default function AdminDashboard() {
       alert("Note & Credentials updated successfully!");
     } catch (error: any) {
       alert(`Update Error: ${error.message}`);
+    }
+  };
+
+  const handleCancelRefundOrder = async (orderId: string) => {
+    if (!isActuallyAdmin) {
+      alert("Admin access required.");
+      return;
+    }
+    
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+
+    if (!window.confirm("Are you sure you want to cancel and return this sold product? This will revoke the customer's downloads and access, and adjust any processed referral bonuses.")) return;
+
+    try {
+      const updates: any = {
+        status: "returned",
+        updatedAt: serverTimestamp()
+      };
+
+      // If the order had a bonus processed, adjust the user's affiliate balance
+      if (order.bonusProcessed && order.bonusAssigneeEmail && (order.bonusAmountGiven || 0) > 0) {
+        const uq = query(collection(db, "users"), where("email", "==", order.bonusAssigneeEmail.toLowerCase().trim()));
+        const userSnap = await getDocs(uq);
+        
+        if (!userSnap.empty) {
+          const userDoc = userSnap.docs[0];
+          const userRef = doc(db, "users", userDoc.id);
+          const bonusChange = -order.bonusAmountGiven;
+          
+          await updateDoc(userRef, {
+            bonusBalance: increment(bonusChange)
+          });
+          
+          updates.bonusAdjustedForReturn = true;
+
+          // Log the commission reversal
+          await addDoc(collection(db, "commissions"), {
+            affiliateId: userDoc.id,
+            affiliateEmail: order.bonusAssigneeEmail,
+            orderId: orderId,
+            amount: bonusChange,
+            status: "reversed",
+            createdAt: serverTimestamp()
+          });
+        }
+      }
+
+      await updateDoc(doc(db, "orders", orderId), updates);
+      await logAdminAction('cancel_return_order', { orderId });
+      await fetchOrders();
+      setSelectedOrderId(null);
+      alert("Product purchase successfully cancelled and returned! Customer's access has been revoked.");
+    } catch (error: any) {
+      console.error(error);
+      alert(`Failed to cancel order: ${error.message}`);
     }
   };
 
@@ -2537,7 +2710,7 @@ export default function AdminDashboard() {
                                     "px-2 sm:px-3 py-1 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-widest border",
                                     order.status === 'completed' || order.status === 'delivered'
                                        ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800"
-                                       : order.status === 'pending'
+                                       : order.status === 'returned' || order.status === 'cancelled'
                                           ? "bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 border-rose-100 dark:border-rose-800"
                                           : "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-800"
                                  )}>
@@ -3927,12 +4100,16 @@ export default function AdminDashboard() {
                             <div className="flex items-center gap-1.5">
                               {o.status === "completed" ? (
                                 <CheckCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-green-500" />
+                              ) : o.status === "returned" ? (
+                                <RotateCcw className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-rose-500" />
                               ) : (
                                 <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500" />
                               )}
                               <span className={cn(
                                 "text-[8px] sm:text-[10px] font-black uppercase tracking-widest",
-                                o.status === "completed" ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"
+                                o.status === "completed" ? "text-green-600 dark:text-green-400" :
+                                o.status === "returned" ? "text-rose-600 dark:text-rose-400" :
+                                "text-amber-600 dark:text-amber-400"
                               )}>
                                 {o.status}
                               </span>
@@ -3963,6 +4140,15 @@ export default function AdminDashboard() {
                               >
                                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                               </button>
+                              {o.status === "completed" && isModeratorRole && (
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleCancelRefundOrder(o.id); }}
+                                  title="Cancel & Return Product"
+                                  className="p-2 sm:p-3 text-rose-500 dark:text-rose-400 hover:text-rose-600 dark:hover:text-rose-300 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-955/55 rounded-xl sm:rounded-2xl transition-all border border-transparent hover:border-rose-200 dark:hover:border-rose-900/30 shadow-sm dark:shadow-none active:scale-90"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                </button>
+                              )}
                               {o.status === "pending" && isModeratorRole && (
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); handleConfirmOrder(o.id); }}
@@ -6014,6 +6200,30 @@ export default function AdminDashboard() {
                         Payoneer
                       </label>
                     </div>
+                    <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
+                      <input 
+                        type="checkbox"
+                        id="enableSSLCommerz"
+                        checked={siteSettings.enableSSLCommerz !== false}
+                        onChange={e => setSiteSettings({...siteSettings, enableSSLCommerz: e.target.checked})}
+                        className="w-5 h-5 rounded border-gray-300 dark:border-gray-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer bg-white dark:bg-gray-950"
+                      />
+                      <label htmlFor="enableSSLCommerz" className="text-sm font-bold text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+                        SSLCommerz
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
+                      <input 
+                        type="checkbox"
+                        id="enableShurjoPay"
+                        checked={siteSettings.enableShurjoPay !== false}
+                        onChange={e => setSiteSettings({...siteSettings, enableShurjoPay: e.target.checked})}
+                        className="w-5 h-5 rounded border-gray-300 dark:border-gray-700 text-emerald-600 focus:ring-emerald-500 cursor-pointer bg-white dark:bg-gray-950"
+                      />
+                      <label htmlFor="enableShurjoPay" className="text-sm font-bold text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+                        ShurjoPay
+                      </label>
+                    </div>
                   </div>
                 </div>
 
@@ -6233,6 +6443,314 @@ export default function AdminDashboard() {
               </div>
             </form>
           </section>
+        ) : activeTab === "payment-gateways" ? (
+          <div className="space-y-12 pb-12">
+            {/* Header */}
+            <div className="flex items-center gap-4 bg-white dark:bg-gray-950 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm">
+              <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl">
+                <CreditCard className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Payment Gateway Settings</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Configure core dynamic payment gateways for customer checkouts.</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* SSLCommerz Settings Card */}
+              <section className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-100 dark:border-gray-800 p-8 shadow-sm space-y-6 animate-in fade-in duration-300">
+                <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-4">
+                  <div className="flex items-center gap-3">
+                    {sslSettings.logo ? (
+                      <div className="w-10 h-10 rounded-xl bg-gray-50 dark:bg-gray-900 p-1 flex items-center justify-center border border-gray-100 dark:border-gray-800">
+                        <img src={sslSettings.logo} className="h-full w-full object-contain rounded-lg" />
+                      </div>
+                    ) : (
+                      <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-950 text-indigo-600 rounded-xl flex items-center justify-center font-bold text-sm">
+                        SSL
+                      </div>
+                    )}
+                    <div>
+                      <h4 className="font-bold text-gray-900 dark:text-white">SSLCommerz Settings</h4>
+                      <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Gateway Module</p>
+                    </div>
+                  </div>
+
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer"
+                      checked={sslSettings.is_active}
+                      onChange={e => setSslSettings({...sslSettings, is_active: e.target.checked})}
+                    />
+                    <div className="w-11 h-6 bg-gray-200 dark:bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600 animate-all"></div>
+                  </label>
+                </div>
+
+                <form onSubmit={handleSaveSslSettings} className="space-y-4">
+                  {/* Sandbox Mode */}
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
+                    <div>
+                      <div className="text-xs font-black text-gray-900 dark:text-gray-100 uppercase tracking-tight">Sandbox Mode</div>
+                      <div className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Enable for testing with mock cards</div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        className="sr-only peer"
+                        checked={sslSettings.sandbox_mode}
+                        onChange={e => setSslSettings({...sslSettings, sandbox_mode: e.target.checked})}
+                      />
+                      <div className="w-11 h-6 bg-gray-200 dark:bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600 animate-all"></div>
+                    </label>
+                  </div>
+
+                  {/* Store ID */}
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Store ID</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={sslSettings.store_id}
+                      onChange={e => setSslSettings({...sslSettings, store_id: e.target.value})}
+                      className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Enter Store ID"
+                    />
+                  </div>
+
+                  {/* Store Password */}
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Store Password</label>
+                    <input 
+                      type="password" 
+                      required
+                      value={sslSettings.store_password}
+                      onChange={e => setSslSettings({...sslSettings, store_password: e.target.value})}
+                      className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Enter Store Password"
+                    />
+                  </div>
+
+                  {/* Dynamic Callback System */}
+                  <div className="bg-indigo-50/50 dark:bg-indigo-950/10 border border-indigo-100 dark:border-indigo-900/30 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                      <span className="text-[10px] font-black uppercase text-indigo-950 dark:text-indigo-100 tracking-wider">Dynamic Callback Auto-Routing</span>
+                    </div>
+                    <p className="text-[10px] sm:text-xs text-indigo-600/80 dark:text-indigo-400/80 leading-relaxed font-semibold">
+                      Payment checkout flows, client redirects, and security callback handlers are dynamically auto-configured based on your active domain address. No manual input or manual endpoint settings are required.
+                    </p>
+                    <div className="space-y-2 text-[10px] font-bold">
+                      <div className="flex items-center justify-between bg-white dark:bg-gray-900 border border-indigo-50/50 dark:border-indigo-950 p-2.5 rounded-xl">
+                        <span className="text-gray-400">Success Url</span>
+                        <span className="font-mono text-indigo-600 dark:text-indigo-400">{window.location.origin}/api/payment/sslcommerz/success</span>
+                      </div>
+                      <div className="flex items-center justify-between bg-white dark:bg-gray-900 border border-indigo-50/50 dark:border-indigo-950 p-2.5 rounded-xl">
+                        <span className="text-gray-400">Failed Url</span>
+                        <span className="font-mono text-indigo-600 dark:text-indigo-400">{window.location.origin}/api/payment/sslcommerz/failed</span>
+                      </div>
+                      <div className="flex items-center justify-between bg-white dark:bg-gray-900 border border-indigo-50/50 dark:border-indigo-950 p-2.5 rounded-xl">
+                        <span className="text-gray-400">Cancel Url</span>
+                        <span className="font-mono text-indigo-600 dark:text-indigo-400">{window.location.origin}/api/payment/sslcommerz/cancel</span>
+                      </div>
+                      <div className="flex items-center justify-between bg-white dark:bg-gray-900 border border-indigo-50/50 dark:border-indigo-950 p-2.5 rounded-xl">
+                        <span className="text-gray-400">IPN Webhook</span>
+                        <span className="font-mono text-indigo-600 dark:text-indigo-400">{window.location.origin}/api/payment/sslcommerz/ipn</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Logo Upload & Text */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Gateway Logo</label>
+                    <div className="flex gap-4 items-center">
+                      <input 
+                        type="text" 
+                        value={sslSettings.logo}
+                        onChange={e => setSslSettings({...sslSettings, logo: e.target.value})}
+                        className="flex-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-xs font-mono dark:text-white outline-none"
+                        placeholder="Or enter image URL manual"
+                      />
+                      <label className="bg-indigo-50 dark:bg-indigo-900/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/20 rounded-2xl p-4 cursor-pointer text-xs font-bold transition-all flex items-center gap-2">
+                        <Upload className="w-4 h-4" />
+                        {uploadingSslLogo ? "Uploading..." : "Upload Logo"}
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={e => e.target.files?.[0] && handleSslLogoUpload(e.target.files[0])}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Save Button */}
+                  <div className="pt-4">
+                    <button 
+                      type="submit"
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-widest py-4 rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-indigo-100 dark:shadow-none transition-all"
+                    >
+                      <Save className="w-4 h-4" />
+                      Save SSLCommerz Configuration
+                    </button>
+                  </div>
+                </form>
+              </section>
+
+              {/* ShurjoPay Settings Card */}
+              <section className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-100 dark:border-gray-800 p-8 shadow-sm space-y-6 animate-in fade-in duration-300">
+                <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-4">
+                  <div className="flex items-center gap-3">
+                    {shurjoSettings.logo ? (
+                      <div className="w-10 h-10 rounded-xl bg-gray-50 dark:bg-gray-900 p-1 flex items-center justify-center border border-gray-100 dark:border-gray-800">
+                        <img src={shurjoSettings.logo} className="h-full w-full object-contain rounded-lg" />
+                      </div>
+                    ) : (
+                      <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-950 text-emerald-600 rounded-xl flex items-center justify-center font-bold text-sm">
+                        SH
+                      </div>
+                    )}
+                    <div>
+                      <h4 className="font-bold text-gray-900 dark:text-white">ShurjoPay Settings</h4>
+                      <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Gateway Module</p>
+                    </div>
+                  </div>
+
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer"
+                      checked={shurjoSettings.is_active}
+                      onChange={e => setShurjoSettings({...shurjoSettings, is_active: e.target.checked})}
+                    />
+                    <div className="w-11 h-6 bg-gray-200 dark:bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 animate-all"></div>
+                  </label>
+                </div>
+
+                <form onSubmit={handleSaveShurjoSettings} className="space-y-4">
+                  {/* Sandbox Mode */}
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
+                    <div>
+                      <div className="text-xs font-black text-gray-900 dark:text-gray-100 uppercase tracking-tight">Sandbox Mode</div>
+                      <div className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Enable for testing with mock keys</div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        className="sr-only peer"
+                        checked={shurjoSettings.sandbox_mode}
+                        onChange={e => setShurjoSettings({...shurjoSettings, sandbox_mode: e.target.checked})}
+                      />
+                      <div className="w-11 h-6 bg-gray-200 dark:bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600 animate-all"></div>
+                    </label>
+                  </div>
+
+                  {/* Username */}
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Username / API Key</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={shurjoSettings.store_id}
+                      onChange={e => setShurjoSettings({...shurjoSettings, store_id: e.target.value})}
+                      className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                      placeholder="Enter Username"
+                    />
+                  </div>
+
+                  {/* Password / Secret Key */}
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Password / Secret Key</label>
+                    <input 
+                      type="password" 
+                      required
+                      value={shurjoSettings.store_password}
+                      onChange={e => setShurjoSettings({...shurjoSettings, store_password: e.target.value})}
+                      className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                      placeholder="Enter Password / Secret Key"
+                    />
+                  </div>
+
+                  {/* Prefix */}
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Prefix</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={shurjoSettings.prefix}
+                      onChange={e => setShurjoSettings({...shurjoSettings, prefix: e.target.value})}
+                      className="w-full mt-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                      placeholder="e.g. SP"
+                    />
+                  </div>
+
+                  {/* Dynamic Callback System */}
+                  <div className="bg-emerald-50/50 dark:bg-emerald-950/10 border border-emerald-100 dark:border-emerald-900/30 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                      <span className="text-[10px] font-black uppercase text-emerald-950 dark:text-emerald-100 tracking-wider">Dynamic Callback Auto-Routing</span>
+                    </div>
+                    <p className="text-[10px] sm:text-xs text-emerald-600/80 dark:text-emerald-400/80 leading-relaxed font-semibold">
+                      Payment checkout flows, client redirects, and security callback handlers are dynamically auto-configured based on your active domain address. No manual input or manual endpoint settings are required.
+                    </p>
+                    <div className="space-y-2 text-[10px] font-bold">
+                      <div className="flex items-center justify-between bg-white dark:bg-gray-900 border border-emerald-50/50 dark:border-emerald-950 p-2.5 rounded-xl">
+                        <span className="text-gray-400">Success Url</span>
+                        <span className="font-mono text-emerald-600 dark:text-emerald-400">{window.location.origin}/api/payment/shurjopay/success</span>
+                      </div>
+                      <div className="flex items-center justify-between bg-white dark:bg-gray-900 border border-emerald-50/50 dark:border-emerald-950 p-2.5 rounded-xl">
+                        <span className="text-gray-400">Failed Url</span>
+                        <span className="font-mono text-emerald-600 dark:text-emerald-400">{window.location.origin}/api/payment/shurjopay/failed</span>
+                      </div>
+                      <div className="flex items-center justify-between bg-white dark:bg-gray-900 border border-emerald-50/50 dark:border-emerald-950 p-2.5 rounded-xl">
+                        <span className="text-gray-400">Cancel Url</span>
+                        <span className="font-mono text-emerald-600 dark:text-emerald-400">{window.location.origin}/api/payment/shurjopay/cancel</span>
+                      </div>
+                      <div className="flex items-center justify-between bg-white dark:bg-gray-900 border border-emerald-50/50 dark:border-emerald-950 p-2.5 rounded-xl">
+                        <span className="text-gray-400">IPN Webhook</span>
+                        <span className="font-mono text-emerald-600 dark:text-emerald-400">{window.location.origin}/api/payment/shurjopay/ipn</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Logo Upload & Text */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">Gateway Logo</label>
+                    <div className="flex gap-4 items-center">
+                      <input 
+                        type="text" 
+                        value={shurjoSettings.logo}
+                        onChange={e => setShurjoSettings({...shurjoSettings, logo: e.target.value})}
+                        className="flex-1 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-xs font-mono dark:text-white outline-none"
+                        placeholder="Or enter image URL manual"
+                      />
+                      <label className="bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/20 rounded-2xl p-4 cursor-pointer text-xs font-bold transition-all flex items-center gap-2">
+                        <Upload className="w-4 h-4" />
+                        {uploadingShurjoLogo ? "Uploading..." : "Upload Logo"}
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={e => e.target.files?.[0] && handleShurjoLogoUpload(e.target.files[0])}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Save Button */}
+                  <div className="pt-4">
+                    <button 
+                      type="submit"
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-widest py-4 rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-emerald-100 dark:shadow-none transition-all"
+                    >
+                      <Save className="w-4 h-4" />
+                      Save ShurjoPay Configuration
+                    </button>
+                  </div>
+                </form>
+              </section>
+            </div>
+          </div>
         ) : null}
       </div>
 
@@ -6323,6 +6841,7 @@ export default function AdminDashboard() {
                     <span className={cn(
                       "px-2 sm:px-3 py-1.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm",
                       selectedOrder.status === "completed" ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" : 
+                      selectedOrder.status === "returned" ? "bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400" :
                       selectedOrder.status === "pending" ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400" : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
                     )}>
                       {selectedOrder.status}
@@ -6334,6 +6853,14 @@ export default function AdminDashboard() {
                       className="w-full mt-4 bg-indigo-600 text-white py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-2xl shadow-indigo-200 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-95"
                     >
                       Confirm Order
+                    </button>
+                  )}
+                  {selectedOrder.status === "completed" && isActuallyAdmin && (
+                    <button 
+                      onClick={() => handleCancelRefundOrder(selectedOrder.id)}
+                      className="w-full mt-4 bg-rose-600 hover:bg-rose-700 text-white py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-lg shadow-rose-100 dark:shadow-none transition-all active:scale-95 flex items-center justify-center gap-2"
+                    >
+                      <RotateCcw className="w-4 h-4 animate-spin-slow" /> Cancel & Return Product
                     </button>
                   )}
                 </div>

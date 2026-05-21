@@ -51,6 +51,8 @@ interface SiteSettings {
   binanceQR?: string;
   enablePayoneer?: boolean;
   payoneerEmail?: string;
+  enableSSLCommerz?: boolean;
+  enableShurjoPay?: boolean;
   heroBanners?: { id: string, imageUrl: string, title?: string, subtitle?: string, link?: string, buttonText?: string }[];
   hiddenCategories?: string[];
   cartText?: string;
@@ -124,6 +126,8 @@ const defaultSettings: SiteSettings = {
   enableStripe: true,
   enableLocal: true,
   enableCOD: true,
+  enableSSLCommerz: true,
+  enableShurjoPay: true,
   enableBinancePay: false,
   binanceId: "",
   binanceQR: "",

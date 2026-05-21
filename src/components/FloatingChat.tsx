@@ -76,7 +76,15 @@ export default function FloatingChat() {
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [products, setProducts] = useState<any[]>([]);
   const [showProductPicker, setShowProductPicker] = useState(false);
-  const [siteSettings, setSiteSettings] = useState<any>(null);
+  const [siteSettings, setSiteSettings] = useState<any>(() => {
+    try {
+      const cached = localStorage.getItem("site_settings");
+      return cached ? JSON.parse(cached) : null;
+    } catch (e) {
+      console.error("Failed to load cached settings in FloatingChat:", e);
+      return null;
+    }
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [adminIsTyping, setAdminIsTyping] = useState(false);
@@ -232,16 +240,21 @@ export default function FloatingChat() {
     setInputText(prev => prev + (prev ? " " : "") + text);
   };
 
-  // Load products and site settings
+  // Load site settings in real-time for instantaneous load & live changes
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "settings", "site"), (snap) => {
+      if (snap.exists()) {
+        setSiteSettings(snap.data());
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Load products when chat is opened
   useEffect(() => {
     if (isOpen) {
       getDocs(collection(db, "products")).then(snap => {
         setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      getDoc(doc(db, "settings", "site")).then(snap => {
-        if (snap.exists()) {
-          setSiteSettings(snap.data());
-        }
       });
     }
   }, [isOpen]);

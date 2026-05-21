@@ -268,9 +268,36 @@
         "seen": { "type": "boolean" }
       },
       "required": ["sessionId", "senderId", "senderType", "createdAt"]
+    },
+    "PaymentGateway": {
+      "title": "Payment Gateway",
+      "description": "Payment gateway configuration (SSLCommerz, ShurjoPay)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "gateway_name": { "type": "string" },
+        "is_active": { "type": "boolean" },
+        "sandbox_mode": { "type": "boolean" },
+        "store_id": { "type": "string" },
+        "store_password": { "type": "string" },
+        "secret_key": { "type": "string" },
+        "prefix": { "type": "string" },
+        "success_url": { "type": "string" },
+        "failed_url": { "type": "string" },
+        "cancel_url": { "type": "string" },
+        "ipn_url": { "type": "string" },
+        "logo": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["gateway_name", "is_active"]
     }
   },
   "firestore": {
+    "/payment_gateways/{gatewayId}": {
+      "schema": "PaymentGateway",
+      "description": "Payment gateways configuration"
+    },
     "/chat_sessions/{sessionId}": {
       "schema": "ChatSession",
       "description": "Chat conversations"
