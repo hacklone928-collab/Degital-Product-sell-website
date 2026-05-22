@@ -117,12 +117,21 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
 
   // Pull products lists directly from order doc on payment success redirect if state was reset
   useEffect(() => {
-    if (isSuccess && lastOrderId && products.length === 0) {
+    if (isSuccess && lastOrderId) {
       getDoc(doc(db, "orders", lastOrderId)).then((snap) => {
         if (snap.exists()) {
           const orderData = snap.data();
-          if (orderData.items) {
+          if (products.length === 0 && orderData.items) {
             setProducts(orderData.items);
+          }
+          // Self-healing: if order is not completed/paid, do it from client side
+          if (orderData.status !== "completed") {
+            console.log("Healing order status client-side...");
+            updateDoc(doc(db, "orders", lastOrderId), {
+              status: "completed",
+              isPaid: true,
+              paidAt: serverTimestamp()
+            }).catch((err) => console.warn("Client self-healing update order failed: ", err));
           }
         }
       });

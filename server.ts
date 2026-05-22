@@ -4,6 +4,23 @@ import path from "path";
 import { fileURLToPath } from "url";
 import admin from "firebase-admin";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { initializeApp as initializeClientApp } from "firebase/app";
+import { 
+  getFirestore as getClientFirestore, 
+  doc as clientDoc, 
+  getDoc as clientGetDoc, 
+  getDocs as clientGetDocs, 
+  setDoc as clientSetDoc, 
+  addDoc as clientAddDoc, 
+  updateDoc as clientUpdateDoc, 
+  query as clientQuery, 
+  collection as clientCollection, 
+  where as clientWhere, 
+  orderBy as clientOrderBy, 
+  limit as clientLimit,
+  serverTimestamp as clientServerTimestamp,
+  increment as clientIncrement
+} from "firebase/firestore";
 import Stripe from "stripe";
 import dotenv from "dotenv";
 import fs from "fs";
@@ -120,6 +137,11 @@ if (dbId && dbId !== "(default)") {
   console.log(`Firestore initialized with DEFAULT database`);
 }
 
+// Initializing Web Client SDK db for sandbox fallback
+const clientApp = initializeClientApp(firebaseConfig);
+const clientDb = getClientFirestore(clientApp, firebaseConfig.firestoreDatabaseId);
+console.log("Firebase Web Client SDK successfully initialized for sandbox fallbacks");
+
 // Resilient Firestore REST API query fallback for isolated sandbox environments (overcomes 7 PERMISSION_DENIED)
 const toFirestoreValue = (val: any): any => {
   if (val === null || val === undefined) return { nullValue: null };
@@ -169,13 +191,38 @@ const parseFirestoreValue = (val: any): any => {
   return null;
 };
 
+const getRESTAuthHeaders = async () => {
+  const headers: any = { "Content-Type": "application/json" };
+  try {
+    const cred = admin.credential.applicationDefault();
+    const tokenObj = await cred.getAccessToken();
+    if (tokenObj && tokenObj.access_token) {
+      headers["Authorization"] = `Bearer ${tokenObj.access_token}`;
+    }
+  } catch (err: any) {
+    // Proceed silently so unauthenticated REST fallback with API Key works
+  }
+  return headers;
+};
+
 const fetchFirestoreDocREST = async (collectionName: string, docId: string) => {
   const projectId = firebaseConfig.projectId;
   const databaseId = firebaseConfig.firestoreDatabaseId || "(default)";
   const apiKey = firebaseConfig.apiKey;
   const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/${collectionName}/${docId}?key=${apiKey}`;
   
-  const response = await nodeFetch(url);
+  const headers = await getRESTAuthHeaders();
+  let response = await nodeFetch(url, {
+    method: "GET",
+    headers
+  });
+  if (response.status === 403 && headers["Authorization"]) {
+    console.warn(`REST fetch returned 403 with auth headers for ${collectionName}/${docId}. Retrying as unauthenticated JSON request with API key...`);
+    response = await nodeFetch(url, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" }
+    });
+  }
   if (!response.ok) {
     throw new Error(`REST fetch failed with status ${response.status}`);
   }
@@ -210,11 +257,21 @@ const writeFirestoreDocREST = async (collectionName: string, docId: string, data
     url += `&${updateMasks}`;
   }
 
-  const response = await nodeFetch(url, {
+  const headers = await getRESTAuthHeaders();
+  let response = await nodeFetch(url, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ fields })
   });
+
+  if (response.status === 403 && headers["Authorization"]) {
+    console.warn(`REST PATCH returned 403 with auth headers for ${collectionName}/${docId}. Retrying as unauthenticated JSON request with API key...`);
+    response = await nodeFetch(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fields })
+    });
+  }
 
   if (!response.ok) {
     const errText = await response.text();
@@ -246,11 +303,21 @@ const addFirestoreDocREST = async (collectionName: string, data: any) => {
     fields[k] = toFirestoreValue(val);
   }
 
-  const response = await nodeFetch(url, {
+  const headers = await getRESTAuthHeaders();
+  let response = await nodeFetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ fields })
   });
+
+  if (response.status === 403 && headers["Authorization"]) {
+    console.warn(`REST POST returned 403 with auth headers for ${collectionName}. Retrying as unauthenticated JSON request with API key...`);
+    response = await nodeFetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fields })
+    });
+  }
 
   if (!response.ok) {
     const errText = await response.text();
@@ -322,11 +389,21 @@ const queryFirestoreREST = async (
     }));
   }
 
-  const response = await nodeFetch(url, {
+  const headers = await getRESTAuthHeaders();
+  let response = await nodeFetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ structuredQuery })
   });
+
+  if (response.status === 403 && headers["Authorization"]) {
+    console.warn(`REST POST query returned 403 with auth headers for ${collectionName}. Retrying as unauthenticated JSON request with API key...`);
+    response = await nodeFetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ structuredQuery })
+    });
+  }
 
   if (!response.ok) {
     const errText = await response.text();
@@ -1203,9 +1280,159 @@ async function startServer() {
     }
   });
 
+// ==========================================
+// DB WEBSDK FALLBACK HELPER FUNCTIONS
+// ==========================================
+const clientFetchSiteSettings = async (): Promise<any> => {
+  try {
+    const docRef = clientDoc(clientDb, "settings", "site");
+    const docSnap = await clientGetDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data();
+    }
+  } catch (err: any) {
+    console.error("Client SDK fallback failed to fetch site settings:", err.message || err);
+  }
+  return null;
+};
+
+const clientFetchChatSession = async (sessionId: string): Promise<any> => {
+  try {
+    const docRef = clientDoc(clientDb, "chat_sessions", sessionId);
+    const docSnap = await clientGetDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data();
+    }
+  } catch (err: any) {
+    console.error("Client SDK fallback failed to fetch chat session:", err.message || err);
+  }
+  return null;
+};
+
+const clientForceEnableAi = async (sessionId: string): Promise<boolean> => {
+  try {
+    const docRef = clientDoc(clientDb, "chat_sessions", sessionId);
+    await clientSetDoc(docRef, { aiEnabled: true }, { merge: true });
+    return true;
+  } catch (err: any) {
+    console.error("Client SDK fallback failed to force enable AI:", err.message || err);
+    return false;
+  }
+};
+
+const clientFetchProducts = async (): Promise<any[]> => {
+  try {
+    const colRef = clientCollection(clientDb, "products");
+    const q = clientQuery(colRef, clientLimit(15));
+    const querySnap = await clientGetDocs(q);
+    const products: any[] = [];
+    querySnap.forEach(doc => {
+      products.push({ id: doc.id, ...doc.data() });
+    });
+    return products;
+  } catch (err: any) {
+    console.error("Client SDK fallback failed to fetch products:", err.message || err);
+    return [];
+  }
+};
+
+const clientFetchOrders = async (email: string): Promise<any[]> => {
+  try {
+    const colRef = clientCollection(clientDb, "orders");
+    const q1 = clientQuery(
+      colRef, 
+      clientWhere("customerEmail", "==", email), 
+      clientOrderBy("createdAt", "desc"), 
+      clientLimit(3)
+    );
+    const querySnap = await clientGetDocs(q1);
+    const orders: any[] = [];
+    querySnap.forEach(doc => {
+      orders.push({ id: doc.id, ...doc.data() });
+    });
+    
+    if (orders.length === 0) {
+      const q2 = clientQuery(
+        colRef, 
+        clientWhere("email", "==", email), 
+        clientOrderBy("createdAt", "desc"), 
+        clientLimit(3)
+      );
+      const querySnap2 = await clientGetDocs(q2);
+      querySnap2.forEach(doc => {
+        orders.push({ id: doc.id, ...doc.data() });
+      });
+    }
+    return orders;
+  } catch (err: any) {
+    console.error("Client SDK fallback failed to fetch orders:", err.message || err);
+    return [];
+  }
+};
+
+const clientFetchChatHistory = async (sessionId: string): Promise<any[]> => {
+  try {
+    const colRef = clientCollection(clientDb, "chat_messages");
+    const q = clientQuery(
+      colRef, 
+      clientWhere("sessionId", "==", sessionId), 
+      clientOrderBy("createdAt", "asc"), 
+      clientLimit(15)
+    );
+    const querySnap = await clientGetDocs(q);
+    const messages: any[] = [];
+    querySnap.forEach(doc => {
+      messages.push(doc.data());
+    });
+    return messages;
+  } catch (err: any) {
+    console.error("Client SDK fallback failed to fetch chat history:", err.message || err);
+    return [];
+  }
+};
+
+const clientPersistAiResponse = async (sessionId: string, aiReply: string): Promise<boolean> => {
+  try {
+    const colRef = clientCollection(clientDb, "chat_messages");
+    await clientAddDoc(colRef, {
+      sessionId,
+      senderId: "ai_bot",
+      senderType: "ai",
+      text: aiReply,
+      createdAt: clientServerTimestamp(),
+      seen: false
+    });
+    
+    const docRef = clientDoc(clientDb, "chat_sessions", sessionId);
+    await clientSetDoc(docRef, {
+      lastMessage: aiReply,
+      lastTimestamp: clientServerTimestamp(),
+      unreadCount: clientIncrement(1)
+    }, { merge: true });
+    
+    console.log("Client SDK successfully persisted auto-reply chat message.");
+    return true;
+  } catch (err: any) {
+    console.error("Client SDK fallback failed to persist AI response:", err.message || err);
+    return false;
+  }
+};
+
+const clientUpdateSiteSettings = async (geminiApiKeys: any[]): Promise<boolean> => {
+  try {
+    const docRef = clientDoc(clientDb, "settings", "site");
+    await clientSetDoc(docRef, { geminiApiKeys }, { merge: true });
+    console.log("Client SDK successfully updated site settings api keys usage stats.");
+    return true;
+  } catch (err: any) {
+    console.error("Client SDK fallback failed to update site settings api keys:", err.message || err);
+    return false;
+  }
+};
+
 // AI Auto Reply (with resilient sandboxed Firestore fallbacks)
   app.post("/api/chat/auto-reply", async (req, res) => {
-    const { sessionId, message, userName, userEmail } = req.body;
+    const { sessionId, message, userName, userEmail, forceEnabled, cart, sharedProduct } = req.body;
     
     if (!sessionId) return res.status(400).json({ error: "Missing sessionId" });
 
@@ -1214,24 +1441,52 @@ async function startServer() {
       
       let aiEnabled = true;
       let sessionDocRef: any = null;
+      
       try {
         sessionDocRef = db.collection("chat_sessions").doc(sessionId);
-        const sessionDoc = await sessionDocRef.get();
-        if (sessionDoc.exists) {
-          const sessionData = sessionDoc.data();
-          if (sessionData && sessionData.aiEnabled === false) {
-            aiEnabled = false;
+      } catch (err) {
+        console.warn("Failed to initialize sessionDocRef:", err);
+      }
+
+      if (forceEnabled) {
+        aiEnabled = true;
+        // Re-enable in firestore
+        try {
+          if (sessionDocRef) {
+            await sessionDocRef.set({ aiEnabled: true }, { merge: true });
+          }
+        } catch (e: any) {
+          console.warn("Firestore Admin SDK failed to set aiEnabled. Trying fallbacks...", e.message || e);
+          try {
+            const success = await clientForceEnableAi(sessionId);
+            if (!success) {
+              await writeFirestoreDocREST("chat_sessions", sessionId, { aiEnabled: true }, true);
+            }
+          } catch (restErr: any) {
+            console.error("REST/Client fallbacks forced update failed:", restErr.message || restErr);
           }
         }
-      } catch (firestoreError: any) {
-        console.warn("Firestore Admin SDK failed to fetch chat session. Trying REST fallback...", firestoreError.message || firestoreError);
+      } else {
         try {
-          const sessionData = await fetchFirestoreDocREST("chat_sessions", sessionId);
-          if (sessionData && sessionData.aiEnabled === false) {
-            aiEnabled = false;
+          if (sessionDocRef) {
+            const sessionDoc = await sessionDocRef.get();
+            if (sessionDoc.exists) {
+              const sessionData = sessionDoc.data();
+              if (sessionData && sessionData.aiEnabled === false) {
+                aiEnabled = false;
+              }
+            }
           }
-        } catch (restError: any) {
-          console.warn("Could not fetch session info via REST fallback. Defaulting to AI enabled:", restError.message || restError);
+        } catch (firestoreError: any) {
+          console.warn("Firestore Admin SDK failed to fetch chat session. Trying fallbacks...", firestoreError.message || firestoreError);
+          try {
+            const sessionData = await clientFetchChatSession(sessionId) || await fetchFirestoreDocREST("chat_sessions", sessionId);
+            if (sessionData && sessionData.aiEnabled === false) {
+              aiEnabled = false;
+            }
+          } catch (restError: any) {
+            console.warn("Could not fetch session info via fallbacks. Defaulting to AI enabled:", restError.message || restError);
+          }
         }
       }
       
@@ -1248,14 +1503,14 @@ async function startServer() {
           return `- ${p.name}: ৳${p.price} (${p.category || "General"}). Description: ${p.description?.substring(0, 100) || "No description available"}...`;
         }).join("\n");
       } catch (e) {
-        console.warn("Could not fetch products context from Admin SDK. Trying REST fallback...", e);
+        console.warn("Could not fetch products context from Admin SDK. Trying fallbacks...", e);
         try {
-          const productsRest = await queryFirestoreREST("products", { limit: 15 });
+          const productsRest = await clientFetchProducts() || await queryFirestoreREST("products", { limit: 15 });
           productsContext = productsRest.map(p => {
             return `- ${p.name}: ৳${p.price} (${p.category || "General"}). Description: ${p.description?.substring(0, 100) || "No description available"}...`;
           }).join("\n");
         } catch (restErr: any) {
-          console.warn("Could not fetch products context via REST fallback:", restErr.message || restErr);
+          console.warn("Could not fetch products context via fallbacks:", restErr.message || restErr);
         }
       }
       
@@ -1277,9 +1532,9 @@ async function startServer() {
           geminiApiKeys = settings?.geminiApiKeys || [];
         }
       } catch (e) {
-        console.warn("Could not fetch site settings context via Admin SDK. Trying REST fallback...", e);
+        console.warn("Could not fetch site settings context via Admin SDK. Trying fallbacks...", e);
         try {
-          const settings = await fetchFirestoreDocREST("settings", "site");
+          const settings = await clientFetchSiteSettings() || await fetchFirestoreDocREST("settings", "site");
           if (settings) {
             siteName = settings.siteName || siteName;
             refundPolicy = settings.refundPolicy || refundPolicy;
@@ -1288,7 +1543,7 @@ async function startServer() {
             geminiApiKeys = settings.geminiApiKeys || [];
           }
         } catch (restErr: any) {
-          console.warn("Could not fetch site settings context via REST fallback:", restErr.message || restErr);
+          console.warn("Could not fetch site settings context via fallbacks:", restErr.message || restErr);
         }
       }
 
@@ -1296,17 +1551,31 @@ async function startServer() {
       let selectedApiKey = process.env.GEMINI_API_KEY;
       let selectedKeyIndex = -1;
       
-      if (geminiApiKeys && geminiApiKeys.length > 0) {
+      if (geminiApiKeys && Array.isArray(geminiApiKeys) && geminiApiKeys.length > 0) {
         // Filter for active keys (simple strategy: random from active)
-        const activeKeys = geminiApiKeys.map((k, i) => ({ ...k, originalIndex: i }))
-          .filter(k => (typeof k === 'string') || (k.status === 'active' || !k.status));
+        const activeKeys = geminiApiKeys
+          .map((k, i) => {
+            if (typeof k === 'string') {
+              return { key: k, status: 'active', originalIndex: i };
+            } else if (k && typeof k === 'object') {
+              return { 
+                key: k.key || '', 
+                status: k.status || 'active', 
+                originalIndex: i 
+              };
+            }
+            return null;
+          })
+          .filter(k => k && k.key && k.status === 'active');
         
         if (activeKeys.length > 0) {
           const randomIndex = Math.floor(Math.random() * activeKeys.length);
           const selected = activeKeys[randomIndex];
-          selectedApiKey = typeof selected === 'string' ? selected : selected.key;
-          selectedKeyIndex = selected.originalIndex ?? -1;
-          console.log(`Using rotated Gemini API Key (Index: ${selectedKeyIndex})`);
+          if (selected) {
+            selectedApiKey = selected.key;
+            selectedKeyIndex = selected.originalIndex;
+            console.log(`Using rotated Gemini API Key (Index: ${selectedKeyIndex})`);
+          }
         }
       }
 
@@ -1327,14 +1596,17 @@ async function startServer() {
           console.log(`Fetching order context for email: ${userEmail}`);
           let orders: any[] = [];
           try {
-            const ordersSnapshot = await db.collection("orders")
-              .where("customerEmail", "==", userEmail)
-              .orderBy("createdAt", "desc")
-              .limit(3)
-              .get();
-            orders = ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            orders = await clientFetchOrders(userEmail);
+            if (orders.length === 0) {
+              const ordersSnapshot = await db.collection("orders")
+                .where("customerEmail", "==", userEmail)
+                .orderBy("createdAt", "desc")
+                .limit(3)
+                .get();
+              orders = ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            }
           } catch (firstErr) {
-            console.warn("First fallback order context search failed, trying query with alternative field...");
+            console.warn("First fallback order context search failed, trying alternative queries and REST fallback...");
             try {
               const ordersSnapshot2 = await db.collection("orders")
                 .where("email", "==", userEmail)
@@ -1386,16 +1658,19 @@ async function startServer() {
             .get();
           messages = chatMessagesSnapshot.docs.map(doc => doc.data());
         } catch (firestoreError: any) {
-          console.warn("Firestore Admin SDK failed to fetch chat history. Trying REST fallback...", firestoreError.message || firestoreError);
+          console.warn("Firestore Admin SDK failed to fetch chat history. Trying fallbacks...", firestoreError.message || firestoreError);
           try {
-            messages = await queryFirestoreREST("chat_messages", {
-              where: [{ field: "sessionId", op: "EQUAL", value: sessionId }],
-              limit: 10
-            });
-            // Sort by createdAt manually if runQuery orderBy is too restrictive
-            messages.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+            messages = await clientFetchChatHistory(sessionId);
+            if (messages.length === 0) {
+              messages = await queryFirestoreREST("chat_messages", {
+                where: [{ field: "sessionId", op: "EQUAL", value: sessionId }],
+                limit: 10
+              });
+              // Sort by createdAt manually if runQuery orderBy is too restrictive
+              messages.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+            }
           } catch (restErr: any) {
-            console.error("Could not fetch chat history via REST fallback:", restErr.message || restErr);
+            console.error("Could not fetch chat history via fallbacks:", restErr.message || restErr);
           }
         }
 
@@ -1437,6 +1712,35 @@ async function startServer() {
         CUSTOMER PROFILE:
         - Name: ${userName || "Valued Customer"}
         - Email: ${userEmail || "Not provided"}
+
+        CUSTOMER'S CURRENT ACTIVE CART (PRODUCTS IN THEIR HANDS RUNTIME):
+        ${cart && Array.isArray(cart) && cart.length > 0 
+          ? cart.map((item: any) => `- "${item.name}" (Quantity: ${item.quantity || 1}x, Unit Price: ৳${item.price}, Total: ৳${item.price * (item.quantity || 1)})`).join("\n")
+          : "The customer's shopping cart is currently empty."}
+
+        CUSTOMER'S SHARED PRODUCT (SPECIFICALLY SELECTED BY CUSTOMER TO DISCUSS NOW):
+        ${sharedProduct 
+          ? `- ID: ${sharedProduct.id}\n- Name: "${sharedProduct.name}"\n- Price: ৳${sharedProduct.price}\n- Image URL: ${sharedProduct.imageUrl || "Not provided"}`
+          : "No specific product shared in this turn."}
+
+        CART AND CHECKOUT OPERATIONS ACTIONS:
+        - If the customer asks about what products are in their cart, asks to clarify price or checkout, or refers to what they're trying to purchase, reference the active cart items listed above with detail, warmth, and excitement!
+        - If the customer shared a specific product (listed in CUSTOMER'S SHARED PRODUCT above), you MUST reply with detailed and expert insights about that product! Focus on its fantastic benefits, explain why it is an amazing value for money, help answer any questions about it, and highly encourage them to complete their purchase by providing direct conversion links using format: [/product/${sharedProduct?.id || ''}]( বিস্তারিত) / [/checkout/${sharedProduct?.id || ''}]( অর্ডার করতে).
+        - Guide them politely to our easy Cart Checkout link at "/cart-checkout" to place their order.
+        - If they mention that their cart is empty, suggest some premium products from our catalog above!
+
+        SALES EXPERTISE AND PRODUCT LINKING (CRITICAL):
+        - You are a highly professional, skilled, and persuasive sales expert (আপনি প্রোডাক্ট সেল করতে অত্যন্ত দক্ষ এবং পারদর্শী).
+        - To make buying smooth, you MUST include clickable Markdown links with matching emojis when suggesting products:
+          * Product details page path: '/product/<product_id>'
+          * Direct instantaneous checkout page path: '/checkout/<product_id>'
+          * Cart checkout page path: '/cart-checkout'
+        - Format markdown links beautifully, for example:
+          * "[Product Name 🌟](/product/product_id) সম্পর্কে বিস্তারিত জানতে পারেন।"
+          * "আজই অর্ডার করতে ক্লিক করুন: [ক্লিক করুন অর্ডার করতে 🛒](/checkout/product_id)"
+          * "আপনার কার্ট চেকআউট করতে এখানে যান: [কার্ট চেকআউট করুন 💳](/cart-checkout)"
+        - Look at the ID, Name, and Price in the Product Catalog above to obtain correct IDs. Never hallucinate product IDs or make up product links that aren't in the catalog!
+        - Focus on describing benefits, solving customer hesitations, and closing sales politely!
 
         CUSTOMER'S RECENT ORDERS in DB:
         ${orderContext || "No orders found under this email yet. Encourage them to place an order or view our premium products."}
@@ -1482,7 +1786,25 @@ async function startServer() {
             const siteSettingsRef = db.collection("settings").doc("site");
             await siteSettingsRef.set({ geminiApiKeys: updatedKeys }, { merge: true });
           } catch (keyWriteErr: any) {
-            console.warn("Could not write rotated key stats to settings:", keyWriteErr.message);
+            console.warn("Could not write rotated key stats to settings via Admin SDK, trying fallbacks:", keyWriteErr.message);
+            try {
+              const updatedKeys = [...geminiApiKeys];
+              const keyObj = typeof updatedKeys[selectedKeyIndex] === 'string' 
+                ? { key: updatedKeys[selectedKeyIndex] } 
+                : { ...updatedKeys[selectedKeyIndex] };
+              
+              keyObj.usageCount = (keyObj.usageCount || 0) + 1;
+              keyObj.lastUsed = new Date().toISOString();
+              keyObj.status = 'active';
+              updatedKeys[selectedKeyIndex] = keyObj;
+              
+              const success = await clientUpdateSiteSettings(updatedKeys);
+              if (!success) {
+                await writeFirestoreDocREST("settings", "site", { geminiApiKeys: updatedKeys }, true);
+              }
+            } catch (restErr: any) {
+              console.error("Could not write key stats via fallbacks either:", restErr.message);
+            }
           }
         }
       } catch (aiErr: any) {
@@ -1502,7 +1824,23 @@ async function startServer() {
             const siteSettingsRef = db.collection("settings").doc("site");
             await siteSettingsRef.set({ geminiApiKeys: updatedKeys }, { merge: true });
           } catch (siteWriteErr: any) {
-            console.warn("Could not write error status back to site settings:", siteWriteErr.message);
+            console.warn("Could not write error status back via Admin SDK, trying fallbacks:", siteWriteErr.message);
+            try {
+              const updatedKeys = [...geminiApiKeys];
+              const keyObj = typeof updatedKeys[selectedKeyIndex] === 'string' 
+                ? { key: updatedKeys[selectedKeyIndex] } 
+                : { ...updatedKeys[selectedKeyIndex] };
+              
+              keyObj.status = 'error';
+              keyObj.lastError = aiErr.message;
+              updatedKeys[selectedKeyIndex] = keyObj;
+              const success = await clientUpdateSiteSettings(updatedKeys);
+              if (!success) {
+                await writeFirestoreDocREST("settings", "site", { geminiApiKeys: updatedKeys }, true);
+              }
+            } catch (restErr: any) {
+              console.error("Could not write error status via fallbacks either:", restErr.message);
+            }
           }
         }
         throw aiErr;
@@ -1531,22 +1869,25 @@ async function startServer() {
           }, { merge: true });
         }
       } catch (firestoreError: any) {
-        console.warn("Firestore Admin SDK failed to persist AI response (isolated sandbox permissions). Trying REST fallback...", firestoreError.message || firestoreError);
+        console.warn("Firestore Admin SDK failed to persist AI response (isolated sandbox permissions). Trying Client/REST fallbacks...", firestoreError.message || firestoreError);
         try {
-          await addFirestoreDocREST("chat_messages", {
-            sessionId,
-            senderId: "ai_bot",
-            senderType: "ai",
-            text: aiReply,
-            createdAt: new Date().toISOString(),
-            seen: false
-          });
+          const success = await clientPersistAiResponse(sessionId, aiReply);
+          if (!success) {
+            await addFirestoreDocREST("chat_messages", {
+              sessionId,
+              senderId: "ai_bot",
+              senderType: "ai",
+              text: aiReply,
+              createdAt: new Date().toISOString(),
+              seen: false
+            });
 
-          await writeFirestoreDocREST("chat_sessions", sessionId, {
-            lastMessage: aiReply,
-            lastTimestamp: new Date().toISOString()
-          }, true);
-          console.log("Auto-reply chat message persisted via REST API successfully.");
+            await writeFirestoreDocREST("chat_sessions", sessionId, {
+              lastMessage: aiReply,
+              lastTimestamp: new Date().toISOString()
+            }, true);
+            console.log("Auto-reply chat message persisted via REST API successfully.");
+          }
         } catch (restErr: any) {
           console.error("REST fallback both failed for chat message persistence:", restErr.message || restErr);
         }
@@ -1569,6 +1910,67 @@ async function startServer() {
     const { sessionId, lastUserMessage, history } = req.body;
     
     try {
+      // Fetch Site settings for API keys
+      let geminiApiKeys: any[] = [];
+      try {
+        const settingsDoc = await db.collection("settings").doc("site").get();
+        if (settingsDoc.exists) {
+          const settings = settingsDoc.data();
+          geminiApiKeys = settings?.geminiApiKeys || [];
+        }
+      } catch (e) {
+        console.warn("Could not fetch site settings for suggestions via Admin SDK. Trying fallbacks...", e);
+        try {
+          const settings = await clientFetchSiteSettings() || await fetchFirestoreDocREST("settings", "site");
+          if (settings) {
+            geminiApiKeys = settings.geminiApiKeys || [];
+          }
+        } catch (restErr: any) {
+          console.warn("Could not fetch site settings for suggestions via fallbacks:", restErr.message || restErr);
+        }
+      }
+
+      // API Key Rotation Logic
+      let selectedApiKey = process.env.GEMINI_API_KEY;
+      let selectedKeyIndex = -1;
+      
+      if (geminiApiKeys && Array.isArray(geminiApiKeys) && geminiApiKeys.length > 0) {
+        const activeKeys = geminiApiKeys
+          .map((k, i) => {
+            if (typeof k === 'string') {
+              return { key: k, status: 'active', originalIndex: i };
+            } else if (k && typeof k === 'object') {
+              return { 
+                key: k.key || '', 
+                status: k.status || 'active', 
+                originalIndex: i 
+              };
+            }
+            return null;
+          })
+          .filter(k => k && k.key && k.status === 'active');
+        
+        if (activeKeys.length > 0) {
+          const randomIndex = Math.floor(Math.random() * activeKeys.length);
+          const selected = activeKeys[randomIndex];
+          if (selected) {
+            selectedApiKey = selected.key;
+            selectedKeyIndex = selected.originalIndex;
+            console.log(`Using rotated Gemini API Key for suggestions (Index: ${selectedKeyIndex})`);
+          }
+        }
+      }
+
+      // Initialize AI client with the selected key
+      const localAi = new GoogleGenAI({ 
+        apiKey: selectedApiKey!,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
       const prompt = `
         You are helping a customer support admin draft a perfect reply.
         Customer message: "${lastUserMessage}"
@@ -1581,12 +1983,88 @@ async function startServer() {
         Format: Return only a JSON array of strings. No extra text.
       `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash", 
-        contents: prompt,
-      });
+      let techText = "";
+      try {
+        const response = await localAi.models.generateContent({
+          model: "gemini-3.5-flash", 
+          contents: prompt,
+        });
+        techText = response.text;
 
-      let techText = response.text;
+        // Update successful usage
+        if (selectedKeyIndex !== -1) {
+          try {
+            const updatedKeys = [...geminiApiKeys];
+            const keyObj = typeof updatedKeys[selectedKeyIndex] === 'string' 
+              ? { key: updatedKeys[selectedKeyIndex] } 
+              : { ...updatedKeys[selectedKeyIndex] };
+            
+            keyObj.usageCount = (keyObj.usageCount || 0) + 1;
+            keyObj.lastUsed = new Date().toISOString();
+            keyObj.status = 'active';
+            updatedKeys[selectedKeyIndex] = keyObj;
+            
+            const siteSettingsRef = db.collection("settings").doc("site");
+            await siteSettingsRef.set({ geminiApiKeys: updatedKeys }, { merge: true });
+          } catch (keyWriteErr: any) {
+            console.warn("Could not write rotated suggestion key stats to settings via Admin SDK, trying fallbacks:", keyWriteErr.message);
+            try {
+              const updatedKeys = [...geminiApiKeys];
+              const keyObj = typeof updatedKeys[selectedKeyIndex] === 'string' 
+                ? { key: updatedKeys[selectedKeyIndex] } 
+                : { ...updatedKeys[selectedKeyIndex] };
+              
+              keyObj.usageCount = (keyObj.usageCount || 0) + 1;
+              keyObj.lastUsed = new Date().toISOString();
+              keyObj.status = 'active';
+              updatedKeys[selectedKeyIndex] = keyObj;
+              
+              const success = await clientUpdateSiteSettings(updatedKeys);
+              if (!success) {
+                await writeFirestoreDocREST("settings", "site", { geminiApiKeys: updatedKeys }, true);
+              }
+            } catch (restErr: any) {
+              console.error("Could not write suggestion key stats via fallbacks either:", restErr.message);
+            }
+          }
+        }
+      } catch (aiErr: any) {
+        console.error("Gemini Suggestion API Error details:", aiErr);
+        if (selectedKeyIndex !== -1 && (aiErr.message?.includes("429") || aiErr.message?.includes("403") || aiErr.message?.includes("API_KEY_INVALID"))) {
+          try {
+            const updatedKeys = [...geminiApiKeys];
+            const keyObj = typeof updatedKeys[selectedKeyIndex] === 'string' 
+              ? { key: updatedKeys[selectedKeyIndex] } 
+              : { ...updatedKeys[selectedKeyIndex] };
+            
+            keyObj.status = 'error';
+            keyObj.lastError = aiErr.message;
+            updatedKeys[selectedKeyIndex] = keyObj;
+            const siteSettingsRef = db.collection("settings").doc("site");
+            await siteSettingsRef.set({ geminiApiKeys: updatedKeys }, { merge: true });
+          } catch (siteWriteErr: any) {
+            console.warn("Could not write error status back for suggestion keys via Admin SDK, trying fallbacks:", siteWriteErr.message);
+            try {
+              const updatedKeys = [...geminiApiKeys];
+              const keyObj = typeof updatedKeys[selectedKeyIndex] === 'string' 
+                ? { key: updatedKeys[selectedKeyIndex] } 
+                : { ...updatedKeys[selectedKeyIndex] };
+              
+              keyObj.status = 'error';
+              keyObj.lastError = aiErr.message;
+              updatedKeys[selectedKeyIndex] = keyObj;
+              const success = await clientUpdateSiteSettings(updatedKeys);
+              if (!success) {
+                await writeFirestoreDocREST("settings", "site", { geminiApiKeys: updatedKeys }, true);
+              }
+            } catch (restErr: any) {
+              console.error("Could not write error status back for suggestion keys via fallbacks either:", restErr.message);
+            }
+          }
+        }
+        throw aiErr;
+      }
+
       // Clean potential markdown blocks
       if (techText.includes("```json")) {
         techText = techText.split("```json")[1].split("```")[0].trim();

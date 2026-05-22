@@ -2308,22 +2308,22 @@ export default function AdminDashboard() {
         )}
 
         {(siteSettings.adminLayout === "classic" || activeTab === "analytics") && (
-          <div className="bg-white dark:bg-gray-950 p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-6 sm:space-y-8">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-green-50 dark:bg-green-900/10 rounded-xl">
-                  <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
+          <div className="bg-white dark:bg-gray-950 p-4 sm:p-8 lg:p-4 rounded-2xl sm:rounded-3xl lg:rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-6 sm:space-y-8 lg:space-y-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 lg:gap-2">
+              <div className="flex items-center gap-3 lg:gap-1.5">
+                <div className="p-2.5 bg-green-50 dark:bg-green-900/10 rounded-xl lg:p-1.5 lg:rounded-lg">
+                  <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400 lg:w-4 lg:h-4" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-gray-900 dark:text-gray-100 text-sm sm:text-base">Revenue Statistics</h3>
-                  <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">Daily earnings performance over time</p>
+                  <h3 className="font-bold text-gray-900 dark:text-gray-100 text-sm sm:text-base lg:text-xs">Revenue Statistics</h3>
+                  <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 lg:text-[8px]">Daily earnings performance over time</p>
                 </div>
               </div>
-              <div className="flex bg-gray-50 dark:bg-gray-900 p-1 rounded-xl border border-gray-100 dark:border-gray-800 w-full md:w-auto overflow-x-auto no-scrollbar whitespace-nowrap">
+              <div className="flex bg-gray-50 dark:bg-gray-900 p-1 rounded-xl border border-gray-100 dark:border-gray-800 w-full md:w-auto overflow-x-auto no-scrollbar whitespace-nowrap lg:scale-90 lg:origin-right">
                 <button 
                   onClick={() => setRevenueTimeframe("daily")}
                   className={cn(
-                    "flex-1 md:flex-none px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                    "flex-1 md:flex-none px-4 py-1.5 rounded-lg text-[10px] lg:text-[9px] font-black uppercase tracking-widest transition-all",
                     revenueTimeframe === "daily" ? "bg-white dark:bg-gray-800 shadow-sm text-indigo-600 dark:text-indigo-400" : "text-gray-400 dark:text-gray-500"
                   )}
                 >
@@ -2332,7 +2332,7 @@ export default function AdminDashboard() {
                 <button 
                   onClick={() => setRevenueTimeframe("weekly")}
                   className={cn(
-                    "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                    "px-4 py-1.5 rounded-lg text-[10px] lg:text-[9px] font-black uppercase tracking-widest transition-all",
                     revenueTimeframe === "weekly" ? "bg-white dark:bg-gray-800 shadow-sm text-indigo-600 dark:text-indigo-400" : "text-gray-400 dark:text-gray-500"
                   )}
                 >
@@ -2341,7 +2341,7 @@ export default function AdminDashboard() {
                 <button 
                   onClick={() => setRevenueTimeframe("monthly")}
                   className={cn(
-                    "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                    "px-4 py-1.5 rounded-lg text-[10px] lg:text-[9px] font-black uppercase tracking-widest transition-all",
                     revenueTimeframe === "monthly" ? "bg-white dark:bg-gray-800 shadow-sm text-indigo-600 dark:text-indigo-400" : "text-gray-400 dark:text-gray-500"
                   )}
                 >
@@ -2350,40 +2350,40 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 pb-4">
-          <div className="bg-indigo-50/30 dark:bg-indigo-900/10 p-3 rounded-2xl border border-indigo-50 dark:border-indigo-900/20">
-            <div className="text-[9px] font-black text-indigo-400 dark:text-indigo-500 uppercase tracking-widest mb-1">Today</div>
-            <div className="text-lg font-black text-indigo-600 dark:text-indigo-400">৳{detailedStats.daily.toLocaleString()}</div>
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 lg:gap-2 pb-4 lg:pb-2">
+          <div className="bg-indigo-50/30 dark:bg-indigo-900/10 p-3 lg:p-2 rounded-2xl lg:rounded-lg border border-indigo-50 dark:border-indigo-900/20">
+            <div className="text-[9px] lg:text-[8px] font-black text-indigo-400 dark:text-indigo-500 uppercase tracking-widest mb-1 lg:mb-0.5">Today</div>
+            <div className="text-lg lg:text-xs font-black text-indigo-600 dark:text-indigo-400">৳{detailedStats.daily.toLocaleString()}</div>
           </div>
-          <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-3 rounded-2xl border border-emerald-50 dark:border-emerald-900/20">
-            <div className="text-[9px] font-black text-emerald-400 dark:text-emerald-500 uppercase tracking-widest mb-1">Weekly</div>
-            <div className="text-lg font-black text-emerald-600 dark:text-emerald-400">৳{detailedStats.weekly.toLocaleString()}</div>
+          <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-3 lg:p-2 rounded-2xl lg:rounded-lg border border-emerald-50 dark:border-emerald-900/20">
+            <div className="text-[9px] lg:text-[8px] font-black text-emerald-400 dark:text-emerald-500 uppercase tracking-widest mb-1 lg:mb-0.5">Weekly</div>
+            <div className="text-lg lg:text-xs font-black text-emerald-600 dark:text-emerald-400">৳{detailedStats.weekly.toLocaleString()}</div>
           </div>
-          <div className="bg-amber-50/30 dark:bg-amber-900/10 p-3 rounded-2xl border border-amber-50 dark:border-amber-900/20">
-            <div className="text-[9px] font-black text-amber-400 dark:text-amber-500 uppercase tracking-widest mb-1">Monthly</div>
-            <div className="text-lg font-black text-amber-600 dark:text-amber-400">৳{detailedStats.monthly.toLocaleString()}</div>
+          <div className="bg-amber-50/30 dark:bg-amber-900/10 p-3 lg:p-2 rounded-2xl lg:rounded-lg border border-amber-50 dark:border-amber-900/20">
+            <div className="text-[9px] lg:text-[8px] font-black text-amber-400 dark:text-amber-500 uppercase tracking-widest mb-1 lg:mb-0.5">Monthly</div>
+            <div className="text-lg lg:text-xs font-black text-amber-600 dark:text-amber-400">৳{detailedStats.monthly.toLocaleString()}</div>
           </div>
-          <div className="bg-purple-50/30 dark:bg-purple-900/10 p-3 rounded-2xl border border-purple-50 dark:border-purple-900/20">
-            <div className="text-[9px] font-black text-purple-400 dark:text-purple-500 uppercase tracking-widest mb-1">New Orders</div>
-            <div className="text-lg font-black text-purple-600 dark:text-purple-400">{orderCounts.new}</div>
+          <div className="bg-purple-50/30 dark:bg-purple-900/10 p-3 lg:p-2 rounded-2xl lg:rounded-lg border border-purple-50 dark:border-purple-900/20">
+            <div className="text-[9px] lg:text-[8px] font-black text-purple-400 dark:text-purple-500 uppercase tracking-widest mb-1 lg:mb-0.5">New Orders</div>
+            <div className="text-lg lg:text-xs font-black text-purple-600 dark:text-purple-400">{orderCounts.new}</div>
           </div>
-          <div className="bg-rose-50/30 dark:bg-rose-900/10 p-3 rounded-2xl border border-rose-100 dark:border-rose-900/20 flex justify-between items-end">
+          <div className="bg-rose-50/30 dark:bg-rose-900/10 p-3 lg:p-2 rounded-2xl lg:rounded-lg border border-rose-100 dark:border-rose-900/20 flex justify-between items-end">
             <div>
-              <div className="text-[9px] font-black text-rose-400 dark:text-rose-500 uppercase tracking-widest mb-1">Pending</div>
-              <div className="text-lg font-black text-rose-600 dark:text-rose-400">{orderCounts.pending}</div>
+              <div className="text-[9px] lg:text-[8px] font-black text-rose-400 dark:text-rose-500 uppercase tracking-widest mb-1 lg:mb-0.5">Pending</div>
+              <div className="text-lg lg:text-xs font-black text-rose-600 dark:text-rose-400">{orderCounts.pending}</div>
             </div>
-            <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.6)] mb-1" />
+            <div className="w-2 h-2 lg:w-1.5 lg:h-1.5 rounded-full bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.6)] mb-1 lg:mb-0.5" />
           </div>
-          <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-3 rounded-2xl border border-emerald-100 dark:border-emerald-900/20 flex justify-between items-end">
+          <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-3 lg:p-2 rounded-2xl lg:rounded-lg border border-emerald-100 dark:border-emerald-900/20 flex justify-between items-end">
             <div>
-              <div className="text-[9px] font-black text-emerald-400 dark:text-emerald-500 uppercase tracking-widest mb-1">Done</div>
-              <div className="text-lg font-black text-emerald-600 dark:text-emerald-400">{orderCounts.completed}</div>
+              <div className="text-[9px] lg:text-[8px] font-black text-emerald-400 dark:text-emerald-500 uppercase tracking-widest mb-1 lg:mb-0.5">Done</div>
+              <div className="text-lg lg:text-xs font-black text-emerald-600 dark:text-emerald-400">{orderCounts.completed}</div>
             </div>
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)] mb-1" />
+            <div className="w-2 h-2 lg:w-1.5 lg:h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)] mb-1 lg:mb-0.5" />
           </div>
         </div>
 
-        <div className="h-[300px] w-full">
+        <div className="h-[300px] lg:h-[200px] w-full">
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
@@ -2450,28 +2450,28 @@ export default function AdminDashboard() {
         </div>
 
         {/* Coupon & Affiliate Analytics */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-8 border-t border-gray-100 dark:border-gray-800">
-          <div className="space-y-4">
-             <div className="flex items-center gap-2 mb-2">
-                <Ticket className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                <h4 className="font-bold text-gray-900 dark:text-gray-100 uppercase text-xs tracking-widest">Top Coupons</h4>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-4 pt-8 lg:pt-4 border-t border-gray-100 dark:border-gray-800">
+          <div className="space-y-4 lg:space-y-2">
+             <div className="flex items-center gap-2 mb-2 lg:mb-1">
+                <Ticket className="w-5 h-5 lg:w-4 lg:h-4 text-indigo-600 dark:text-indigo-400" />
+                <h4 className="font-bold text-gray-900 dark:text-gray-100 uppercase text-xs lg:text-[10px] tracking-widest">Top Coupons</h4>
              </div>
-             <div className="space-y-3">
+             <div className="space-y-3 lg:space-y-2">
                 {coupons
                   .sort((a, b) => (b.usageCount || 0) - (a.usageCount || 0))
                   .slice(0, 5)
                   .map((coupon, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800">
-                      <div className="flex items-center gap-3">
-                         <div className="w-8 h-8 bg-white dark:bg-gray-800 rounded-lg flex items-center justify-center border border-gray-100 dark:border-gray-700 font-mono font-bold text-[10px] text-indigo-600 dark:text-indigo-400">
+                    <div key={i} className="flex items-center justify-between p-3 lg:p-2 bg-gray-50 dark:bg-gray-900 rounded-2xl lg:rounded-lg border border-gray-100 dark:border-gray-800">
+                      <div className="flex items-center gap-3 lg:gap-2">
+                         <div className="w-8 h-8 lg:w-6 lg:h-6 bg-white dark:bg-gray-800 rounded-lg flex items-center justify-center border border-gray-100 dark:border-gray-700 font-mono font-bold text-[10px] lg:text-[9px] text-indigo-600 dark:text-indigo-400">
                            {i + 1}
                          </div>
                          <div>
-                            <div className="text-xs font-black text-gray-900 dark:text-gray-100 tracking-tight">{coupon.code}</div>
-                            <div className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{coupon.usageCount || 0} uses</div>
+                            <div className="text-xs lg:text-[10px] font-black text-gray-900 dark:text-gray-100 tracking-tight">{coupon.code}</div>
+                            <div className="text-[10px] lg:text-[8px] text-gray-400 font-medium">{coupon.usageCount || 0} uses</div>
                          </div>
                       </div>
-                      <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                      <div className="text-xs lg:text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
                         ৳{orders
                           .filter(o => o.couponCode === coupon.code && (o.status === 'completed' || o.status === 'delivered'))
                           .reduce((sum, o) => sum + (o.discountAmount || 0), 0)
@@ -2480,17 +2480,17 @@ export default function AdminDashboard() {
                     </div>
                   ))}
                 {coupons.length === 0 && (
-                  <p className="text-xs text-gray-400 italic">No coupons found.</p>
+                  <p className="text-xs lg:text-[10px] text-gray-400 italic">No coupons found.</p>
                 )}
              </div>
           </div>
 
-          <div className="space-y-4">
-             <div className="flex items-center gap-2 mb-2">
-                <Users className="w-5 h-5 text-emerald-600" />
-                <h4 className="font-bold text-gray-900 dark:text-gray-100 uppercase text-xs tracking-widest">Top Earners</h4>
+          <div className="space-y-4 lg:space-y-2">
+             <div className="flex items-center gap-2 mb-2 lg:mb-1">
+                <Users className="w-5 h-5 lg:w-4 lg:h-4 text-emerald-600" />
+                <h4 className="font-bold text-gray-900 dark:text-gray-100 uppercase text-xs lg:text-[10px] tracking-widest">Top Earners</h4>
              </div>
-             <div className="space-y-3">
+             <div className="space-y-3 lg:space-y-2">
                 {Array.from(new Set(orders.map(o => o.bonusAssigneeEmail).filter(Boolean)))
                   .map(email => {
                     const totalBonus = orders
@@ -2502,17 +2502,17 @@ export default function AdminDashboard() {
                   .sort((a, b) => b.totalBonus - a.totalBonus)
                   .slice(0, 5)
                   .map((earner, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100 dark:border-emerald-900/20">
-                      <div className="flex items-center gap-3">
-                         <div className="w-8 h-8 bg-white dark:bg-gray-800 rounded-lg flex items-center justify-center border border-emerald-100 dark:border-emerald-900/40 font-mono font-bold text-[10px] text-emerald-600 dark:text-emerald-400">
+                    <div key={i} className="flex items-center justify-between p-3 lg:p-2 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-2xl lg:rounded-lg border border-emerald-100 dark:border-emerald-940/20">
+                      <div className="flex items-center gap-3 lg:gap-2">
+                         <div className="w-8 h-8 lg:w-6 lg:h-6 bg-white dark:bg-gray-800 rounded-lg flex items-center justify-center border border-emerald-100 dark:border-emerald-900/40 font-mono font-bold text-[10px] lg:text-[9px] text-emerald-600 dark:text-emerald-400">
                            {i + 1}
                          </div>
                          <div>
-                            <div className="text-xs font-black text-gray-900 dark:text-gray-100 tracking-tight max-w-[150px] truncate">{earner.email}</div>
-                            <div className="text-[10px] text-gray-500 font-medium">{earner.orderCount} conversions</div>
+                            <div className="text-xs lg:text-[10px] font-black text-gray-900 dark:text-gray-100 tracking-tight max-w-[150px] lg:max-w-[120px] truncate">{earner.email}</div>
+                            <div className="text-[10px] lg:text-[8px] text-emerald-500 font-medium">{earner.orderCount} conversions</div>
                          </div>
                       </div>
-                      <div className="text-xs font-bold text-emerald-600">
+                      <div className="text-xs lg:text-[10px] font-bold text-emerald-600">
                         ৳{earner.totalBonus.toLocaleString()}
                       </div>
                     </div>
@@ -2555,21 +2555,21 @@ export default function AdminDashboard() {
         ) : activeTab === "analytics" ? (
           <section className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
             {/* Professional Analytics Header */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-white dark:bg-gray-950 p-6 sm:p-10 rounded-3xl sm:rounded-[40px] border border-gray-100 dark:border-gray-800 shadow-sm relative overflow-hidden">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 lg:gap-4 bg-white dark:bg-gray-950 p-6 sm:p-10 lg:p-5 rounded-3xl sm:rounded-[40px] lg:rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm relative overflow-hidden">
                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 dark:bg-indigo-900/10 rounded-full blur-3xl -mr-32 -mt-32" />
                <div className="relative z-10 space-y-2">
-                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 dark:bg-indigo-900/30 rounded-full border border-indigo-100 dark:border-indigo-800">
+                 <div className="inline-flex items-center gap-2 px-3 py-1 lg:px-2 lg:py-0.5 bg-indigo-50 dark:bg-indigo-900/30 rounded-full border border-indigo-100 dark:border-indigo-800">
                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />
-                   <span className="text-[9px] sm:text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Real-time Attribution</span>
+                   <span className="text-[9px] sm:text-[10px] lg:text-[8px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Real-time Attribution</span>
                  </div>
-                 <h3 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-gray-100 tracking-tighter uppercase">Revenue Statistics</h3>
-                 <p className="text-[10px] sm:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest max-w-md leading-relaxed">
+                 <h3 className="text-2xl sm:text-3xl lg:text-lg font-black text-gray-900 dark:text-gray-100 tracking-tighter uppercase">Revenue Statistics</h3>
+                 <p className="text-[10px] sm:text-xs lg:text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest max-w-md leading-relaxed">
                    Comprehensive financial performance monitoring and marketing ROI tracking
                  </p>
                </div>
 
                <div className="relative z-10 flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-                  <div className="flex bg-gray-50 dark:bg-gray-900 p-1.5 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-x-auto no-scrollbar whitespace-nowrap">
+                  <div className="flex bg-gray-50 dark:bg-gray-900 p-1.5 lg:p-1 rounded-2xl lg:rounded-xl border border-gray-100 dark:border-gray-800 overflow-x-auto no-scrollbar whitespace-nowrap">
                     {[
                       { id: "today", label: "24h" },
                       { id: "yesterday", label: "Fixed" },
@@ -2583,7 +2583,7 @@ export default function AdminDashboard() {
                         key={p.id}
                         onClick={() => setDatePreset(p.id as any)}
                         className={cn(
-                          "px-4 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all",
+                          "px-4 py-2 lg:px-2.5 lg:py-1 text-[9px] lg:text-[8px] font-black uppercase tracking-widest rounded-xl lg:rounded-lg transition-all",
                           datePreset === p.id 
                             ? "bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 shadow-md shadow-indigo-200/20 dark:shadow-black/20" 
                             : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
@@ -2607,7 +2607,7 @@ export default function AdminDashboard() {
                     a.click();
                     document.body.removeChild(a);
                   }}
-                  className="flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-800 transition-all active:scale-95"
+                  className="flex items-center gap-2 px-6 py-3 lg:px-3 lg:py-2 bg-gray-900 text-white rounded-2xl lg:rounded-xl text-[10px] lg:text-[8px] font-black uppercase tracking-widest hover:bg-gray-800 transition-all active:scale-95"
                  >
                    <Save className="w-4 h-4" />
                    Export Report
@@ -2630,15 +2630,15 @@ export default function AdminDashboard() {
                    initial={{ opacity: 0, y: 20 }}
                    animate={{ opacity: 1, y: 0 }}
                    transition={{ delay: i * 0.1 }}
-                   className="bg-white dark:bg-gray-950 p-4 sm:p-6 rounded-2xl sm:rounded-[2.5rem] border border-gray-100 dark:border-gray-800 shadow-sm flex items-center gap-4 sm:gap-6 group hover:shadow-lg transition-all"
+                   className="bg-white dark:bg-gray-950 p-4 sm:p-6 lg:p-3 rounded-2xl sm:rounded-[2.5rem] lg:rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm flex items-center gap-4 sm:gap-6 lg:gap-3 group hover:shadow-lg transition-all"
                  >
-                   <div className={cn("w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center p-2.5 sm:p-3 transition-transform group-hover:scale-110 group-hover:rotate-6", stat.bg, stat.color)}>
+                   <div className={cn("w-12 h-12 sm:w-14 sm:h-14 lg:w-9 lg:h-9 rounded-xl sm:rounded-2xl lg:rounded-lg flex items-center justify-center p-2.5 sm:p-3 lg:p-1.5 transition-transform group-hover:scale-110 group-hover:rotate-6", stat.bg, stat.color)}>
                      <stat.icon className="w-full h-full" />
                    </div>
                    <div className="flex-1 min-w-0">
-                     <p className="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1 truncate">{stat.label}</p>
+                     <p className="text-[8px] sm:text-[10px] lg:text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1 lg:mb-0.5 truncate">{stat.label}</p>
                      <div className="flex items-center justify-between">
-                       <h4 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-gray-100 tracking-tighter truncate">
+                       <h4 className="text-xl sm:text-2xl lg:text-sm font-black text-gray-900 dark:text-gray-100 tracking-tighter truncate">
                          {stat.value}
                        </h4>
                        {stat.badge && (
@@ -2654,20 +2654,20 @@ export default function AdminDashboard() {
             </div>
 
             {/* Recent Orders Section */}
-            <div className="bg-white dark:bg-gray-950 p-5 sm:p-8 rounded-3xl sm:rounded-[45px] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
-               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8 text-center sm:text-left">
-                  <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
-                    <div className="w-12 h-12 sm:w-16 sm:h-16 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl sm:rounded-[28px] flex items-center justify-center flex-shrink-0">
+            <div className="bg-white dark:bg-gray-950 p-5 sm:p-8 lg:p-4 rounded-3xl sm:rounded-[45px] lg:rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8 lg:mb-4 text-center sm:text-left">
+                  <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 lg:gap-3">
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 lg:w-9 lg:h-9 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl sm:rounded-[28px] lg:rounded-lg flex items-center justify-center flex-shrink-0">
                       <ShoppingBag className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-600 dark:text-indigo-400" />
                     </div>
                     <div>
-                 <h3 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-gray-100 tracking-tighter uppercase italic">Recent Operations</h3>
-                      <p className="text-[9px] sm:text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Real-time live transactional stream</p>
+                 <h3 className="text-2xl sm:text-3xl lg:text-sm font-black text-gray-900 dark:text-gray-100 tracking-tighter uppercase italic">Recent Operations</h3>
+                      <p className="text-[9px] sm:text-[10px] lg:text-[8px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1 lg:mt-0.5">Real-time live transactional stream</p>
                     </div>
                   </div>
                   <button 
                     onClick={() => setActiveTab("orders")}
-                    className="w-full sm:w-auto px-6 py-3 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-100 dark:hover:bg-gray-800 transition-all border border-gray-100 dark:border-gray-800"
+                    className="w-full sm:w-auto px-6 py-3 lg:px-3 lg:py-1.5 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-2xl lg:rounded-lg text-[10px] lg:text-[8px] font-black uppercase tracking-widest hover:bg-gray-100 dark:hover:bg-gray-800 transition-all border border-gray-100 dark:border-gray-800"
                   >
                     View All Orders
                   </button>
@@ -2743,7 +2743,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Detailed Filters Expandable */}
-            <div className="bg-white dark:bg-gray-950 p-6 sm:p-8 rounded-[40px] border border-gray-100 dark:border-gray-800 shadow-sm relative overflow-hidden">
+            <div className="bg-white dark:bg-gray-950 p-6 sm:p-8 lg:p-4 rounded-[40px] lg:rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm relative overflow-hidden">
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                  <div>
                     <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 block ml-1 flex items-center gap-2">
@@ -3040,17 +3040,17 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
                {/* Left: Line Charts */}
                <div className="xl:col-span-8 space-y-8">
-                  <div className="bg-white dark:bg-gray-900 p-10 rounded-[45px] border border-gray-100 dark:border-gray-800 shadow-sm space-y-10 relative overflow-hidden group">
+                  <div className="bg-white dark:bg-gray-900 p-10 lg:p-4 rounded-[45px] lg:rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-10 lg:space-y-4 relative overflow-hidden group">
                      <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-50/30 rounded-full blur-[100px] -mr-48 -mt-48 pointer-events-none" />
                      <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                        <div className="flex items-center gap-5">
-                           <div className="w-16 h-16 bg-indigo-600 rounded-[35px] flex items-center justify-center shadow-2xl shadow-indigo-200">
-                              <TrendingUp className="w-8 h-8 text-white" />
+                        <div className="flex items-center gap-5 lg:gap-2.5">
+                           <div className="w-16 h-16 lg:w-10 lg:h-10 bg-indigo-600 rounded-[35px] lg:rounded-lg flex items-center justify-center shadow-2xl shadow-indigo-200">
+                              <TrendingUp className="w-8 h-8 lg:w-5 lg:h-5 text-white" />
                            </div>
                            <div>
                               <div className="flex items-center gap-2">
-                                <h3 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tighter italic">Earnings Velocity</h3>
-                                <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-900/30 rounded-full border border-emerald-100 dark:border-emerald-800">
+                                <h3 className="text-2xl lg:text-sm font-black text-gray-900 dark:text-white uppercase tracking-tighter italic">Earnings Velocity</h3>
+                                <div className="flex items-center gap-1.5 px-3 py-1 lg:px-1.5 lg:py-0.5 bg-emerald-50 dark:bg-emerald-900/30 rounded-full border border-emerald-100 dark:border-emerald-800 lg:scale-90 lg:origin-left">
                                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                   <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest leading-none">Live Sync</span>
                                 </div>
@@ -3060,13 +3060,13 @@ export default function AdminDashboard() {
                               </p>
                            </div>
                         </div>
-                        <div className="flex items-center gap-2 bg-gray-50/80 dark:bg-gray-800/80 backdrop-blur-md p-2 rounded-2xl border border-gray-100 dark:border-gray-700 self-start">
+                        <div className="flex items-center gap-2 bg-gray-50/80 dark:bg-gray-800/80 backdrop-blur-md p-2 lg:p-1 rounded-2xl lg:rounded-xl border border-gray-100 dark:border-gray-700 self-start lg:scale-90 lg:origin-right">
                           {(["daily", "weekly", "monthly"] as const).map((t) => (
                             <button
                               key={t}
                               onClick={() => setRevenueTimeframe(t)}
                               className={cn(
-                                "px-6 py-3 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all",
+                                "px-6 py-3 lg:px-3 lg:py-1.5 text-[9px] lg:text-[8px] font-black uppercase tracking-widest rounded-xl lg:rounded-lg transition-all",
                                 revenueTimeframe === t 
                                   ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-md shadow-indigo-500/5 ring-1 ring-black/5 dark:ring-white/5" 
                                   : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-white/50 dark:hover:bg-gray-700/50"

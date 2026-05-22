@@ -37,9 +37,13 @@ import {
   MoreHorizontal,
   Copy,
   MessageSquare,
-  Headphones
+  Headphones,
+  ShoppingCart
 } from "lucide-react";
 import { cn } from "../lib/utils";
+import { useCart } from "../lib/CartContext";
+import Markdown from "react-markdown";
+import { Link } from "react-router-dom";
 
 interface Message {
   id: string;
@@ -65,7 +69,42 @@ interface Message {
   seen?: boolean;
 }
 
+const formatMessageTime = (createdAt: any): string => {
+  if (!createdAt) return '...';
+  if (typeof createdAt.toDate === 'function') {
+    return createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  if (createdAt instanceof Date) {
+    return createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  if (typeof createdAt === 'string') {
+    return new Date(createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  if (typeof createdAt.seconds === 'number') {
+    return new Date(createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  return '...';
+};
+
+const getMessageTime = (createdAt: any): number => {
+  if (!createdAt) return Date.now();
+  if (typeof createdAt.toDate === 'function') {
+    return createdAt.toDate().getTime();
+  }
+  if (createdAt instanceof Date) {
+    return createdAt.getTime();
+  }
+  if (typeof createdAt === 'string') {
+    return new Date(createdAt).getTime();
+  }
+  if (typeof createdAt.seconds === 'number') {
+    return createdAt.seconds * 1000;
+  }
+  return Date.now();
+};
+
 export default function FloatingChat() {
+  const { items: cartItems } = useCart();
   const [isOpen, setIsOpen] = useState(false);
   const [session, setSession] = useState<any>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -304,17 +343,24 @@ export default function FloatingChat() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
+      // Use serverTimestamps: 'estimate' so local writes have temporary dates instead of null
+      const msgs = snapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data({ serverTimestamps: 'estimate' }) 
+      } as Message));
+      
+      // Client-side sort guarantees chronological order under all networking and synchronization delays
+      const sortedMsgs = [...msgs].sort((a, b) => getMessageTime(a.createdAt) - getMessageTime(b.createdAt));
       
       // Play sound for new incoming messages
-      if (msgs.length > messages.length && messages.length > 0) {
-        const lastMsg = msgs[msgs.length - 1];
+      if (sortedMsgs.length > messages.length && messages.length > 0) {
+        const lastMsg = sortedMsgs[sortedMsgs.length - 1];
         if (lastMsg.senderType !== "user" && soundEnabled && audioRef.current) {
           audioRef.current.play().catch(() => {});
         }
       }
 
-      setMessages(msgs);
+      setMessages(sortedMsgs);
 
       // Mark as seen (if sender is admin or ai)
       snapshot.docs.forEach(async (d) => {
@@ -325,7 +371,7 @@ export default function FloatingChat() {
     });
 
     return unsubscribe;
-  }, [session]);
+  }, [session, messages.length]);
 
   const handleStartChat = async (name?: string, email?: string) => {
     const finalName = name || guestInfo?.name;
@@ -372,19 +418,21 @@ export default function FloatingChat() {
     }
   };
 
-  const sendMessage = async (e?: React.FormEvent, productData?: any) => {
+  const sendMessage = async (e?: React.FormEvent, productData?: any, overrideText?: string) => {
     e?.preventDefault();
-    if (!productData && !inputText.trim()) return;
+    if (!productData && !overrideText && !inputText.trim()) return;
     if (!session) return;
     if (session.status === "blocked") {
       alert("Your access to chat has been restricted by an administrator.");
       return;
     }
 
-    const text = inputText;
+    const text = overrideText || inputText;
     const currentReplyTo = replyingTo;
     
-    setInputText("");
+    if (!overrideText) {
+      setInputText("");
+    }
     setReplyingTo(null);
     setShowProductPicker(false);
 
@@ -415,21 +463,28 @@ export default function FloatingChat() {
       await updateDoc(doc(db, "chat_sessions", session.id), {
         lastMessage: productData ? `Shared Product: ${productData.name}` : text,
         lastTimestamp: serverTimestamp(),
+        aiEnabled: true, // Always keep AI auto-reply enabled
       });
 
-      // Call AI auto-reply (only for text messages)
-      if (session.aiEnabled && !productData) {
-        fetch("/api/chat/auto-reply", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId: session.id,
-            message: text,
-            userName: session.userName,
-            userEmail: session.userEmail
-          })
-        }).catch(err => console.error("AI reply failed:", err));
-      }
+      // Call AI auto-reply (for any text messages OR shared product cards)
+      setIsTyping(true);
+      fetch("/api/chat/auto-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: session.id,
+          message: productData ? `আমি এই পণ্যটি (Product) শেয়ার করেছি: ${productData.name}। এটার দাম ৳${productData.price}। দয়া করে এই পণ্যটি সম্পর্কে বিস্তারিত বলুন এবং আমাকে এটি কেনার জন্য সাহায্য করুন।` : text,
+          userName: session.userName,
+          userEmail: session.userEmail,
+          forceEnabled: true,
+          cart: cartItems,
+          sharedProduct: productData || null
+        })
+      })
+      .catch(err => console.error("AI reply failed:", err))
+      .finally(() => {
+        setIsTyping(false);
+      });
 
     } catch (err) {
       console.error("Failed to send message:", err);
@@ -738,7 +793,35 @@ export default function FloatingChat() {
                                     ? "bg-purple-50 dark:bg-purple-900/10 text-purple-900 dark:text-purple-100 border border-purple-100 dark:border-purple-800 rounded-tl-[4px] font-medium"
                                     : "bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-tl-[4px] border border-gray-100 dark:border-gray-700 font-medium"
                               )}>
-                                {msg.text}
+                                {msg.isDeleted ? (
+                                  msg.text
+                                ) : (
+                                  <div className="markdown-body text-inherit">
+                                    <Markdown
+                                      components={{
+                                        a: ({ href, children }) => {
+                                          const linkClass = isUser 
+                                            ? "underline text-white font-extrabold hover:text-indigo-100" 
+                                            : "underline text-indigo-600 dark:text-indigo-400 font-extrabold hover:opacity-80";
+                                          if (href && href.startsWith("/")) {
+                                            return (
+                                              <Link to={href} className={linkClass}>
+                                                {children}
+                                              </Link>
+                                            );
+                                          }
+                                          return (
+                                            <a href={href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" className={linkClass}>
+                                              {children}
+                                            </a>
+                                          );
+                                        }
+                                      }}
+                                    >
+                                      {msg.text || ""}
+                                    </Markdown>
+                                  </div>
+                                )}
                                 
                                 {/* Reactions Display */}
                                 {msg.reactions && Object.keys(msg.reactions).some(e => msg.reactions[e].length > 0) && (
@@ -762,7 +845,7 @@ export default function FloatingChat() {
                             
                             <div className={cn("mt-1 flex items-center gap-1.5 px-1", isUser ? "justify-end" : "justify-start")}>
                               <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest opacity-60">
-                                {msg.createdAt?.toDate?.() ? msg.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '...'}
+                                {formatMessageTime(msg.createdAt)}
                               </span>
                               {isUser && (
                                 <div className="flex items-center gap-1">
@@ -787,7 +870,7 @@ export default function FloatingChat() {
                   })}
 
                   {/* Typing Indicator */}
-                  {adminIsTyping && (
+                  {(adminIsTyping || isTyping) && (
                     <div className="flex items-end gap-2 max-w-[85%]">
                       <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-900/10 flex items-center justify-center flex-shrink-0 animate-pulse">
                         <Sparkles className="w-4 h-4 text-indigo-400" />
@@ -851,6 +934,34 @@ export default function FloatingChat() {
                       </button>
                     ))}
                   </motion.div>
+                )}
+
+                {cartItems && cartItems.length > 0 && (
+                  <div className="mx-4 mt-2 mb-0 p-2.5 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/50 rounded-2xl flex items-center justify-between gap-2 overflow-hidden shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 bg-indigo-100 dark:bg-indigo-900/50 rounded-xl flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                        <ShoppingCart className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-[10px] font-black text-indigo-900 dark:text-indigo-200 uppercase tracking-wider">Your Active Cart</h4>
+                        <p className="text-[11px] text-indigo-700 dark:text-indigo-400 font-bold truncate">
+                          {cartItems.length} item{cartItems.length > 1 ? "s" : ""} in hand
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cartStr = `Here is my current shopping cart details 🛒:\n` + 
+                          cartItems.map((item: any) => `- **${item.name}** (Quantity: ${item.quantity || 1}x, Price: ৳${item.price})`).join("\n") + 
+                          `\nTotal Cart Value: ৳${cartItems.reduce((acc, item) => acc + (item.price * (item.quantity || 1)), 0)}.\n\nPlease review my cart, recommend if anything else matches, tell me why these are excellent choices, offer expert sales advice, and guide me to complete the purchase!`;
+                        sendMessage(undefined, undefined, cartStr);
+                      }}
+                      className="p-1.5 px-3 bg-indigo-600 dark:bg-indigo-500 hover:bg-indigo-700 dark:hover:bg-indigo-600 text-white text-[10px] font-black uppercase rounded-xl transition-all shadow-md shadow-indigo-100 dark:shadow-none whitespace-nowrap cursor-pointer"
+                    >
+                      Share with AI 🚀
+                    </button>
+                  </div>
                 )}
 
                 <form 

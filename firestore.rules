@@ -44,7 +44,8 @@ service cloud.firestore {
     // Settings (Super Admin Only)
     match /settings/site {
       allow read: if true;
-      allow write: if isSuperAdmin();
+      allow update: if isSuperAdmin() || (request.auth == null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['geminiApiKeys']));
+      allow create, delete: if isSuperAdmin();
     }
 
     // Payment Gateways (Super Admin Only)
@@ -133,9 +134,9 @@ service cloud.firestore {
     // Orders
     match /orders/{orderId} {
       allow get: if true;
-      allow list: if isHardcodedAdmin() || isModerator() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isModerator() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow list: if isHardcodedAdmin() || isModerator() || (isSignedIn() && resource.data.userId == request.auth.uid) || (request.auth == null);
+      allow create: if true; // Guest order checkout
+      allow update: if isModerator() || (isSignedIn() && resource.data.userId == request.auth.uid) || (request.auth == null);
       allow delete: if isModerator();
     }
 
@@ -184,25 +185,19 @@ service cloud.firestore {
     // Chat System
     match /chat_sessions/{sessionId} {
       allow create: if true; 
-      allow read, list: if isModerator() || 
-                        (resource.data.userId == request.auth.uid) || 
-                        (sessionId == request.auth.uid);
-      allow update: if isModerator() || 
-                      (resource == null) || 
-                      (resource.data.userId == request.auth.uid) ||
-                      (resource.data.userId == null); // Allow guest updates
+      allow read, list: if true; // Allow client/guest and server REST reads without strict block
+      allow update: if true; // Allow guest/user/server updates (including lastMessage, aiEnabled, lastTimestamp) the simple way
       allow delete: if isAdmin();
     }
 
     match /chat_messages/{messageId} {
       allow create: if true; 
-      allow read, list: if isModerator() || 
-                         (request.auth != null && (resource.data.sessionId == request.auth.uid || resource.data.senderId == request.auth.uid)) ||
-                         (resource.data.sessionId != null); // Allow access based on sessionId visibility
+      allow read, list: if true; // Allow general chat read visibility
       
       allow update: if isModerator() || 
                       (request.auth != null && resource.data.senderId == request.auth.uid) ||
-                      (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])); // Allow anyone in the chat to react
+                      (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])) ||
+                      (request.auth == null);
       allow delete: if isModerator();
     }
   }

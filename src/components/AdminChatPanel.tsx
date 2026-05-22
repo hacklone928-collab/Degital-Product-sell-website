@@ -91,6 +91,40 @@ interface Message {
   seen?: boolean;
 }
 
+const formatMessageTime = (createdAt: any): string => {
+  if (!createdAt) return '...';
+  if (typeof createdAt.toDate === 'function') {
+    return createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  if (createdAt instanceof Date) {
+    return createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  if (typeof createdAt === 'string') {
+    return new Date(createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  if (typeof createdAt.seconds === 'number') {
+    return new Date(createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  return '...';
+};
+
+const getMessageTime = (createdAt: any): number => {
+  if (!createdAt) return Date.now();
+  if (typeof createdAt.toDate === 'function') {
+    return createdAt.toDate().getTime();
+  }
+  if (createdAt instanceof Date) {
+    return createdAt.getTime();
+  }
+  if (typeof createdAt === 'string') {
+    return new Date(createdAt).getTime();
+  }
+  if (typeof createdAt.seconds === 'number') {
+    return createdAt.seconds * 1000;
+  }
+  return Date.now();
+};
+
 export default function AdminChatPanel() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -299,8 +333,15 @@ export default function AdminChatPanel() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
-      setMessages(data);
+      // Use serverTimestamps: 'estimate' so local writes have temporary dates instead of null
+      const data = snapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data({ serverTimestamps: 'estimate' }) 
+      } as Message));
+
+      // Client-side sort guarantees chronological order under all networking and synchronization delays
+      const sortedData = [...data].sort((a, b) => getMessageTime(a.createdAt) - getMessageTime(b.createdAt));
+      setMessages(sortedData);
       
       // Mark as seen
       snapshot.docs.forEach(async (d) => {
@@ -574,7 +615,7 @@ export default function AdminChatPanel() {
                   <div className="flex justify-between items-start">
                     <h4 className="font-bold text-sm truncate dark:text-white">{s.userName || "Guest"}</h4>
                     <span className="text-[9px] font-bold text-gray-400 whitespace-nowrap">
-                      {s.lastTimestamp?.toDate() ? new Date(s.lastTimestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
+                      {s.lastTimestamp?.toDate ? new Date(s.lastTimestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (s.lastTimestamp ? new Date(s.lastTimestamp.seconds ? s.lastTimestamp.seconds * 1000 : s.lastTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "")}
                     </span>
                   </div>
                   <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate mt-0.5 font-medium">
@@ -788,7 +829,7 @@ export default function AdminChatPanel() {
                             {isAI ? "Assistant" : isAdmin ? "You" : selectedSession.userName}
                           </span>
                           <span className="text-[9px] text-gray-300">
-                            {msg.createdAt?.toDate() ? new Date(msg.createdAt.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
+                            {formatMessageTime(msg.createdAt)}
                           </span>
                           {isAdmin && (
                             <div className="flex items-center gap-1">
@@ -1165,7 +1206,7 @@ export default function AdminChatPanel() {
                       <div className="flex items-center justify-between pt-1 opacity-60">
                         <span className="text-xs font-black text-indigo-600">৳{order.amount.toLocaleString()}</span>
                         <div className="text-[9px] font-bold text-gray-400">
-                          {order.createdAt?.toDate() ? new Date(order.createdAt.toDate()).toLocaleDateString() : ""}
+                          {order.createdAt?.toDate ? new Date(order.createdAt.toDate()).toLocaleDateString() : (order.createdAt ? new Date(order.createdAt.seconds ? order.createdAt.seconds * 1000 : order.createdAt).toLocaleDateString() : "")}
                         </div>
                       </div>
                     </div>
