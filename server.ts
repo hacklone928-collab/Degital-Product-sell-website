@@ -1430,6 +1430,204 @@ const clientUpdateSiteSettings = async (geminiApiKeys: any[]): Promise<boolean> 
   }
 };
 
+// Helper to call multi-provider LLM models (Gemini, OpenRouter, Groq Cloud) with automatic self-healing and rotation
+async function callMultiProviderLLM(
+  prompt: string, 
+  sessionId: string,
+  isSuggestion: boolean = false
+): Promise<{ text: string }> {
+  // 1. Fetch site settings to get key pool
+  let geminiApiKeys: any[] = [];
+  try {
+    const settingsDoc = await db.collection("settings").doc("site").get();
+    if (settingsDoc.exists) {
+      geminiApiKeys = settingsDoc.data()?.geminiApiKeys || [];
+    }
+  } catch (e) {
+    console.warn("Could not fetch site settings via Admin SDK, trying fallbacks...", e);
+    try {
+      const settings = await clientFetchSiteSettings() || await fetchFirestoreDocREST("settings", "site");
+      if (settings) {
+        geminiApiKeys = settings.geminiApiKeys || [];
+      }
+    } catch (restErr: any) {
+      console.warn("Could not fetch site settings via REST/Client fallback:", restErr.message || restErr);
+    }
+  }
+
+  // 2. Prep keys to attempt
+  let keysToTry: any[] = [];
+  if (geminiApiKeys && Array.isArray(geminiApiKeys) && geminiApiKeys.length > 0) {
+    keysToTry = geminiApiKeys.map((k, i) => {
+      if (typeof k === "string") {
+        return {
+          key: k,
+          provider: "gemini",
+          model: "gemini-3.5-flash",
+          status: "active",
+          originalIndex: i
+        };
+      } else {
+        return {
+          key: k.key || "",
+          provider: k.provider || "gemini",
+          model: k.model || (k.provider === "groq" ? "llama-3.3-70b-versatile" : k.provider === "openrouter" ? "meta-llama/llama-3-8b-instruct:free" : "gemini-3.5-flash"),
+          status: k.status || "active",
+          originalIndex: i
+        };
+      }
+    }).filter(k => k.key && k.status === "active");
+  }
+
+  // Shuffle active keys for balanced rotation
+  keysToTry = keysToTry.sort(() => Math.random() - 0.5);
+
+  // If no keys in pool, add the environment Gemini Key fallback
+  if (keysToTry.length === 0 && process.env.GEMINI_API_KEY) {
+    keysToTry.push({
+      key: process.env.GEMINI_API_KEY,
+      provider: "gemini",
+      model: "gemini-3.5-flash",
+      status: "active",
+      originalIndex: -1 // System env fallback indicator
+    });
+  }
+
+  if (keysToTry.length === 0) {
+    throw new Error("No active API keys found. Please set Gemini, OpenRouter, or Groq API keys in the Admin Panel settings.");
+  }
+
+  let lastError: any = null;
+
+  // Loop through keys and automatically fall back
+  for (const keyObj of keysToTry) {
+    const { key, provider, model, originalIndex } = keyObj;
+    console.log(`Pool Rotation: Trying payload with provider: ${provider}, model: ${model} (Original Index: ${originalIndex})`);
+
+    try {
+      let text = "";
+
+      if (provider === "gemini") {
+        const localAi = new GoogleGenAI({ 
+          apiKey: key,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build',
+            }
+          }
+        });
+        const response = await localAi.models.generateContent({
+          model: model || "gemini-3.5-flash",
+          contents: prompt,
+        });
+        text = response?.text || "";
+      } 
+      else if (provider === "groq") {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${key}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: model || "llama-3.3-70b-versatile",
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.7
+          })
+        });
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData?.error?.message || `Groq API responded with status ${response.status}`);
+        }
+        const resJson = await response.json() as any;
+        text = resJson?.choices?.[0]?.message?.content || "";
+      } 
+      else if (provider === "openrouter") {
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${key}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://aistudio.google.com/build",
+            "X-Title": "Digital Marketplace Chatbot"
+          },
+          body: JSON.stringify({
+            model: model || "meta-llama/llama-3-8b-instruct:free",
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.7
+          })
+        });
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData?.error?.message || `OpenRouter API responded with status ${response.status}`);
+        }
+        const resJson = await response.json() as any;
+        text = resJson?.choices?.[0]?.message?.content || "";
+      } 
+      else {
+        throw new Error(`Unsupported API provider: ${provider}`);
+      }
+
+      if (text && text.trim()) {
+        console.log(`Success! Response generated with provider: ${provider}, model: ${model}`);
+
+        // Update stats in firestore for the key
+        if (originalIndex !== -1 && geminiApiKeys[originalIndex]) {
+          try {
+            const updatedKeys = [...geminiApiKeys];
+            const kObj = typeof updatedKeys[originalIndex] === 'string'
+              ? { key: updatedKeys[originalIndex] }
+              : { ...updatedKeys[originalIndex] };
+            
+            kObj.usageCount = (kObj.usageCount || 0) + 1;
+            kObj.lastUsed = new Date().toISOString();
+            kObj.status = 'active';
+            updatedKeys[originalIndex] = kObj;
+
+            await db.collection("settings").doc("site").set({ geminiApiKeys: updatedKeys }, { merge: true })
+              .catch(() => {
+                clientUpdateSiteSettings(updatedKeys).catch(() => {});
+              });
+          } catch (e) {
+            console.warn("Background update of key usage stats failed:", e);
+          }
+        }
+
+        return { text };
+      } else {
+        throw new Error("Received empty response from AI model.");
+      }
+
+    } catch (err: any) {
+      console.warn(`Key attempt failed (Provider: ${provider}, Model: ${model}):`, err.message || err);
+      lastError = err;
+
+      // Mark bad key as "error" in Firestore so we don't spam a disabled/broken key
+      if (originalIndex !== -1 && geminiApiKeys[originalIndex]) {
+        try {
+          const updatedKeys = [...geminiApiKeys];
+          const kObj = typeof updatedKeys[originalIndex] === "string"
+            ? { key: updatedKeys[originalIndex] }
+            : { ...updatedKeys[originalIndex] };
+          
+          kObj.status = "error";
+          kObj.lastError = err.message || "Unknown error";
+          updatedKeys[originalIndex] = kObj;
+
+          await db.collection("settings").doc("site").set({ geminiApiKeys: updatedKeys }, { merge: true })
+            .catch(() => {
+              clientUpdateSiteSettings(updatedKeys).catch(() => {});
+            });
+        } catch (e) {
+          console.warn("Background update of key error status failed:", e);
+        }
+      }
+    }
+  }
+
+  throw lastError || new Error("Failed to get response from any configured AI provider keys.");
+}
+
 // AI Auto Reply (with resilient sandboxed Firestore fallbacks)
   app.post("/api/chat/auto-reply", async (req, res) => {
     const { sessionId, message, userName, userEmail, forceEnabled, cart, sharedProduct } = req.body;
@@ -1546,48 +1744,6 @@ const clientUpdateSiteSettings = async (geminiApiKeys: any[]): Promise<boolean> 
           console.warn("Could not fetch site settings context via fallbacks:", restErr.message || restErr);
         }
       }
-
-      // API Key Rotation Logic with Real-time Monitoring
-      let selectedApiKey = process.env.GEMINI_API_KEY;
-      let selectedKeyIndex = -1;
-      
-      if (geminiApiKeys && Array.isArray(geminiApiKeys) && geminiApiKeys.length > 0) {
-        // Filter for active keys (simple strategy: random from active)
-        const activeKeys = geminiApiKeys
-          .map((k, i) => {
-            if (typeof k === 'string') {
-              return { key: k, status: 'active', originalIndex: i };
-            } else if (k && typeof k === 'object') {
-              return { 
-                key: k.key || '', 
-                status: k.status || 'active', 
-                originalIndex: i 
-              };
-            }
-            return null;
-          })
-          .filter(k => k && k.key && k.status === 'active');
-        
-        if (activeKeys.length > 0) {
-          const randomIndex = Math.floor(Math.random() * activeKeys.length);
-          const selected = activeKeys[randomIndex];
-          if (selected) {
-            selectedApiKey = selected.key;
-            selectedKeyIndex = selected.originalIndex;
-            console.log(`Using rotated Gemini API Key (Index: ${selectedKeyIndex})`);
-          }
-        }
-      }
-
-      // Initialize local AI client with the selected key
-      const localAi = new GoogleGenAI({ 
-        apiKey: selectedApiKey!,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          }
-        }
-      });
 
       // Fetch Order context if possible
       let orderContext = "";
@@ -1763,86 +1919,10 @@ const clientUpdateSiteSettings = async (geminiApiKeys: any[]): Promise<boolean> 
       console.log("Generating AI content with prompt...");
       let aiReply = "";
       try {
-        const response = await localAi.models.generateContent({
-          model: "gemini-3.5-flash", 
-          contents: prompt,
-        });
-        aiReply = response.text;
-
-        // Update successful usage
-        if (selectedKeyIndex !== -1) {
-          try {
-            const updatedKeys = [...geminiApiKeys];
-            const keyObj = typeof updatedKeys[selectedKeyIndex] === 'string' 
-              ? { key: updatedKeys[selectedKeyIndex] } 
-              : { ...updatedKeys[selectedKeyIndex] };
-            
-            keyObj.usageCount = (keyObj.usageCount || 0) + 1;
-            keyObj.lastUsed = FieldValue.serverTimestamp();
-            keyObj.status = 'active';
-            updatedKeys[selectedKeyIndex] = keyObj;
-            
-            console.log(`Updating usage stats for key at index ${selectedKeyIndex}`);
-            const siteSettingsRef = db.collection("settings").doc("site");
-            await siteSettingsRef.set({ geminiApiKeys: updatedKeys }, { merge: true });
-          } catch (keyWriteErr: any) {
-            console.warn("Could not write rotated key stats to settings via Admin SDK, trying fallbacks:", keyWriteErr.message);
-            try {
-              const updatedKeys = [...geminiApiKeys];
-              const keyObj = typeof updatedKeys[selectedKeyIndex] === 'string' 
-                ? { key: updatedKeys[selectedKeyIndex] } 
-                : { ...updatedKeys[selectedKeyIndex] };
-              
-              keyObj.usageCount = (keyObj.usageCount || 0) + 1;
-              keyObj.lastUsed = new Date().toISOString();
-              keyObj.status = 'active';
-              updatedKeys[selectedKeyIndex] = keyObj;
-              
-              const success = await clientUpdateSiteSettings(updatedKeys);
-              if (!success) {
-                await writeFirestoreDocREST("settings", "site", { geminiApiKeys: updatedKeys }, true);
-              }
-            } catch (restErr: any) {
-              console.error("Could not write key stats via fallbacks either:", restErr.message);
-            }
-          }
-        }
+        const result = await callMultiProviderLLM(prompt, sessionId);
+        aiReply = result.text;
       } catch (aiErr: any) {
-        console.error("Gemini API Error details:", aiErr);
-        // Mark key as error if rate limited or invalid
-        if (selectedKeyIndex !== -1 && (aiErr.message?.includes("429") || aiErr.message?.includes("403") || aiErr.message?.includes("API_KEY_INVALID"))) {
-          try {
-            const updatedKeys = [...geminiApiKeys];
-            const keyObj = typeof updatedKeys[selectedKeyIndex] === 'string' 
-              ? { key: updatedKeys[selectedKeyIndex] } 
-              : { ...updatedKeys[selectedKeyIndex] };
-            
-            keyObj.status = 'error';
-            keyObj.lastError = aiErr.message;
-            updatedKeys[selectedKeyIndex] = keyObj;
-            console.log(`Marking key at index ${selectedKeyIndex} as ERROR`);
-            const siteSettingsRef = db.collection("settings").doc("site");
-            await siteSettingsRef.set({ geminiApiKeys: updatedKeys }, { merge: true });
-          } catch (siteWriteErr: any) {
-            console.warn("Could not write error status back via Admin SDK, trying fallbacks:", siteWriteErr.message);
-            try {
-              const updatedKeys = [...geminiApiKeys];
-              const keyObj = typeof updatedKeys[selectedKeyIndex] === 'string' 
-                ? { key: updatedKeys[selectedKeyIndex] } 
-                : { ...updatedKeys[selectedKeyIndex] };
-              
-              keyObj.status = 'error';
-              keyObj.lastError = aiErr.message;
-              updatedKeys[selectedKeyIndex] = keyObj;
-              const success = await clientUpdateSiteSettings(updatedKeys);
-              if (!success) {
-                await writeFirestoreDocREST("settings", "site", { geminiApiKeys: updatedKeys }, true);
-              }
-            } catch (restErr: any) {
-              console.error("Could not write error status via fallbacks either:", restErr.message);
-            }
-          }
-        }
+        console.error("Multi-Provider LLM Generation Error details:", aiErr);
         throw aiErr;
       }
 
@@ -1906,71 +1986,11 @@ const clientUpdateSiteSettings = async (geminiApiKeys: any[]): Promise<boolean> 
   });
 
   // AI Suggested Reply for Admin
+  // AI Suggested Reply for Admin
   app.post("/api/chat/suggest-reply", async (req, res) => {
     const { sessionId, lastUserMessage, history } = req.body;
     
     try {
-      // Fetch Site settings for API keys
-      let geminiApiKeys: any[] = [];
-      try {
-        const settingsDoc = await db.collection("settings").doc("site").get();
-        if (settingsDoc.exists) {
-          const settings = settingsDoc.data();
-          geminiApiKeys = settings?.geminiApiKeys || [];
-        }
-      } catch (e) {
-        console.warn("Could not fetch site settings for suggestions via Admin SDK. Trying fallbacks...", e);
-        try {
-          const settings = await clientFetchSiteSettings() || await fetchFirestoreDocREST("settings", "site");
-          if (settings) {
-            geminiApiKeys = settings.geminiApiKeys || [];
-          }
-        } catch (restErr: any) {
-          console.warn("Could not fetch site settings for suggestions via fallbacks:", restErr.message || restErr);
-        }
-      }
-
-      // API Key Rotation Logic
-      let selectedApiKey = process.env.GEMINI_API_KEY;
-      let selectedKeyIndex = -1;
-      
-      if (geminiApiKeys && Array.isArray(geminiApiKeys) && geminiApiKeys.length > 0) {
-        const activeKeys = geminiApiKeys
-          .map((k, i) => {
-            if (typeof k === 'string') {
-              return { key: k, status: 'active', originalIndex: i };
-            } else if (k && typeof k === 'object') {
-              return { 
-                key: k.key || '', 
-                status: k.status || 'active', 
-                originalIndex: i 
-              };
-            }
-            return null;
-          })
-          .filter(k => k && k.key && k.status === 'active');
-        
-        if (activeKeys.length > 0) {
-          const randomIndex = Math.floor(Math.random() * activeKeys.length);
-          const selected = activeKeys[randomIndex];
-          if (selected) {
-            selectedApiKey = selected.key;
-            selectedKeyIndex = selected.originalIndex;
-            console.log(`Using rotated Gemini API Key for suggestions (Index: ${selectedKeyIndex})`);
-          }
-        }
-      }
-
-      // Initialize AI client with the selected key
-      const localAi = new GoogleGenAI({ 
-        apiKey: selectedApiKey!,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          }
-        }
-      });
-
       const prompt = `
         You are helping a customer support admin draft a perfect reply.
         Customer message: "${lastUserMessage}"
@@ -1985,83 +2005,10 @@ const clientUpdateSiteSettings = async (geminiApiKeys: any[]): Promise<boolean> 
 
       let techText = "";
       try {
-        const response = await localAi.models.generateContent({
-          model: "gemini-3.5-flash", 
-          contents: prompt,
-        });
-        techText = response.text;
-
-        // Update successful usage
-        if (selectedKeyIndex !== -1) {
-          try {
-            const updatedKeys = [...geminiApiKeys];
-            const keyObj = typeof updatedKeys[selectedKeyIndex] === 'string' 
-              ? { key: updatedKeys[selectedKeyIndex] } 
-              : { ...updatedKeys[selectedKeyIndex] };
-            
-            keyObj.usageCount = (keyObj.usageCount || 0) + 1;
-            keyObj.lastUsed = new Date().toISOString();
-            keyObj.status = 'active';
-            updatedKeys[selectedKeyIndex] = keyObj;
-            
-            const siteSettingsRef = db.collection("settings").doc("site");
-            await siteSettingsRef.set({ geminiApiKeys: updatedKeys }, { merge: true });
-          } catch (keyWriteErr: any) {
-            console.warn("Could not write rotated suggestion key stats to settings via Admin SDK, trying fallbacks:", keyWriteErr.message);
-            try {
-              const updatedKeys = [...geminiApiKeys];
-              const keyObj = typeof updatedKeys[selectedKeyIndex] === 'string' 
-                ? { key: updatedKeys[selectedKeyIndex] } 
-                : { ...updatedKeys[selectedKeyIndex] };
-              
-              keyObj.usageCount = (keyObj.usageCount || 0) + 1;
-              keyObj.lastUsed = new Date().toISOString();
-              keyObj.status = 'active';
-              updatedKeys[selectedKeyIndex] = keyObj;
-              
-              const success = await clientUpdateSiteSettings(updatedKeys);
-              if (!success) {
-                await writeFirestoreDocREST("settings", "site", { geminiApiKeys: updatedKeys }, true);
-              }
-            } catch (restErr: any) {
-              console.error("Could not write suggestion key stats via fallbacks either:", restErr.message);
-            }
-          }
-        }
+        const result = await callMultiProviderLLM(prompt, sessionId, true);
+        techText = result.text;
       } catch (aiErr: any) {
-        console.error("Gemini Suggestion API Error details:", aiErr);
-        if (selectedKeyIndex !== -1 && (aiErr.message?.includes("429") || aiErr.message?.includes("403") || aiErr.message?.includes("API_KEY_INVALID"))) {
-          try {
-            const updatedKeys = [...geminiApiKeys];
-            const keyObj = typeof updatedKeys[selectedKeyIndex] === 'string' 
-              ? { key: updatedKeys[selectedKeyIndex] } 
-              : { ...updatedKeys[selectedKeyIndex] };
-            
-            keyObj.status = 'error';
-            keyObj.lastError = aiErr.message;
-            updatedKeys[selectedKeyIndex] = keyObj;
-            const siteSettingsRef = db.collection("settings").doc("site");
-            await siteSettingsRef.set({ geminiApiKeys: updatedKeys }, { merge: true });
-          } catch (siteWriteErr: any) {
-            console.warn("Could not write error status back for suggestion keys via Admin SDK, trying fallbacks:", siteWriteErr.message);
-            try {
-              const updatedKeys = [...geminiApiKeys];
-              const keyObj = typeof updatedKeys[selectedKeyIndex] === 'string' 
-                ? { key: updatedKeys[selectedKeyIndex] } 
-                : { ...updatedKeys[selectedKeyIndex] };
-              
-              keyObj.status = 'error';
-              keyObj.lastError = aiErr.message;
-              updatedKeys[selectedKeyIndex] = keyObj;
-              const success = await clientUpdateSiteSettings(updatedKeys);
-              if (!success) {
-                await writeFirestoreDocREST("settings", "site", { geminiApiKeys: updatedKeys }, true);
-              }
-            } catch (restErr: any) {
-              console.error("Could not write error status back for suggestion keys via fallbacks either:", restErr.message);
-            }
-          }
-        }
+        console.error("Multi-Provider LLM Suggestion Error details:", aiErr);
         throw aiErr;
       }
 
@@ -2080,33 +2027,92 @@ const clientUpdateSiteSettings = async (geminiApiKeys: any[]): Promise<boolean> 
     }
   });
 
-  // Test a specified Gemini API Key (ensures 100% active and working chatbot)
+  // Test a specified API Key (ensures 100% active and working chatbot)
   app.post("/api/chat/test-key", async (req, res) => {
-    const { key } = req.body;
+    const { key, provider, model } = req.body;
     if (!key) {
       return res.status(400).json({ error: "Missing key parameter" });
     }
+    
+    const targetProvider = provider || "gemini";
+    const targetModel = model || (targetProvider === "groq" ? "llama-3.3-70b-versatile" : targetProvider === "openrouter" ? "meta-llama/llama-3-8b-instruct:free" : "gemini-3.5-flash");
+
+    console.log(`Testing key for provider: ${targetProvider}, model: ${targetModel}`);
+
     try {
-      const testAi = new GoogleGenAI({ 
-        apiKey: key,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build-test',
+      let text = "";
+
+      if (targetProvider === "gemini") {
+        const testAi = new GoogleGenAI({ 
+          apiKey: key,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build-test',
+            }
           }
+        });
+        const response = await testAi.models.generateContent({
+          model: targetModel,
+          contents: "Hello! Reply with only 'OK'.",
+        });
+        text = response?.text || "";
+      } 
+      else if (targetProvider === "groq") {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${key}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: targetModel,
+            messages: [{ role: "user", content: "Hello! Reply with only 'OK'." }],
+            temperature: 0.7,
+            max_tokens: 10
+          })
+        });
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData?.error?.message || `Groq API responded with status ${response.status}`);
         }
-      });
-      const response = await testAi.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: "Hello! Reply with only 'OK'.",
-      });
-      if (response && response.text) {
-        return res.json({ success: true, message: "API key is working correctly!" });
+        const resJson = await response.json() as any;
+        text = resJson?.choices?.[0]?.message?.content || "";
+      } 
+      else if (targetProvider === "openrouter") {
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${key}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://aistudio.google.com/build",
+            "X-Title": "Digital Marketplace Chatbot"
+          },
+          body: JSON.stringify({
+            model: targetModel,
+            messages: [{ role: "user", content: "Hello! Reply with only 'OK'." }],
+            temperature: 0.7,
+            max_tokens: 10
+          })
+        });
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData?.error?.message || `OpenRouter API responded with status ${response.status}`);
+        }
+        const resJson = await response.json() as any;
+        text = resJson?.choices?.[0]?.message?.content || "";
+      } 
+      else {
+        return res.json({ success: false, error: `Unsupported API provider: ${targetProvider}` });
+      }
+
+      if (text && text.trim()) {
+        return res.json({ success: true, message: `API Key verified successfully! Response: ${text.trim().substring(0, 100)}` });
       } else {
-        return res.json({ success: false, error: "Empty response from Gemini API" });
+        return res.json({ success: false, error: "Empty or null response received from API provider." });
       }
     } catch (err: any) {
-      console.error("Test Gemini Key failed:", err);
-      return res.json({ success: false, error: err.message || "An error occurred while calling the Gemini API" });
+      console.error(`Test Key failed for provider ${targetProvider}:`, err);
+      return res.json({ success: false, error: err.message || "An unexpected error occurred during API key validation" });
     }
   });
 

@@ -95,6 +95,8 @@ export default function AdminDashboard() {
   const [tickets, setTickets] = useState<any[]>([]);
   const [coupons, setCoupons] = useState<any[]>([]);
   const [newGeminiKey, setNewGeminiKey] = useState("");
+  const [newGeminiKeyProvider, setNewGeminiKeyProvider] = useState<"gemini" | "openrouter" | "groq">("gemini");
+  const [newGeminiKeyModel, setNewGeminiKeyModel] = useState("");
   const [testingKeyIndex, setTestingKeyIndex] = useState<number | null>(null);
   const [testResult, setTestResult] = useState<{ [key: number]: { status: "success" | "error"; msg: string } }>({});
 
@@ -5266,7 +5268,7 @@ export default function AdminDashboard() {
                         type="text" 
                         value={siteSettings.paymentMethods}
                         onChange={e => setSiteSettings((prev: any) => ({...prev, paymentMethods: e.target.value}))}
-                        className="w-full bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-orange-500"
+                        className="w-full bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-orange-500 resize-none font-medium"
                       />
                     </div>
 
@@ -5275,49 +5277,112 @@ export default function AdminDashboard() {
                       <div className="flex items-center gap-2">
                         <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                         <div>
-                          <h4 className="text-xs font-black text-gray-900 dark:text-gray-100 uppercase tracking-widest">Gemini API Key Rotation Pool (মাল্টিপল এপিআই কী সেটআপ)</h4>
-                          <p className="text-[10px] text-gray-500 font-medium">Add one or more Gemini API keys. This website will automatically rotate them and handle error fallbacks securely, even after deploying to other domains!</p>
+                          <h4 className="text-xs font-black text-gray-900 dark:text-gray-100 uppercase tracking-widest">AI Chatbot API Key Rotation Pool (মাল্টি-প্রোভাইডার এপিআই কী সেটআপ)</h4>
+                          <p className="text-[10px] text-gray-500 font-medium">Add one or more Gemini, OpenRouter, or Groq Cloud API keys. This website will automatically rotate them and handle error fallbacks securely, even after deploying to other domains!</p>
                         </div>
                       </div>
 
-                      {/* Add new key bar */}
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="Paste Gemini API Key here (e.g. AIzaSy...)"
-                          value={newGeminiKey}
-                          onChange={(e) => setNewGeminiKey(e.target.value)}
-                          className="flex-1 bg-gray-50 dark:bg-gray-950/40 border-none rounded-2xl p-4 text-xs font-mono dark:text-white outline-none focus:ring-2 focus:ring-orange-500"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!newGeminiKey.trim()) return alert("Please enter a valid Gemini API key.");
-                            const currentKeys = siteSettings.geminiApiKeys || [];
-                            const alreadyExists = currentKeys.some((k: any) => {
-                              const existingStr = typeof k === 'string' ? k : k.key;
-                              return existingStr === newGeminiKey.trim();
-                            });
-                            if (alreadyExists) return alert("This API Key is already added to the list!");
-                            
-                            const newKeyObject = {
-                              key: newGeminiKey.trim(),
-                              status: "active",
-                              usageCount: 0,
-                              lastUsed: "",
-                              createdAt: new Date().toISOString()
-                            };
+                      {/* Provider Tabs selector */}
+                      <div className="bg-gray-50/50 dark:bg-gray-950/20 p-3 rounded-2xl border border-gray-100 dark:border-gray-900 space-y-3">
+                        <div className="flex flex-col gap-2">
+                          <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Select LLM Provider (প্রোভাইডার নির্বাচন করুন)</label>
+                          <div className="flex flex-wrap gap-2">
+                            {(["gemini", "openrouter", "groq"] as const).map((prov) => (
+                              <button
+                                key={prov}
+                                type="button"
+                                onClick={() => {
+                                  setNewGeminiKeyProvider(prov);
+                                  if (prov === "gemini") setNewGeminiKeyModel("gemini-3.5-flash");
+                                  else if (prov === "openrouter") setNewGeminiKeyModel("meta-llama/llama-3-8b-instruct:free");
+                                  else if (prov === "groq") setNewGeminiKeyModel("llama-3.3-70b-versatile");
+                                }}
+                                className={cn(
+                                  "px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all border flex items-center gap-1.5",
+                                  newGeminiKeyProvider === prov
+                                    ? "bg-indigo-600 border-indigo-600 text-white shadow-sm shadow-indigo-600/25"
+                                    : "bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-500 hover:text-gray-900 dark:hover:text-white"
+                                )}
+                              >
+                                <span className={cn(
+                                  "w-1.5 h-1.5 rounded-full",
+                                  newGeminiKeyProvider === prov ? "bg-white animate-pulse" : 
+                                  prov === "gemini" ? "bg-indigo-500" : prov === "openrouter" ? "bg-orange-500" : "bg-rose-500"
+                                )} />
+                                {prov === "gemini" ? "Google Gemini" : prov === "openrouter" ? "OpenRouter" : "Groq Cloud"}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
 
-                            setSiteSettings((prev: any) => ({
-                              ...prev,
-                              geminiApiKeys: [...(prev.geminiApiKeys || []), newKeyObject]
-                            }));
-                            setNewGeminiKey("");
-                          }}
-                          className="px-5 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-1 transition-all"
-                        >
-                          <Plus className="w-4 h-4" /> Add Key
-                        </button>
+                        {/* Add new key fields */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Paste API Key (এপিআই কী)</label>
+                            <input
+                              type="text"
+                              placeholder={
+                                newGeminiKeyProvider === "gemini" ? "Enter Gemini API Key (e.g. AIzaSy...)" :
+                                newGeminiKeyProvider === "openrouter" ? "Enter OpenRouter API Key (e.g. sk-or-...)" :
+                                "Enter Groq API Key (e.g. gsk_...)"
+                              }
+                              value={newGeminiKey}
+                              onChange={(e) => setNewGeminiKey(e.target.value)}
+                              className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-3 text-xs font-mono dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 animate-fadeIn"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">AI Model (মডেল নেম - ঐচ্ছিক)</label>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                placeholder="Model identifier (e.g. gemini-3.5-flash)"
+                                value={newGeminiKeyModel}
+                                onChange={(e) => setNewGeminiKeyModel(e.target.value)}
+                                className="flex-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-3 text-xs font-mono dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!newGeminiKey.trim()) return alert("Please enter a valid API key.");
+                                  const currentKeys = siteSettings.geminiApiKeys || [];
+                                  const alreadyExists = currentKeys.some((k: any) => {
+                                    const existingStr = typeof k === 'string' ? k : k.key;
+                                    return existingStr === newGeminiKey.trim();
+                                  });
+                                  if (alreadyExists) return alert("This API Key is already added to the list!");
+                                  
+                                  const providerDefaultModel = newGeminiKeyProvider === "groq" 
+                                    ? "llama-3.3-70b-versatile" 
+                                    : newGeminiKeyProvider === "openrouter" 
+                                    ? "meta-llama/llama-3-8b-instruct:free" 
+                                    : "gemini-3.5-flash";
+
+                                  const newKeyObject = {
+                                    key: newGeminiKey.trim(),
+                                    provider: newGeminiKeyProvider,
+                                    model: newGeminiKeyModel.trim() || providerDefaultModel,
+                                    status: "active",
+                                    usageCount: 0,
+                                    lastUsed: "",
+                                    createdAt: new Date().toISOString()
+                                  };
+
+                                  setSiteSettings((prev: any) => ({
+                                    ...prev,
+                                    geminiApiKeys: [...(prev.geminiApiKeys || []), newKeyObject]
+                                  }));
+                                  setNewGeminiKey("");
+                                  setNewGeminiKeyModel("");
+                                }}
+                                className="px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1 transition-all"
+                              >
+                                <Plus className="w-4 h-4" /> Add
+                              </button>
+                            </div>
+                          </div>
+                        </div>
                       </div>
 
                       {/* List of Keys */}
@@ -5329,16 +5394,28 @@ export default function AdminDashboard() {
                         ) : (
                           siteSettings.geminiApiKeys.map((keyObj: any, index: number) => {
                             const rawKey = typeof keyObj === "string" ? keyObj : keyObj.key;
+                            const provider = typeof keyObj === "string" ? "gemini" : (keyObj.provider || "gemini");
+                            const modelId = typeof keyObj === "string" ? "gemini-3.5-flash" : (keyObj.model || (provider === "groq" ? "llama-3.3-70b-versatile" : provider === "openrouter" ? "meta-llama/llama-3-8b-instruct:free" : "gemini-3.5-flash"));
                             const status = typeof keyObj === "string" ? "active" : (keyObj.status || "active");
                             const usage = typeof keyObj === "string" ? 0 : (keyObj.usageCount || 0);
                             const errMsg = typeof keyObj === "string" ? "" : (keyObj.lastError || "");
                             const maskedKey = rawKey ? `${rawKey.substring(0, 8)}...${rawKey.substring(rawKey.length - 4)}` : "INVALID_KEY";
 
                             return (
-                              <div key={index} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-gray-50 dark:bg-gray-950/40 border border-gray-100 dark:border-gray-800 rounded-2xl gap-3 text-xs">
+                              <div key={index} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-gray-50 dark:bg-gray-950/40 border border-gray-100 dark:border-gray-800 rounded-2xl gap-3 text-xs animate-fadeIn">
                                 <div className="flex items-center gap-3">
-                                  <div className="p-2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-xl font-mono text-[10px] font-bold">
-                                    Key #{index + 1}
+                                  <div className="flex flex-col items-center gap-1">
+                                    <div className="p-2 py-1 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-xl font-mono text-[9px] font-bold">
+                                      Key #{index + 1}
+                                    </div>
+                                    <span className={cn(
+                                      "px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider text-center",
+                                      provider === "gemini" ? "bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-300" :
+                                      provider === "openrouter" ? "bg-orange-100 dark:bg-orange-950 text-orange-800 dark:text-orange-300" :
+                                      "bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300"
+                                    )}>
+                                      {provider}
+                                    </span>
                                   </div>
                                   <div>
                                     <div className="font-mono text-[11px] font-bold dark:text-white tracking-wider flex items-center gap-2">
@@ -5355,8 +5432,10 @@ export default function AdminDashboard() {
                                         <Copy className="w-3.5 h-3.5" />
                                       </button>
                                     </div>
-                                    <div className="flex items-center gap-2 text-[9px] font-semibold text-gray-400 dark:text-gray-500 mt-1 uppercase tracking-wider">
-                                      <span>Calls: <span className="text-gray-900 dark:text-gray-300 font-bold">{usage}</span></span>
+                                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[9px] font-semibold text-gray-400 dark:text-gray-500 mt-1 uppercase tracking-wider">
+                                      <span>Model: <span className="text-indigo-600 dark:text-indigo-400 font-mono font-bold lowercase">{modelId}</span></span>
+                                      <span>•</span>
+                                      <span>Calls: <span className="text-gray-950 dark:text-gray-300 font-bold">{usage}</span></span>
                                       <span>•</span>
                                       <span>Status: 
                                         <span className={cn(
@@ -5385,16 +5464,18 @@ export default function AdminDashboard() {
                                         const res = await fetch("/api/chat/test-key", {
                                           method: "POST",
                                           headers: { "Content-Type": "application/json" },
-                                          body: JSON.stringify({ key: rawKey })
+                                          body: JSON.stringify({ 
+                                            key: rawKey,
+                                            provider,
+                                            model: modelId
+                                          })
                                         });
                                         const data = await res.json();
                                         if (data.success) {
-                                          // Keep active
                                           setTestResult(prev => ({
                                             ...prev,
                                             [index]: { status: "success", msg: data.message }
                                           }));
-                                          // Update status on local Settings to active
                                           setSiteSettings((prev: any) => {
                                             const updated = [...(prev.geminiApiKeys || [])];
                                             if (typeof updated[index] === 'string') {
@@ -5409,7 +5490,6 @@ export default function AdminDashboard() {
                                             ...prev,
                                             [index]: { status: "error", msg: data.error }
                                           }));
-                                          // Update status on local Settings to error
                                           setSiteSettings((prev: any) => {
                                             const updated = [...(prev.geminiApiKeys || [])];
                                             if (typeof updated[index] === 'string') {
