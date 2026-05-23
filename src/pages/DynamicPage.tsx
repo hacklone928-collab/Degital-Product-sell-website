@@ -59,7 +59,7 @@ export default function DynamicPage() {
         <h1 className="text-3xl sm:text-5xl font-black text-gray-900 dark:text-white leading-tight uppercase tracking-tighter transition-colors">{page.title}</h1>
         <div className="flex items-center gap-2 text-gray-400 dark:text-gray-500 text-sm font-medium transition-colors">
           <Clock className="w-4 h-4" />
-          Last updated: {page.updatedAt?.toDate().toLocaleDateString() || "Recently"}
+          Last updated: {page.updatedAt?.toDate ? page.updatedAt.toDate().toLocaleDateString() : (page.updatedAt ? new Date(page.updatedAt.seconds ? page.updatedAt.seconds * 1000 : page.updatedAt).toLocaleDateString() : "Recently")}
         </div>
       </div>
 

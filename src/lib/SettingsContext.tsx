@@ -83,6 +83,7 @@ interface SiteSettings {
   themeToggleStyle?: "classic" | "minimal" | "ios" | "glass" | "creative" | "glow" | "landscape";
   themeTogglePosition?: "header-left" | "header-center" | "header-right" | "profile-page";
   themeToggleSize?: "sm" | "md" | "lg";
+  geminiApiKeys?: any[];
 }
 
 const defaultSettings: SiteSettings = {
@@ -163,6 +164,7 @@ const defaultSettings: SiteSettings = {
   themeToggleStyle: "classic",
   themeTogglePosition: "header-right",
   themeToggleSize: "md",
+  geminiApiKeys: [],
 };
 
 const SettingsContext = createContext<{ settings: SiteSettings; loading: boolean }>({

@@ -2080,6 +2080,36 @@ const clientUpdateSiteSettings = async (geminiApiKeys: any[]): Promise<boolean> 
     }
   });
 
+  // Test a specified Gemini API Key (ensures 100% active and working chatbot)
+  app.post("/api/chat/test-key", async (req, res) => {
+    const { key } = req.body;
+    if (!key) {
+      return res.status(400).json({ error: "Missing key parameter" });
+    }
+    try {
+      const testAi = new GoogleGenAI({ 
+        apiKey: key,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build-test',
+          }
+        }
+      });
+      const response = await testAi.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: "Hello! Reply with only 'OK'.",
+      });
+      if (response && response.text) {
+        return res.json({ success: true, message: "API key is working correctly!" });
+      } else {
+        return res.json({ success: false, error: "Empty response from Gemini API" });
+      }
+    } catch (err: any) {
+      console.error("Test Gemini Key failed:", err);
+      return res.json({ success: false, error: err.message || "An error occurred while calling the Gemini API" });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

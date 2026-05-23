@@ -94,6 +94,9 @@ export default function AdminDashboard() {
   const [pages, setPages] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
   const [coupons, setCoupons] = useState<any[]>([]);
+  const [newGeminiKey, setNewGeminiKey] = useState("");
+  const [testingKeyIndex, setTestingKeyIndex] = useState<number | null>(null);
+  const [testResult, setTestResult] = useState<{ [key: number]: { status: "success" | "error"; msg: string } }>({});
 
   // Payment gateways states & uploads
   const [paymentGateways, setPaymentGateways] = useState<any[]>([]);
@@ -354,7 +357,8 @@ export default function AdminDashboard() {
       themeToggleStyle: "classic" as "classic" | "minimal" | "ios" | "glass" | "creative" | "glow" | "landscape",
       themeTogglePosition: "header-right" as "header-left" | "header-center" | "header-right" | "profile-page",
       themeToggleSize: "md" as "sm" | "md" | "lg",
-      socialLinks: [] as { platform: string, url: string, icon: string }[]
+      socialLinks: [] as { platform: string, url: string, icon: string }[],
+      geminiApiKeys: [] as any[]
     };
   });
   const [newProduct, setNewProduct] = useState({
@@ -1223,7 +1227,7 @@ export default function AdminDashboard() {
           <Trash2 className="w-4 h-4" /> Delete Records ({selectedOrderIds.length})
         </button>
       )}
-      {activeTab !== "settings" && isSuperAdmin && (
+      {activeTab !== "settings" && isActuallyAdmin && (
         <button 
           onClick={() => {
             handleClearAll();
@@ -1898,10 +1902,40 @@ export default function AdminDashboard() {
       confirmMsg = "Are you sure you want to delete ALL custom pages?";
       successMsg = "All pages deleted!";
       callback = fetchPages;
+    } else if (activeTab === "categories") {
+      collectionName = "categories";
+      confirmMsg = "Are you sure you want to delete ALL categories?";
+      successMsg = "All categories deleted!";
+      callback = fetchCategories;
+    } else if (activeTab === "coupons") {
+      collectionName = "coupons";
+      confirmMsg = "Are you sure you want to delete ALL coupons?";
+      successMsg = "All coupons deleted!";
+      callback = fetchCoupons;
+    } else if (activeTab === "withdrawals") {
+      collectionName = "withdrawals";
+      confirmMsg = "Are you sure you want to delete ALL withdrawals?";
+      successMsg = "All withdrawals deleted!";
+      callback = fetchWithdrawals;
+    } else if (activeTab === "reviews") {
+      collectionName = "reviews";
+      confirmMsg = "Are you sure you want to delete ALL reviews?";
+      successMsg = "All reviews deleted!";
+      callback = async () => {};
+    } else if (activeTab === "logs") {
+      collectionName = "admin_logs";
+      confirmMsg = "Are you sure you want to delete ALL admin logs?";
+      successMsg = "All admin logs deleted!";
+      callback = async () => {};
+    } else if (activeTab === "users") {
+      collectionName = "users";
+      confirmMsg = "Are you sure you want to delete ALL users? WARNING: This could be highly destructive.";
+      successMsg = "All users cleared!";
+      callback = fetchUsers;
     }
 
-    if (!collectionName || !isSuperAdmin) {
-      alert("Only Super Admins can clear all records.");
+    if (!collectionName || !isActuallyAdmin) {
+      alert("Only Admins can clear all records.");
       return;
     }
     if (!window.confirm(confirmMsg)) return;
@@ -2106,6 +2140,7 @@ export default function AdminDashboard() {
           invoiceSubtitle: data.invoiceSubtitle || "Digital Asset Purchase",
           invoiceFooter: data.invoiceFooter || "Thank you for choosing our platform for your digital assets.",
           invoiceNote: data.invoiceNote || "This is a computer generated invoice and does not require a physical signature.",
+          geminiApiKeys: data.geminiApiKeys || [],
         }));
       }
     } catch (error) {
@@ -2288,7 +2323,9 @@ export default function AdminDashboard() {
 
         <div className={cn(
           "transition-all duration-300",
-          siteSettings.adminLayout === "modern" ? "flex-1 overflow-y-auto p-3 sm:p-8 space-y-6 sm:space-y-10 no-scrollbar pb-32" : "space-y-12"
+          siteSettings.adminLayout === "modern" 
+            ? (activeTab === "orders" ? "flex-1 overflow-y-auto p-2 sm:p-3 space-y-4 no-scrollbar pb-32" : "flex-1 overflow-y-auto p-3 sm:p-8 space-y-6 sm:space-y-10 no-scrollbar pb-32") 
+            : "space-y-12"
         )}>
 
         {(siteSettings.adminLayout === "classic" || activeTab === "analytics") && (
@@ -3765,7 +3802,7 @@ export default function AdminDashboard() {
                     <Trash2 className="w-3.5 h-3.5" /> Delete ({selectedProductIds.length})
                   </button>
                 )}
-                {isSuperAdmin && products.length > 0 && (
+                {isActuallyAdmin && products.length > 0 && (
                   <button 
                     onClick={handleClearAll}
                     className="bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors flex items-center gap-2 border border-transparent hover:border-red-100 dark:hover:border-red-900/20"
@@ -4412,7 +4449,7 @@ export default function AdminDashboard() {
                       <td className="px-6 py-4 font-bold text-gray-900 dark:text-gray-100">{page.title}</td>
                       <td className="px-6 py-4 font-mono text-xs text-indigo-600 dark:text-indigo-400">/{page.slug}</td>
                       <td className="px-6 py-4 text-xs text-gray-500 dark:text-gray-400">
-                        {page.updatedAt?.toDate().toLocaleDateString() || "Recently"}
+                        {page.updatedAt?.toDate ? page.updatedAt.toDate().toLocaleDateString() : (page.updatedAt ? new Date(page.updatedAt.seconds ? page.updatedAt.seconds * 1000 : page.updatedAt).toLocaleDateString() : "Recently")}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-2">
@@ -4509,7 +4546,7 @@ export default function AdminDashboard() {
                         <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{t.message}</p>
                       </td>
                       <td className="px-6 py-4 text-xs text-gray-400 dark:text-gray-500">
-                        {t.createdAt?.toDate().toLocaleDateString() || "Recently"}
+                        {t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString() : (t.createdAt ? new Date(t.createdAt.seconds ? t.createdAt.seconds * 1000 : t.createdAt).toLocaleDateString() : "Recently")}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-2">
@@ -5231,6 +5268,224 @@ export default function AdminDashboard() {
                         onChange={e => setSiteSettings((prev: any) => ({...prev, paymentMethods: e.target.value}))}
                         className="w-full bg-gray-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-orange-500"
                       />
+                    </div>
+
+                    {/* Gemini API Key Pool Manager */}
+                    <div className="md:col-span-2 border-t border-gray-100 dark:border-gray-800/60 pt-6 mt-4 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                        <div>
+                          <h4 className="text-xs font-black text-gray-900 dark:text-gray-100 uppercase tracking-widest">Gemini API Key Rotation Pool (মাল্টিপল এপিআই কী সেটআপ)</h4>
+                          <p className="text-[10px] text-gray-500 font-medium">Add one or more Gemini API keys. This website will automatically rotate them and handle error fallbacks securely, even after deploying to other domains!</p>
+                        </div>
+                      </div>
+
+                      {/* Add new key bar */}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Paste Gemini API Key here (e.g. AIzaSy...)"
+                          value={newGeminiKey}
+                          onChange={(e) => setNewGeminiKey(e.target.value)}
+                          className="flex-1 bg-gray-50 dark:bg-gray-950/40 border-none rounded-2xl p-4 text-xs font-mono dark:text-white outline-none focus:ring-2 focus:ring-orange-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!newGeminiKey.trim()) return alert("Please enter a valid Gemini API key.");
+                            const currentKeys = siteSettings.geminiApiKeys || [];
+                            const alreadyExists = currentKeys.some((k: any) => {
+                              const existingStr = typeof k === 'string' ? k : k.key;
+                              return existingStr === newGeminiKey.trim();
+                            });
+                            if (alreadyExists) return alert("This API Key is already added to the list!");
+                            
+                            const newKeyObject = {
+                              key: newGeminiKey.trim(),
+                              status: "active",
+                              usageCount: 0,
+                              lastUsed: "",
+                              createdAt: new Date().toISOString()
+                            };
+
+                            setSiteSettings((prev: any) => ({
+                              ...prev,
+                              geminiApiKeys: [...(prev.geminiApiKeys || []), newKeyObject]
+                            }));
+                            setNewGeminiKey("");
+                          }}
+                          className="px-5 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-1 transition-all"
+                        >
+                          <Plus className="w-4 h-4" /> Add Key
+                        </button>
+                      </div>
+
+                      {/* List of Keys */}
+                      <div className="space-y-2">
+                        {(!siteSettings.geminiApiKeys || siteSettings.geminiApiKeys.length === 0) ? (
+                          <div className="p-4 bg-gray-50 dark:bg-gray-900/40 border border-dashed border-gray-200 dark:border-gray-800 rounded-2xl text-center text-xs text-gray-500">
+                            No custom API keys added to the pool yet. It will fall back to using process.env.GEMINI_API_KEY if configured.
+                          </div>
+                        ) : (
+                          siteSettings.geminiApiKeys.map((keyObj: any, index: number) => {
+                            const rawKey = typeof keyObj === "string" ? keyObj : keyObj.key;
+                            const status = typeof keyObj === "string" ? "active" : (keyObj.status || "active");
+                            const usage = typeof keyObj === "string" ? 0 : (keyObj.usageCount || 0);
+                            const errMsg = typeof keyObj === "string" ? "" : (keyObj.lastError || "");
+                            const maskedKey = rawKey ? `${rawKey.substring(0, 8)}...${rawKey.substring(rawKey.length - 4)}` : "INVALID_KEY";
+
+                            return (
+                              <div key={index} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-gray-50 dark:bg-gray-950/40 border border-gray-100 dark:border-gray-800 rounded-2xl gap-3 text-xs">
+                                <div className="flex items-center gap-3">
+                                  <div className="p-2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-xl font-mono text-[10px] font-bold">
+                                    Key #{index + 1}
+                                  </div>
+                                  <div>
+                                    <div className="font-mono text-[11px] font-bold dark:text-white tracking-wider flex items-center gap-2">
+                                      {maskedKey}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(rawKey);
+                                          alert("Full API key copied to clipboard!");
+                                        }}
+                                        className="text-gray-400 hover:text-indigo-600 p-0.5 rounded transition-colors"
+                                        title="Copy full key"
+                                      >
+                                        <Copy className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-[9px] font-semibold text-gray-400 dark:text-gray-500 mt-1 uppercase tracking-wider">
+                                      <span>Calls: <span className="text-gray-900 dark:text-gray-300 font-bold">{usage}</span></span>
+                                      <span>•</span>
+                                      <span>Status: 
+                                        <span className={cn(
+                                          "ml-1 font-bold",
+                                          status === "active" ? "text-emerald-500" : "text-rose-500"
+                                        )}>
+                                          {status}
+                                        </span>
+                                      </span>
+                                    </div>
+                                    {errMsg && (
+                                      <div className="text-[9px] text-rose-500 mt-1 font-medium bg-rose-50 dark:bg-rose-950/10 p-1.5 px-2 rounded-lg border border-rose-100/30">
+                                        Last Error: {errMsg}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                                  {/* Test Key Button */}
+                                  <button
+                                    type="button"
+                                    disabled={testingKeyIndex === index}
+                                    onClick={async () => {
+                                      setTestingKeyIndex(index);
+                                      try {
+                                        const res = await fetch("/api/chat/test-key", {
+                                          method: "POST",
+                                          headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({ key: rawKey })
+                                        });
+                                        const data = await res.json();
+                                        if (data.success) {
+                                          // Keep active
+                                          setTestResult(prev => ({
+                                            ...prev,
+                                            [index]: { status: "success", msg: data.message }
+                                          }));
+                                          // Update status on local Settings to active
+                                          setSiteSettings((prev: any) => {
+                                            const updated = [...(prev.geminiApiKeys || [])];
+                                            if (typeof updated[index] === 'string') {
+                                              updated[index] = { key: updated[index], status: "active" };
+                                            } else {
+                                              updated[index] = { ...updated[index], status: "active", lastError: "" };
+                                            }
+                                            return { ...prev, geminiApiKeys: updated };
+                                          });
+                                        } else {
+                                          setTestResult(prev => ({
+                                            ...prev,
+                                            [index]: { status: "error", msg: data.error }
+                                          }));
+                                          // Update status on local Settings to error
+                                          setSiteSettings((prev: any) => {
+                                            const updated = [...(prev.geminiApiKeys || [])];
+                                            if (typeof updated[index] === 'string') {
+                                              updated[index] = { key: updated[index], status: "error", lastError: data.error };
+                                            } else {
+                                              updated[index] = { ...updated[index], status: "error", lastError: data.error };
+                                            }
+                                            return { ...prev, geminiApiKeys: updated };
+                                          });
+                                        }
+                                      } catch (err: any) {
+                                        setTestResult(prev => ({
+                                          ...prev,
+                                          [index]: { status: "error", msg: err.message || "Network Error" }
+                                        }));
+                                      } finally {
+                                        setTestingKeyIndex(null);
+                                      }
+                                    }}
+                                    className={cn(
+                                      "p-2 px-3.5 rounded-xl font-black uppercase text-[10px] tracking-widest flex items-center gap-1 transition-all",
+                                      testResult[index]?.status === "success" 
+                                        ? "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 hover:bg-emerald-100"
+                                        : testResult[index]?.status === "error"
+                                        ? "bg-rose-50 dark:bg-rose-950/20 text-rose-600 hover:bg-rose-100"
+                                        : "bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:bg-gray-300 text-gray-700 dark:text-gray-300"
+                                    )}
+                                  >
+                                    {testingKeyIndex === index ? (
+                                      <>
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Testing...
+                                      </>
+                                    ) : testResult[index]?.status === "success" ? (
+                                      "Active ✓"
+                                    ) : testResult[index]?.status === "error" ? (
+                                      "Failed 𐄂 font-bold"
+                                    ) : (
+                                      "Test Key"
+                                    )}
+                                  </button>
+
+                                  {/* Delete Key Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (confirm("Are you sure you want to delete this API key from the list?")) {
+                                        setSiteSettings((prev: any) => ({
+                                          ...prev,
+                                          geminiApiKeys: (prev.geminiApiKeys || []).filter((_: any, i: number) => i !== index)
+                                        }));
+                                      }
+                                    }}
+                                    className="p-2 hover:bg-rose-50 dark:hover:bg-rose-950/25 text-gray-405 hover:text-rose-500 rounded-xl transition-colors"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                        {Object.values(testResult).some((x: any) => x?.msg) && (
+                          <div className="mt-2 text-[10px] space-y-1">
+                            {Object.entries(testResult).map(([indexStr, result]) => (
+                              <p key={indexStr} className={cn(
+                                "p-2 rounded-xl border font-bold px-3 leading-normal",
+                                result.status === "success" 
+                                  ? "bg-emerald-50 dark:bg-emerald-950/25 border-emerald-100/40 text-emerald-600 dark:text-emerald-400" 
+                                  : "bg-rose-50 dark:bg-rose-950/25 border-rose-100/40 text-rose-600 dark:text-rose-400"
+                              )}>
+                                Key #{parseInt(indexStr) + 1} Test Output: {result.msg}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -6847,7 +7102,7 @@ export default function AdminDashboard() {
                       {selectedOrder.status}
                     </span>
                   </div>
-                  {selectedOrder.status === "pending" && isActuallyAdmin && (
+                  {selectedOrder.status !== "completed" && selectedOrder.status !== "cancelled" && selectedOrder.status !== "returned" && isActuallyAdmin && (
                     <button 
                       onClick={() => handleConfirmOrder(selectedOrder.id)}
                       className="w-full mt-4 bg-indigo-600 text-white py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-2xl shadow-indigo-200 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-95"
@@ -6855,12 +7110,12 @@ export default function AdminDashboard() {
                       Confirm Order
                     </button>
                   )}
-                  {selectedOrder.status === "completed" && isActuallyAdmin && (
+                  {(selectedOrder.status === "completed" || selectedOrder.status === "pending" || selectedOrder.status === "pending_payment") && isActuallyAdmin && (
                     <button 
                       onClick={() => handleCancelRefundOrder(selectedOrder.id)}
                       className="w-full mt-4 bg-rose-600 hover:bg-rose-700 text-white py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-lg shadow-rose-100 dark:shadow-none transition-all active:scale-95 flex items-center justify-center gap-2"
                     >
-                      <RotateCcw className="w-4 h-4 animate-spin-slow" /> Cancel & Return Product
+                      <RotateCcw className="w-4 h-4" /> Cancel & Return Product
                     </button>
                   )}
                 </div>
@@ -7006,7 +7261,7 @@ export default function AdminDashboard() {
                 <div className="flex flex-col text-left">
                   <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Order Placed</span>
                   <span className="text-xs font-bold text-indigo-900 dark:text-indigo-100">
-                    {selectedOrder.createdAt?.toDate().toLocaleString() || "Syncing..."}
+                    {selectedOrder.createdAt?.toDate ? selectedOrder.createdAt.toDate().toLocaleString() : (selectedOrder.createdAt ? new Date(selectedOrder.createdAt.seconds ? selectedOrder.createdAt.seconds * 1000 : selectedOrder.createdAt).toLocaleString() : "Syncing...")}
                   </span>
                 </div>
               </div>

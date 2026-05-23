@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, Link, Navigate } from "react-router-dom";
 import { db, auth } from "../lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
-import { Printer, Download, ArrowLeft, ShieldCheck, Zap, Mail, Calendar, Hash, CreditCard } from "lucide-react";
+import { Printer, Download, ArrowLeft, ShieldCheck, Zap, Mail, Calendar, Hash, CreditCard, Phone, Package } from "lucide-react";
 import { motion } from "motion/react";
 
 interface Order {
@@ -153,8 +153,13 @@ export default function Invoice() {
                 <div className="space-y-2">
                   <div className="text-lg font-bold text-gray-900 dark:text-white">{order.customerName || "Customer"}</div>
                   <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 font-medium text-sm">
-                    <Mail className="w-4 h-4" /> {order.customerEmail || order.email}
+                    <Mail className="w-4 h-4 text-indigo-500" /> {order.customerEmail || order.email}
                   </div>
+                  {order.customerPhone && (
+                    <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 font-medium text-sm">
+                      <Phone className="w-4 h-4 text-indigo-500" /> {order.customerPhone}
+                    </div>
+                  )}
                   {order.deliveryAddress && (
                     <div className="mt-4 pt-4 border-t border-gray-50 dark:border-gray-800">
                       <h5 className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Delivery Address</h5>
@@ -190,22 +195,62 @@ export default function Invoice() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  <tr>
-                    <td className="px-6 py-8">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-white dark:bg-gray-900 rounded-2xl flex items-center justify-center shadow-sm border border-gray-50 dark:border-gray-800">
-                          <Zap className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                  {order.items && Array.isArray(order.items) && order.items.length > 0 ? (
+                    order.items.map((item: any, i: number) => {
+                      const itemSubtotal = (Number(item.price || 0) * (item.quantity || 1));
+                      return (
+                        <tr key={item.id || i}>
+                          <td className="px-6 py-6">
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 bg-white dark:bg-gray-900 rounded-2xl flex items-center justify-center shadow-sm border border-gray-50 dark:border-gray-800">
+                                <Package className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                              </div>
+                              <div>
+                                <div className="font-bold text-gray-900 dark:text-white">{item.name || "Product Item"}</div>
+                                <div className="flex flex-wrap items-center gap-2 mt-1">
+                                  {item.size && (
+                                    <span className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded border border-indigo-100 dark:border-indigo-900/40 uppercase tracking-widest">
+                                      Size: {item.size}
+                                    </span>
+                                  )}
+                                  {item.quantity && (
+                                    <span className="text-[9px] font-black text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded border border-amber-100 dark:border-amber-900/40 uppercase tracking-widest">
+                                      Qty: {item.quantity}
+                                    </span>
+                                  )}
+                                  {item.quantity > 1 && (
+                                    <span className="text-[9px] font-medium text-gray-400">
+                                      (৳{Number(item.price || 0).toLocaleString()} each)
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-6 text-right font-black text-gray-900 dark:text-white">
+                            ৳{itemSubtotal.toLocaleString()}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td className="px-6 py-8">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 bg-white dark:bg-gray-900 rounded-2xl flex items-center justify-center shadow-sm border border-gray-50 dark:border-gray-800">
+                            <Zap className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                          </div>
+                          <div>
+                            <div className="font-bold text-gray-900 dark:text-white">{order.productName}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{invoiceSubtitle}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="font-bold text-gray-900 dark:text-white">{order.productName}</div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{invoiceSubtitle}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-8 text-right font-black text-gray-900 dark:text-white">
-                      ৳{subtotal.toLocaleString()}
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="px-6 py-8 text-right font-black text-gray-900 dark:text-white">
+                        ৳{subtotal.toLocaleString()}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
                 <tfoot className="bg-white/50 dark:bg-gray-900/50 space-y-1">
                   <tr>

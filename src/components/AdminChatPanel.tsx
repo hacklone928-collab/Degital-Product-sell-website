@@ -49,7 +49,9 @@ import {
   MessageCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { cn } from "../lib/utils";
+import { cn, ensureMarkdownLinks } from "../lib/utils";
+import Markdown from "react-markdown";
+import { Link } from "react-router-dom";
 
 interface ChatSession {
   id: string;
@@ -615,7 +617,7 @@ export default function AdminChatPanel() {
                   <div className="flex justify-between items-start">
                     <h4 className="font-bold text-sm truncate dark:text-white">{s.userName || "Guest"}</h4>
                     <span className="text-[9px] font-bold text-gray-400 whitespace-nowrap">
-                      {s.lastTimestamp?.toDate ? new Date(s.lastTimestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (s.lastTimestamp ? new Date(s.lastTimestamp.seconds ? s.lastTimestamp.seconds * 1000 : s.lastTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "")}
+                      {s.lastTimestamp?.toDate ? s.lastTimestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (s.lastTimestamp ? new Date((s.lastTimestamp as any).seconds ? (s.lastTimestamp as any).seconds * 1000 : (s.lastTimestamp as any)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "")}
                     </span>
                   </div>
                   <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate mt-0.5 font-medium">
@@ -930,7 +932,31 @@ export default function AdminChatPanel() {
                                   ? "bg-purple-50 dark:bg-purple-900/10 text-purple-900 dark:text-purple-100 border border-purple-100 dark:border-purple-800 rounded-tl-[4px] font-medium"
                                   : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-tl-[4px] border border-gray-100 dark:border-gray-700 shadow-sm"
                             )}>
-                              {msg.text}
+                              <div className="markdown-body text-inherit">
+                                <Markdown
+                                  components={{
+                                    a: ({ href, children }) => {
+                                      const linkClass = isAdmin 
+                                        ? "underline text-white font-extrabold hover:text-indigo-100" 
+                                        : "underline text-indigo-600 dark:text-indigo-400 font-extrabold hover:opacity-80";
+                                      if (href && href.startsWith("/")) {
+                                        return (
+                                          <Link to={href} className={linkClass}>
+                                            {children}
+                                          </Link>
+                                        );
+                                      }
+                                      return (
+                                        <a href={href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" className={linkClass}>
+                                          {children}
+                                        </a>
+                                      );
+                                    }
+                                  }}
+                                >
+                                  {ensureMarkdownLinks(msg.text || "")}
+                                </Markdown>
+                              </div>
 
                               {/* Reactions Display */}
                               {msg.reactions && Object.keys(msg.reactions).some(e => msg.reactions[e].length > 0) && (
@@ -1206,7 +1232,7 @@ export default function AdminChatPanel() {
                       <div className="flex items-center justify-between pt-1 opacity-60">
                         <span className="text-xs font-black text-indigo-600">৳{order.amount.toLocaleString()}</span>
                         <div className="text-[9px] font-bold text-gray-400">
-                          {order.createdAt?.toDate ? new Date(order.createdAt.toDate()).toLocaleDateString() : (order.createdAt ? new Date(order.createdAt.seconds ? order.createdAt.seconds * 1000 : order.createdAt).toLocaleDateString() : "")}
+                          {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString() : (order.createdAt ? new Date((order.createdAt as any).seconds ? (order.createdAt as any).seconds * 1000 : (order.createdAt as any)).toLocaleDateString() : "")}
                         </div>
                       </div>
                     </div>

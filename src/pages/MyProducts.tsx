@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { auth, db } from "../lib/firebase";
-import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
+import { collection, query, where, getDocs, orderBy, onSnapshot } from "firebase/firestore";
 import { Package, Download, ExternalLink, ShieldCheck, Clock, CheckCircle2, User, Key, Copy, Check, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Link, useNavigate } from "react-router-dom";
@@ -31,21 +31,20 @@ export default function MyProducts() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchMyOrdersAndProducts = async () => {
-      const user = auth.currentUser;
-      if (!user) {
-        navigate("/auth");
-        return;
-      }
+    const user = auth.currentUser;
+    if (!user) {
+      navigate("/auth");
+      return;
+    }
 
+    const q = query(
+      collection(db, "orders"),
+      where("userId", "==", user.uid),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(q, async (snap) => {
       try {
-        // Fetch Orders
-        const q = query(
-          collection(db, "orders"),
-          where("userId", "==", user.uid),
-          orderBy("createdAt", "desc")
-        );
-        const snap = await getDocs(q);
         const orderData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Order[];
         setOrders(orderData);
 
@@ -64,13 +63,16 @@ export default function MyProducts() {
           setProductsMap(pMap);
         }
       } catch (error) {
-        console.error("Error fetching data:", error);
+        console.error("Error updating orders or products in real-time:", error);
       } finally {
         setLoading(false);
       }
-    };
+    }, (error) => {
+      console.error("Firestore real-time subscription error:", error);
+      setLoading(false);
+    });
 
-    fetchMyOrdersAndProducts();
+    return () => unsubscribe();
   }, [navigate]);
 
   const handleDownload = (fileUrl?: string) => {

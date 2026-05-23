@@ -7,6 +7,7 @@ import { db } from "../lib/firebase";
 import { motion, AnimatePresence } from "motion/react";
 import { Map as MapIcon, Users, ShoppingCart, TrendingUp, MapPin, Clock, ExternalLink } from "lucide-react";
 import { cn } from "../lib/utils";
+import { BD_DIVISIONS } from "../lib/bd-data";
 
 // Fix for default marker icon in leaflet
 // @ts-ignore
@@ -44,6 +45,39 @@ export default function OrderMap() {
     recentOrder: null as Order | null,
     highestValue: 0
   });
+  const [sidebarTab, setSidebarTab] = useState<"ranking" | "recent">("ranking");
+
+  const topSalesAreas = useMemo(() => {
+    const areaStats: Record<string, { name: string; type: 'domestic' | 'international'; orderCount: number; totalRevenue: number }> = {};
+    
+    orders.forEach(order => {
+      // Find area name - if division is international, use division. Otherwise, use district or division.
+      const isBdDiv = BD_DIVISIONS.includes(order.division || "");
+      let areaName = order.district;
+      let isIntl = false;
+
+      if (order.division && !isBdDiv) {
+        areaName = order.division; // Use country/international name
+        isIntl = true;
+      } else if (!areaName) {
+        areaName = order.division || "Unknown Area";
+      }
+
+      if (!areaStats[areaName]) {
+        areaStats[areaName] = {
+          name: areaName,
+          type: isIntl ? 'international' : 'domestic',
+          orderCount: 0,
+          totalRevenue: 0
+        };
+      }
+      
+      areaStats[areaName].orderCount += 1;
+      areaStats[areaName].totalRevenue += (order.amount || 0);
+    });
+
+    return Object.values(areaStats).sort((a, b) => b.totalRevenue - a.totalRevenue);
+  }, [orders]);
 
   useEffect(() => {
     // Fetch Bangladesh Divisions GeoJSON
@@ -148,8 +182,8 @@ export default function OrderMap() {
         <StatCard 
           icon={<Users className="w-5 h-5 text-rose-500" />}
           label="Active Target"
-          value="Bangladesh"
-          subValue="Nationwide"
+          value={topSalesAreas.some(area => area.type === "international") ? "Worldwide" : "Bangladesh"}
+          subValue={topSalesAreas.some(area => area.type === "international") ? "Global Coverage" : "Nationwide"}
         />
       </div>
 
@@ -208,7 +242,9 @@ export default function OrderMap() {
                          <MapPin className="w-3 h-3" /> 
                          {order.village && `${order.village}, `}
                          {order.union && `${order.union}, `}
-                         {order.upazila}, {order.district}
+                         {order.upazila && `${order.upazila}, `}
+                         {order.district && `${order.district}, `}
+                         {order.division}
                        </p>
                        <p className="text-[10px] text-gray-900 font-bold">
                          ৳{order.amount.toLocaleString()} • {order.productName}
@@ -234,47 +270,166 @@ export default function OrderMap() {
         {/* Sidebar Feed */}
         <div className="lg:col-span-4 flex flex-col gap-6 h-full">
           <div className="bg-white dark:bg-gray-900 rounded-[32px] border-2 border-gray-100 dark:border-gray-800 p-6 flex flex-col h-full shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
-                <Clock className="w-4 h-4 text-indigo-600" /> Recent Activity
-              </h3>
-              <span className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-[10px] font-black px-2 py-1 rounded-lg uppercase">
-                {orders.length} Traced
-              </span>
+            {/* Header & Tabs Toggle */}
+            <div className="flex flex-col gap-4 mb-5 border-b border-gray-100 dark:border-gray-800 pb-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
+                  <MapIcon className="w-4 h-4 text-indigo-600" /> regional insights
+                </h3>
+                <span className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-[9px] font-black px-2 py-0.5 rounded-md uppercase">
+                  {sidebarTab === "ranking" ? `${topSalesAreas.length} Areas` : `${orders.length} Traced`}
+                </span>
+              </div>
+              
+              <div className="flex bg-gray-50 dark:bg-gray-950 p-1 rounded-2xl border border-gray-100 dark:border-gray-800">
+                <button
+                  type="button"
+                  onClick={() => setSidebarTab("ranking")}
+                  className={cn(
+                    "flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all",
+                    sidebarTab === "ranking" 
+                      ? "bg-white dark:bg-gray-900 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                      : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                  )}
+                >
+                  Top Regions
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSidebarTab("recent")}
+                  className={cn(
+                    "flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all",
+                    sidebarTab === "recent" 
+                      ? "bg-white dark:bg-gray-900 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                      : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                  )}
+                >
+                  Recent Feed
+                </button>
+              </div>
             </div>
 
+            {/* List Panels */}
             <div className="flex-grow overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-              <AnimatePresence mode="popLayout">
-                {orders.map((order, idx) => (
+              <AnimatePresence mode="wait">
+                {sidebarTab === "ranking" ? (
                   <motion.div
-                    key={order.id}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ delay: idx * 0.05 }}
-                    className="p-4 bg-gray-50 dark:bg-gray-950/50 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-indigo-200 dark:hover:border-indigo-900/50 transition-all group"
+                    key="ranking-panel"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="space-y-3"
                   >
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="space-y-0.5">
-                        <div className="text-xs font-bold text-gray-900 dark:text-white">{order.customerName}</div>
-                        <div className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">
-                          {order.union ? `${order.union}, ` : ''}{order.upazila}, {order.district}
-                        </div>
+                    {topSalesAreas.length === 0 ? (
+                      <div className="py-20 text-center text-xs font-bold text-gray-400 uppercase tracking-widest">
+                        No localized data yet
                       </div>
-                      <span className="text-[10px] font-mono font-black text-indigo-600 dark:text-indigo-400">
-                        ৳{order.amount.toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                       <span className="text-[10px] text-gray-400 dark:text-gray-500 italic truncate max-w-[150px]">
-                         {order.productName}
-                       </span>
-                       <button className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-indigo-600 transition-all">
-                         <ExternalLink className="w-3 h-3" />
-                       </button>
-                    </div>
+                    ) : (
+                      topSalesAreas.map((area, idx) => {
+                        const maxRevenue = topSalesAreas[0]?.totalRevenue || 1;
+                        const percentOfMax = (area.totalRevenue / maxRevenue) * 100;
+
+                        return (
+                          <motion.div
+                            key={area.name}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: Math.min(idx * 0.05, 0.4) }}
+                            className="p-4 bg-gray-50 dark:bg-gray-950/50 rounded-2xl border border-gray-100 dark:border-gray-800 flex flex-col gap-2.5 group relative overflow-hidden transition-all hover:border-indigo-200 dark:hover:border-indigo-900/60"
+                          >
+                            {/* Proportional background progression line */}
+                            <div 
+                              className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-indigo-500/10 via-indigo-500/15 to-indigo-500/20 group-hover:from-indigo-500/20 group-hover:to-indigo-500/30 transition-all rounded-r"
+                              style={{ width: `${percentOfMax}%` }}
+                            />
+
+                            <div className="flex items-center justify-between relative z-10">
+                              <div className="flex items-center gap-3">
+                                {/* Ranked Rank Circle badge */}
+                                <span className={cn(
+                                  "w-6 h-6 rounded-xl flex items-center justify-center text-[10px] font-black border",
+                                  idx === 0 ? "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-500/20" :
+                                  idx === 1 ? "bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-400/15 dark:text-slate-400 dark:border-slate-500/20" :
+                                  idx === 2 ? "bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-500/20" :
+                                  "bg-white text-gray-500 border-gray-200 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-800"
+                                )}>
+                                  #{idx + 1}
+                                </span>
+                                <div className="space-y-0.5">
+                                  <div className="text-xs font-bold text-gray-900 dark:text-white capitalize flex items-center gap-1.5">
+                                    {area.name}
+                                    {area.type === "international" ? (
+                                      <span className="text-[7px] font-black uppercase px-1 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                        Intl
+                                      </span>
+                                    ) : (
+                                      <span className="text-[7px] font-black uppercase px-1 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                        Local
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[9px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-wider">
+                                    {area.orderCount} {area.orderCount === 1 ? "Order" : "Orders"} Confirmed
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="text-right">
+                                <div className="text-xs font-black font-mono text-indigo-600 dark:text-indigo-400">
+                                  ৳{area.totalRevenue.toLocaleString()}
+                                </div>
+                                <span className="text-[8px] font-black uppercase tracking-widest text-gray-400">
+                                  {Math.round(percentOfMax)}% Max
+                                </span>
+                              </div>
+                            </div>
+                          </motion.div>
+                        );
+                      })
+                    )}
                   </motion.div>
-                ))}
+                ) : (
+                  <motion.div
+                    key="recent-panel"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="space-y-3"
+                  >
+                    <AnimatePresence mode="popLayout">
+                      {orders.map((order, idx) => (
+                        <motion.div
+                          key={order.id}
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          transition={{ delay: idx * 0.05 }}
+                          className="p-4 bg-gray-50 dark:bg-gray-950/50 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-indigo-200 dark:hover:border-indigo-900/50 transition-all group"
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="space-y-0.5">
+                              <div className="text-xs font-bold text-gray-900 dark:text-white">{order.customerName}</div>
+                              <div className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">
+                                {order.union ? `${order.union}, ` : ''}{order.upazila}, {order.district}
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-mono font-black text-indigo-600 dark:text-indigo-400">
+                              ৳{order.amount.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                             <span className="text-[10px] text-gray-400 dark:text-gray-500 italic truncate max-w-[150px]">
+                               {order.productName}
+                             </span>
+                             <button className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-indigo-600 transition-all">
+                               <ExternalLink className="w-3 h-3" />
+                             </button>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </motion.div>
+                )}
               </AnimatePresence>
             </div>
           </div>

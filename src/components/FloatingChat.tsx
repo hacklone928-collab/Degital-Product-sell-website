@@ -40,7 +40,7 @@ import {
   Headphones,
   ShoppingCart
 } from "lucide-react";
-import { cn } from "../lib/utils";
+import { cn, ensureMarkdownLinks } from "../lib/utils";
 import { useCart } from "../lib/CartContext";
 import Markdown from "react-markdown";
 import { Link } from "react-router-dom";
@@ -818,7 +818,7 @@ export default function FloatingChat() {
                                         }
                                       }}
                                     >
-                                      {msg.text || ""}
+                                      {ensureMarkdownLinks(msg.text || "")}
                                     </Markdown>
                                   </div>
                                 )}

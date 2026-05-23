@@ -5,7 +5,7 @@ import { doc, getDoc, collection, addDoc, serverTimestamp, query, where, getDocs
 import { auth, db } from "../lib/firebase";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
-import { ShieldCheck, Lock, CreditCard, ArrowLeft, Loader2, PackageCheck, Wallet, ShoppingBag, Check, Copy, CheckCircle, DollarSign, Inbox, Plus, Minus, Trash2 } from "lucide-react";
+import { ShieldCheck, Lock, CreditCard, ArrowLeft, Loader2, PackageCheck, Wallet, ShoppingBag, Check, Copy, CheckCircle, DollarSign, Inbox, Plus, Minus, Trash2, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../lib/utils";
 import { useCart } from "../lib/CartContext";
@@ -124,11 +124,11 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
           if (products.length === 0 && orderData.items) {
             setProducts(orderData.items);
           }
-          // Self-healing: if order is not completed/paid, do it from client side
-          if (orderData.status !== "completed") {
+          // Self-healing: if order does not have status or is not completed/pending, set to pending
+          if (!orderData.status || (orderData.status !== "pending" && orderData.status !== "completed")) {
             console.log("Healing order status client-side...");
             updateDoc(doc(db, "orders", lastOrderId), {
-              status: "completed",
+              status: "pending",
               isPaid: true,
               paidAt: serverTimestamp()
             }).catch((err) => console.warn("Client self-healing update order failed: ", err));
@@ -191,6 +191,7 @@ export default function Checkout({ user, isCartCheckout }: { user: User | null, 
     union: "",
     village: "",
   });
+  const [isInternational, setIsInternational] = useState(false);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -709,63 +710,156 @@ return (
                 />
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Division</label>
-                <select 
-                  value={customerInfo.division}
-                  onChange={(e) => setCustomerInfo({...customerInfo, division: e.target.value, district: "", upazila: ""})}
-                  className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100"
-                >
-                  <option value="">Select Division</option>
-                  {BD_DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-2">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Location Type</span>
+                <div className="flex bg-gray-100 dark:bg-gray-800 p-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setIsInternational(false);
+                      setCustomerInfo(prev => ({ ...prev, division: "", district: "", upazila: "", union: "", village: "" }));
+                    }}
+                    className={cn(
+                      "px-3 py-1 rounded-md transition-all",
+                      !isInternational 
+                        ? "bg-white dark:bg-gray-950 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                        : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    )}
+                  >
+                    Bangladesh
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setIsInternational(true);
+                      setCustomerInfo(prev => ({ ...prev, division: "", district: "", upazila: "", union: "", village: "" }));
+                    }}
+                    className={cn(
+                      "px-3 py-1 rounded-md transition-all",
+                      isInternational 
+                        ? "bg-white dark:bg-gray-950 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                        : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    )}
+                  >
+                    International
+                  </button>
+                </div>
               </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">District</label>
-                <select 
-                  value={customerInfo.district}
-                  disabled={!customerInfo.division}
-                  onChange={(e) => setCustomerInfo({...customerInfo, district: e.target.value, upazila: ""})}
-                  className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100 disabled:opacity-50"
-                >
-                  <option value="">Select District</option>
-                  {customerInfo.division && BD_DISTRICTS[customerInfo.division]?.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Upazila</label>
-                <select 
-                  value={customerInfo.upazila}
-                  disabled={!customerInfo.district}
-                  onChange={(e) => setCustomerInfo({...customerInfo, upazila: e.target.value})}
-                  className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100 disabled:opacity-50"
-                >
-                  <option value="">Select Upazila</option>
-                  {customerInfo.district && (BD_UPAZILAS[customerInfo.district] || []).map(u => <option key={u} value={u}>{u}</option>)}
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Union / Area</label>
-                <input 
-                  type="text" 
-                  value={customerInfo.union}
-                  onChange={(e) => setCustomerInfo({...customerInfo, union: e.target.value})}
-                  className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100"
-                  placeholder="Your Union"
-                />
-              </div>
-              <div className="space-y-1 sm:col-span-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Village / Local Area</label>
-                <input 
-                  type="text" 
-                  value={customerInfo.village}
-                  onChange={(e) => setCustomerInfo({...customerInfo, village: e.target.value})}
-                  className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100"
-                  placeholder="Village name, House No, Road No"
-                />
-              </div>
+
+              {!isInternational ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Division</label>
+                    <select 
+                      value={customerInfo.division}
+                      onChange={(e) => setCustomerInfo({...customerInfo, division: e.target.value, district: "", upazila: ""})}
+                      className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100"
+                    >
+                      <option value="">Select Division</option>
+                      {BD_DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">District</label>
+                    <select 
+                      value={customerInfo.district}
+                      disabled={!customerInfo.division}
+                      onChange={(e) => setCustomerInfo({...customerInfo, district: e.target.value, upazila: ""})}
+                      className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100 disabled:opacity-50"
+                    >
+                      <option value="">Select District</option>
+                      {customerInfo.division && BD_DISTRICTS[customerInfo.division]?.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Upazila</label>
+                    <select 
+                      value={customerInfo.upazila}
+                      disabled={!customerInfo.district}
+                      onChange={(e) => setCustomerInfo({...customerInfo, upazila: e.target.value})}
+                      className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100 disabled:opacity-50"
+                    >
+                      <option value="">Select Upazila</option>
+                      {customerInfo.district && (BD_UPAZILAS[customerInfo.district] || []).map(u => <option key={u} value={u}>{u}</option>)}
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Union / Area</label>
+                    <input 
+                      type="text" 
+                      value={customerInfo.union}
+                      onChange={(e) => setCustomerInfo({...customerInfo, union: e.target.value})}
+                      className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100"
+                      placeholder="Your Union"
+                    />
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Village / Local Area</label>
+                    <input 
+                      type="text" 
+                      value={customerInfo.village}
+                      onChange={(e) => setCustomerInfo({...customerInfo, village: e.target.value})}
+                      className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100"
+                      placeholder="Village name, House No, Road No"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Country</label>
+                    <input 
+                      type="text" 
+                      value={customerInfo.division}
+                      onChange={(e) => setCustomerInfo({...customerInfo, division: e.target.value})}
+                      className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100"
+                      placeholder="e.g. United States, United Kingdom"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">State / Province</label>
+                    <input 
+                      type="text" 
+                      value={customerInfo.district}
+                      onChange={(e) => setCustomerInfo({...customerInfo, district: e.target.value})}
+                      className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100"
+                      placeholder="e.g. California, Ontario, London"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">City / Town</label>
+                    <input 
+                      type="text" 
+                      value={customerInfo.upazila}
+                      onChange={(e) => setCustomerInfo({...customerInfo, upazila: e.target.value})}
+                      className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100"
+                      placeholder="e.g. San Francisco, Toronto"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Postal / ZIP Code</label>
+                    <input 
+                      type="text" 
+                      value={customerInfo.union}
+                      onChange={(e) => setCustomerInfo({...customerInfo, union: e.target.value})}
+                      className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100"
+                      placeholder="e.g. 94105, SW1A 1AA"
+                    />
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Street Address</label>
+                    <input 
+                      type="text" 
+                      value={customerInfo.village}
+                      onChange={(e) => setCustomerInfo({...customerInfo, village: e.target.value})}
+                      className="w-full bg-gray-50 dark:bg-gray-950 border-none rounded-xl px-4 py-3 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium dark:text-gray-100"
+                      placeholder="e.g. 123 Main Street, Apt 4B"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Additional Notes</label>
@@ -1174,7 +1268,7 @@ function StripeForm({ products, userId, customerInfo, subtotal, amount, appliedC
           village: customerInfo.village,
           lat: locationCoords.lat,
           lng: locationCoords.lng,
-          status: "completed",
+          status: "pending",
           amount: subtotal,
           grossAmount: subtotal,
           discountAmount: discountAmount || 0,
@@ -1747,9 +1841,11 @@ function LocalForm({ products, userId, customerInfo, subtotal, amount, appliedCo
 function SslCommerzForm({ products, userId, customerInfo, subtotal, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; division: string; district: string; upazila: string; union: string; village: string; }, subtotal: number, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [paymentUrl, setPaymentUrl] = useState("");
 
   const handlePay = async () => {
     setError("");
+    setPaymentUrl("");
     if (!customerInfo.name || !customerInfo.phone || !customerInfo.email || !customerInfo.division || !customerInfo.district) {
       setError("Please complete your Billing & Shipping details (Name, Phone, Email, Address) at the top of the page first.");
       return;
@@ -1826,6 +1922,7 @@ function SslCommerzForm({ products, userId, customerInfo, subtotal, amount, appl
 
       const data = await res.json();
       if (data.redirectUrl) {
+        setPaymentUrl(data.redirectUrl);
         window.location.href = data.redirectUrl; 
       } else {
         throw new Error(data.error || "Failed to initialize secure checkout session.");
@@ -1911,6 +2008,22 @@ function SslCommerzForm({ products, userId, customerInfo, subtotal, amount, appl
         </div>
       )}
 
+      {paymentUrl && (
+        <div className="p-4 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-2xl text-[11px] font-bold border border-indigo-100 dark:border-indigo-900/40 shadow-sm flex flex-col gap-3">
+          <p className="font-bold leading-normal">
+            ⚠️ AI Studio iFrame সিকিউরিটি সমস্যার কারণে যদি পেমেন্ট গেটওয়ে পেজটি সরাসরি লোড না হয়, তাহলে নিচের বাটনে ক্লিক করে নতুন ট্যাবে পেমেন্ট সম্পন্ন করুন:
+          </p>
+          <a
+            href={paymentUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-center text-xs font-black uppercase transition-all tracking-wider shadow-sm hover:scale-[1.01]"
+          >
+            নতুন ট্যাবে পেমেন্ট করুন (Open Payment) <ExternalLink className="w-4 h-4" />
+          </a>
+        </div>
+      )}
+
       <button
         type="button"
         onClick={handlePay}
@@ -1943,9 +2056,11 @@ function SslCommerzForm({ products, userId, customerInfo, subtotal, amount, appl
 function ShurjoPayForm({ products, userId, customerInfo, subtotal, amount, appliedCoupon, discountAmount, onSuccess }: { products: Product[], userId: string, customerInfo: { name: string; email: string; phone: string; address: string; division: string; district: string; upazila: string; union: string; village: string; }, subtotal: number, amount: number, appliedCoupon?: any, discountAmount?: number, onSuccess?: (orderId: string) => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [paymentUrl, setPaymentUrl] = useState("");
 
   const handlePay = async () => {
     setError("");
+    setPaymentUrl("");
     if (!customerInfo.name || !customerInfo.phone || !customerInfo.email || !customerInfo.division || !customerInfo.district) {
       setError("Please complete your Billing & Shipping details (Name, Phone, Email, Address) at the top of the page first.");
       return;
@@ -2022,6 +2137,7 @@ function ShurjoPayForm({ products, userId, customerInfo, subtotal, amount, appli
 
       const data = await res.json();
       if (data.redirectUrl) {
+        setPaymentUrl(data.redirectUrl);
         window.location.href = data.redirectUrl; 
       } else {
         throw new Error(data.error || "Failed to initialize secure checkout session.");
@@ -2104,6 +2220,22 @@ function ShurjoPayForm({ products, userId, customerInfo, subtotal, amount, appli
       {error && (
         <div className="p-4 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 rounded-2xl text-xs font-bold border border-red-100 dark:border-red-900/40 shadow-sm animate-pulse">
           ⚠️ {error}
+        </div>
+      )}
+
+      {paymentUrl && (
+        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded-2xl text-[11px] font-bold border border-emerald-100 dark:border-emerald-900/40 shadow-sm flex flex-col gap-3">
+          <p className="font-bold leading-normal">
+            ⚠️ AI Studio iFrame সিকিউরিটি সমস্যার কারণে যদি পেমেন্ট গেটওয়ে পেজটি সরাসরি লোড না হয়, তাহলে নিচের বাটনে ক্লিক করে নতুন ট্যাবে পেমেন্ট সম্পন্ন করুন:
+          </p>
+          <a
+            href={paymentUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-3 bg-emerald-600 hover:bg-emerald-750 text-white rounded-xl text-center text-xs font-black uppercase transition-all tracking-wider shadow-sm hover:scale-[1.01]"
+          >
+            নতুন ট্যাবে পেমেন্ট করুন (Open Payment) <ExternalLink className="w-4 h-4" />
+          </a>
         </div>
       )}
 

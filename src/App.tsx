@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { auth, db } from "./lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
@@ -34,12 +34,15 @@ import { ThemeProvider, useTheme } from "./lib/ThemeContext";
 import Footer from "./components/Footer";
 
 function AppContent() {
+  const location = useLocation();
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const { settings, loading: settingsLoading } = useSettings();
   const { theme } = useTheme();
   const [sessionId] = useState(() => Math.random().toString(36).substring(7));
+
+  const isWideAdmin = location.pathname.startsWith("/admin");
 
   useEffect(() => {
     if (settings) {
@@ -116,7 +119,7 @@ function AppContent() {
   }, [authLoading, settingsLoading]);
 
   return (
-    <BrowserRouter>
+    <>
       <ScrollToTop />
       <AnimatePresence mode="wait">
         {!isReady ? (
@@ -208,9 +211,9 @@ function AppContent() {
                         key={i}
                         className="absolute inset-0 border-2 border-indigo-600 bg-indigo-50/20"
                         style={{
-                          transform: i < 4 
-                            ? `rotateY(${i * 90}deg) translateZ(32px)` 
-                            : `rotateX(${i === 4 ? 90 : -90}deg) translateZ(32px)`
+                           transform: i < 4 
+                             ? `rotateY(${i * 90}deg) translateZ(32px)` 
+                             : `rotateX(${i === 4 ? 90 : -90}deg) translateZ(32px)`
                         }}
                       />
                     ))}
@@ -308,7 +311,7 @@ function AppContent() {
                   </div>
                 </motion.div>
               )}
-
+ 
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -326,7 +329,7 @@ function AppContent() {
                    <div className="h-[1px] w-4 bg-gray-200" />
                 </div>
               </motion.div>
-
+ 
               {/* Ambient progress indicator */}
               {settings?.loadingStyle !== "classic" && (
                 <div className="absolute bottom-[-60px] w-48 h-1 bg-gray-50 rounded-full overflow-hidden">
@@ -350,7 +353,12 @@ function AppContent() {
           >
             <Navbar user={user} isAdmin={isAdmin} />
             
-            <div className="flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
+            <div className={cn(
+              "flex-grow w-full mx-auto py-4 sm:py-8 transition-all duration-300",
+              isWideAdmin 
+                ? "max-w-none px-2 sm:px-6 lg:px-8" 
+                : "max-w-7xl px-4 sm:px-6 lg:px-8"
+            )}>
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/product/:id" element={<ProductDetail />} />
@@ -374,18 +382,20 @@ function AppContent() {
           </motion.div>
         )}
       </AnimatePresence>
-    </BrowserRouter>
+    </>
   );
 }
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <SettingsProvider>
-        <CartProvider>
-          <AppContent />
-        </CartProvider>
-      </SettingsProvider>
-    </ThemeProvider>
+    <BrowserRouter>
+      <ThemeProvider>
+        <SettingsProvider>
+          <CartProvider>
+            <AppContent />
+          </CartProvider>
+        </SettingsProvider>
+      </ThemeProvider>
+    </BrowserRouter>
   );
 }
